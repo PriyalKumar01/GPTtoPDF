@@ -4,6 +4,7 @@ import { APP_CONFIG } from './config';
 import { ConversationData, PdfOptions } from './types';
 import { COLLEGE_STUDY_LOGO_B64 } from './college-study-logo-b64';
 import { APP_LOGO_BASE64 } from './app-logo-b64';
+import { QWIK_SAVE_BANNER_B64 } from './qwik-save-banner-b64';
 
 export class NotesPdfGenerator {
   private doc: jsPDF;
@@ -167,57 +168,102 @@ export class NotesPdfGenerator {
   }
 
   /**
-   * Compact User Question Card matching reference design
+   * Compact User Question Card matching reference design or clean Academic Question / Topic block
    */
-  private renderUserBox(content: string) {
+  private renderUserBox(content: string, authorName?: string) {
     if (!this.options.includeUserMessages) return;
 
     const scale = this.getScale();
     const cleanPrompt = this.cleanText(content);
+    const isNote =
+      authorName === '' ||
+      !authorName ||
+      this.conversation.id.startsWith('builder') ||
+      this.conversation.id.startsWith('direct');
 
-    this.doc.setFont(this.baseFont, 'normal');
-    this.doc.setFontSize(scale.body);
-    const lines = this.doc.splitTextToSize(cleanPrompt, this.contentWidth - 8);
-    const boxHeight = lines.length * scale.lineH + 8.5;
+    if (isNote) {
+      // Highlighted Question / Topic Header Box (No 'USER' label, bold highlighted topic)
+      this.doc.setFont(this.baseFont, 'bold');
+      this.doc.setFontSize(scale.h3);
+      const lines = this.doc.splitTextToSize(cleanPrompt, this.contentWidth - 10);
+      const boxHeight = lines.length * (scale.lineH + 0.6) + 7;
 
-    this.checkBreak(boxHeight + 4);
+      this.checkBreak(boxHeight + 4);
 
-    // Subtle container
-    this.doc.setFillColor(248, 250, 252); // slate 50
-    this.doc.setDrawColor(226, 232, 240); // slate 200
-    this.doc.setLineWidth(0.2);
-    this.doc.roundedRect(this.marginX, this.currentY, this.contentWidth, boxHeight, 1.5, 1.5, 'FD');
+      // Clean highlighted card with bold blue accent bar
+      this.doc.setFillColor(248, 250, 252); // slate 50
+      this.doc.setDrawColor(226, 232, 240); // slate 200
+      this.doc.setLineWidth(0.25);
+      this.doc.roundedRect(this.marginX, this.currentY, this.contentWidth, boxHeight, 1.2, 1.2, 'FD');
 
-    // USER label
-    this.doc.setFont(this.baseFont, 'bold');
-    this.doc.setFontSize(6.5);
-    this.doc.setTextColor(100, 116, 139); // slate 500
-    this.doc.text('USER', this.marginX + 4, this.currentY + 4.5);
+      // Solid primary blue left highlight accent bar
+      this.doc.setFillColor(37, 99, 235); // #2563EB
+      this.doc.rect(this.marginX, this.currentY, 2.5, boxHeight, 'F');
 
-    // Text
-    this.doc.setFont(this.baseFont, 'normal');
-    this.doc.setFontSize(scale.body);
-    this.doc.setTextColor(30, 41, 59); // slate 800
-    this.doc.text(lines, this.marginX + 4, this.currentY + 8);
+      // Render bold question/topic heading
+      this.doc.setFont(this.baseFont, 'bold');
+      this.doc.setFontSize(scale.h3);
+      this.doc.setTextColor(15, 23, 42); // slate 900
+      this.doc.text(lines, this.marginX + 6, this.currentY + 5.5);
 
-    this.currentY += boxHeight + 4.5;
+      this.currentY += boxHeight + 4.5;
+    } else {
+      // Standard AI prompt card
+      this.doc.setFont(this.baseFont, 'normal');
+      this.doc.setFontSize(scale.body);
+      const lines = this.doc.splitTextToSize(cleanPrompt, this.contentWidth - 8);
+      const boxHeight = lines.length * scale.lineH + 8.5;
+
+      this.checkBreak(boxHeight + 4);
+
+      // Subtle container
+      this.doc.setFillColor(248, 250, 252);
+      this.doc.setDrawColor(226, 232, 240);
+      this.doc.setLineWidth(0.2);
+      this.doc.roundedRect(this.marginX, this.currentY, this.contentWidth, boxHeight, 1.5, 1.5, 'FD');
+
+      // Author / User label
+      if (authorName) {
+        this.doc.setFont(this.baseFont, 'bold');
+        this.doc.setFontSize(6.5);
+        this.doc.setTextColor(100, 116, 139);
+        this.doc.text(authorName.toUpperCase(), this.marginX + 4, this.currentY + 4.5);
+      }
+
+      // Text
+      this.doc.setFont(this.baseFont, 'normal');
+      this.doc.setFontSize(scale.body);
+      this.doc.setTextColor(30, 41, 59);
+      this.doc.text(lines, this.marginX + 4, this.currentY + (authorName ? 8 : 5.5));
+
+      this.currentY += boxHeight + 4.5;
+    }
   }
 
   /**
-   * Markdown Content Stream for Assistant Responses
+   * Markdown Content Stream for Academic Explanations or Assistant Responses
    */
-  private renderAssistantContent(content: string) {
+  private renderAssistantContent(content: string, authorName?: string) {
     if (!this.options.includeAssistantMessages) return;
 
     const scale = this.getScale();
+    const isNote =
+      authorName === '' ||
+      !authorName ||
+      this.conversation.id.startsWith('builder') ||
+      this.conversation.id.startsWith('direct');
 
-    // ASSISTANT label
-    this.checkBreak(8);
-    this.doc.setFont(this.baseFont, 'bold');
-    this.doc.setFontSize(6.5);
-    this.doc.setTextColor(100, 116, 139);
-    this.doc.text('ASSISTANT', this.marginX, this.currentY);
-    this.currentY += 4;
+    // Only render ASSISTANT tag if this is a standard chat and authorName is explicitly given
+    if (!isNote && authorName) {
+      this.checkBreak(8);
+      this.doc.setFont(this.baseFont, 'bold');
+      this.doc.setFontSize(6.5);
+      this.doc.setTextColor(100, 116, 139);
+      this.doc.text(authorName.toUpperCase(), this.marginX, this.currentY);
+      this.currentY += 4;
+    } else {
+      this.checkBreak(4);
+    }
 
     const rawLines = content.split('\n');
     let i = 0;
@@ -572,6 +618,41 @@ export class NotesPdfGenerator {
           // Continue gracefully
         }
       }
+
+      // 3. Subtle Qwik Save watermark on every page (~18% subtle opacity, professional aesthetic)
+      try {
+        const GState = (this.doc as any).GState;
+        if (GState) {
+          this.doc.setGState(new GState({ opacity: 0.18 }));
+        }
+
+        const centerX = this.pageWidth / 2;
+        const centerY = this.pageHeight / 2;
+
+        try {
+          const wmWidth = 72;
+          const wmHeight = 18;
+          this.doc.addImage(
+            QWIK_SAVE_BANNER_B64,
+            'PNG',
+            centerX - wmWidth / 2,
+            centerY - wmHeight / 2,
+            wmWidth,
+            wmHeight
+          );
+        } catch {
+          this.doc.setFont('helvetica', 'bold');
+          this.doc.setFontSize(30);
+          this.doc.setTextColor(148, 163, 184);
+          this.doc.text('Qwik Save', centerX - 28, centerY, { angle: 35 });
+        }
+
+        if (GState) {
+          this.doc.setGState(new GState({ opacity: 1.0 }));
+        }
+      } catch {
+        // Continue gracefully
+      }
     }
   }
 
@@ -697,9 +778,9 @@ export class NotesPdfGenerator {
 
     for (const msg of this.conversation.messages) {
       if (msg.role === 'user') {
-        this.renderUserBox(msg.content);
+        this.renderUserBox(msg.content, msg.authorName);
       } else {
-        this.renderAssistantContent(msg.content);
+        this.renderAssistantContent(msg.content, msg.authorName);
       }
     }
 

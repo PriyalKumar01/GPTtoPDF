@@ -452,22 +452,28 @@ export function ConversationPreview({
                 key={msg.id || idx}
                 className={`p-4 rounded-[2px] border text-xs sm:text-sm leading-relaxed transition-all ${
                   msg.role === 'user'
-                    ? 'bg-slate-50 dark:bg-[#0B121E] border-slate-300 dark:border-[#1E2C42]'
+                    ? 'bg-blue-50/30 dark:bg-[#0B1424] border-slate-300 dark:border-[#1E2C42] border-l-4 border-l-[#2563EB]'
                     : 'bg-white dark:bg-[#142033] border-slate-300 dark:border-[#22354E]'
                 } ${isEditing ? 'ring-2 ring-blue-500/40 dark:ring-[#38BDF8]/40' : ''}`}
               >
                 {/* Message Header & Action Toolbar */}
                 <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-200 dark:border-[#1E2C42]">
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`font-bold text-xs uppercase tracking-wide ${
-                        msg.role === 'user'
-                          ? 'text-blue-600 dark:text-[#38BDF8]'
-                          : 'text-slate-800 dark:text-[#E2E8F0]'
-                      }`}
-                    >
-                      {msg.authorName}
-                    </span>
+                    {msg.authorName ? (
+                      <span
+                        className={`font-bold text-xs uppercase tracking-wide ${
+                          msg.role === 'user'
+                            ? 'text-blue-600 dark:text-[#38BDF8]'
+                            : 'text-slate-800 dark:text-[#E2E8F0]'
+                        }`}
+                      >
+                        {msg.authorName}
+                      </span>
+                    ) : msg.role === 'user' ? (
+                      <span className="font-bold text-xs px-2 py-0.5 rounded-[2px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                        Topic / Question
+                      </span>
+                    ) : null}
                     <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-slate-200/80 dark:bg-[#1E2C42] text-slate-600 dark:text-[#94A3B8]">
                       #{idx + 1}
                     </span>

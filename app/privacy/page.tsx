@@ -2,18 +2,18 @@ import React from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
-import { ShieldCheck, Lock, EyeOff, Server, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Lock, EyeOff, Server, HardDrive, CheckCircle2 } from 'lucide-react';
 import { APP_CONFIG } from '@/lib/config';
 
 export const metadata = {
-  title: 'Privacy Policy & Data Security — GPT to PDF',
+  title: 'Privacy Policy & Zero Data Storage Guarantee — Qwik Save',
   description:
-    'Learn how GPT to PDF protects student privacy with zero account creation, ephemeral memory processing, and client-side PDF generation.',
+    'Read Qwik Save privacy policy: 100% zero data retention, no account creation, client-side in-browser processing, and direct download privacy.',
 };
 
 export default function PrivacyPage() {
   return (
-    <div className="flex-1 flex flex-col min-h-screen">
+    <div className="flex-1 flex flex-col min-h-screen bg-slate-50 dark:bg-[#090D14] text-slate-900 dark:text-[#E8EDF5] transition-colors duration-200">
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-12">
@@ -21,99 +21,128 @@ export default function PrivacyPage() {
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-[#141D2B] border border-emerald-200 dark:border-[#22C55E]/30 rounded-[2px] text-xs font-semibold text-emerald-600 dark:text-[#22C55E]">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Privacy Architecture</span>
+            <span>Zero Data Storage Guarantee</span>
           </div>
-          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight text-slate-900 dark:text-[#E8EDF5]">
-            Privacy & Security Policy
+          <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-[#E8EDF5]">
+            Privacy Policy & Data Security
           </h1>
           <p className="max-w-2xl mx-auto text-xs sm:text-sm text-slate-600 dark:text-[#94A3B8] leading-relaxed">
-            Your conversations are processed only for PDF conversion. We do not require an account or permanently store your notes.
+            Your privacy is absolute. {APP_CONFIG.brandName} does not require an account, does not store your files or media, and does not track your personal identity.
           </p>
         </div>
 
-        {/* Core Principles */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-[#141D2B] border border-slate-200 dark:border-[#263448] p-5 rounded-[2px] space-y-2">
-            <div className="w-8 h-8 rounded-[2px] bg-blue-50 dark:bg-[#192536] border border-blue-200 dark:border-[#263448] flex items-center justify-center text-blue-600 dark:text-[#3B82F6]">
-              <EyeOff className="w-4 h-4" />
+        {/* 3 Core Pillars */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <div className="bg-white dark:bg-[#111A29] border border-slate-200 dark:border-[#263448] p-6 rounded-[3px] space-y-2.5 shadow-xs">
+            <div className="w-9 h-9 rounded-[2px] bg-slate-100 dark:bg-[#1E293B] border border-slate-200 dark:border-[#263448] flex items-center justify-center text-slate-800 dark:text-[#E8EDF5]">
+              <EyeOff className="w-4 h-4 text-emerald-500" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-[#E8EDF5]">
-              No Identity Tracking
+            <h3 className="text-sm font-bold text-slate-900 dark:text-[#E8EDF5]">
+              Zero User Accounts
             </h3>
             <p className="text-xs text-slate-600 dark:text-[#94A3B8] leading-relaxed">
-              We never collect emails, phone numbers, or passwords. There are zero accounts or tracking cookies on our platform.
+              We never ask for emails, usernames, phone numbers, or passwords. You can use every tool anonymously without registration.
             </p>
           </div>
 
-          <div className="bg-white dark:bg-[#141D2B] border border-slate-200 dark:border-[#263448] p-5 rounded-[2px] space-y-2">
-            <div className="w-8 h-8 rounded-[2px] bg-blue-50 dark:bg-[#192536] border border-blue-200 dark:border-[#263448] flex items-center justify-center text-blue-600 dark:text-[#3B82F6]">
-              <Server className="w-4 h-4" />
+          <div className="bg-white dark:bg-[#111A29] border border-slate-200 dark:border-[#263448] p-6 rounded-[3px] space-y-2.5 shadow-xs">
+            <div className="w-9 h-9 rounded-[2px] bg-slate-100 dark:bg-[#1E293B] border border-slate-200 dark:border-[#263448] flex items-center justify-center text-slate-800 dark:text-[#E8EDF5]">
+              <HardDrive className="w-4 h-4 text-blue-500" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-[#E8EDF5]">
-              Ephemeral Processing
+            <h3 className="text-sm font-bold text-slate-900 dark:text-[#E8EDF5]">
+              No Files or Media Stored
             </h3>
             <p className="text-xs text-slate-600 dark:text-[#94A3B8] leading-relaxed">
-              Conversations exist only in memory during the conversion lifecycle and are destroyed immediately upon response.
+              We do not save your videos, photos, or PDF documents to any database or storage server. Once downloaded, everything is wiped from active memory.
             </p>
           </div>
 
-          <div className="bg-white dark:bg-[#141D2B] border border-slate-200 dark:border-[#263448] p-5 rounded-[2px] space-y-2">
-            <div className="w-8 h-8 rounded-[2px] bg-blue-50 dark:bg-[#192536] border border-blue-200 dark:border-[#263448] flex items-center justify-center text-blue-600 dark:text-[#3B82F6]">
-              <Lock className="w-4 h-4" />
+          <div className="bg-white dark:bg-[#111A29] border border-slate-200 dark:border-[#263448] p-6 rounded-[3px] space-y-2.5 shadow-xs">
+            <div className="w-9 h-9 rounded-[2px] bg-slate-100 dark:bg-[#1E293B] border border-slate-200 dark:border-[#263448] flex items-center justify-center text-slate-800 dark:text-[#E8EDF5]">
+              <Lock className="w-4 h-4 text-purple-500" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-[#E8EDF5]">
-              Anti-SSRF Hardened
+            <h3 className="text-sm font-bold text-slate-900 dark:text-[#E8EDF5]">
+              Client-Side Browser Processing
             </h3>
             <p className="text-xs text-slate-600 dark:text-[#94A3B8] leading-relaxed">
-              Backend requests are strictly validated against verified OpenAI, Anthropic, and Google domains, blocking internal addresses.
+              Our PDF and document manipulation tools (Merge, Compress, Image to PDF) execute 100% inside your local browser without uploading your files.
             </p>
           </div>
         </div>
 
-        {/* Detailed Sections */}
-        <div className="bg-white dark:bg-[#141D2B] border border-slate-200 dark:border-[#263448] p-6 rounded-[2px] shadow-sm space-y-6 text-xs sm:text-sm text-slate-700 dark:text-[#94A3B8] leading-relaxed">
+        {/* Clear Policy Details */}
+        <div className="bg-white dark:bg-[#111A29] border border-slate-200 dark:border-[#263448] p-6 sm:p-8 rounded-[3px] shadow-sm space-y-6 text-xs sm:text-sm text-slate-700 dark:text-[#94A3B8] leading-relaxed">
           <div className="space-y-2">
-            <h2 className="text-base font-semibold text-slate-900 dark:text-[#E8EDF5]">
-              1. Information We Never Collect
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#E8EDF5]">
+              1. Information We Never Collect or Retain
             </h2>
             <p>
-              When you use {APP_CONFIG.name}, you do not register an account. We do not store:
+              When you use {APP_CONFIG.brandName}, your privacy is guaranteed by architecture:
             </p>
-            <ul className="list-disc list-inside space-y-1 pl-2 text-xs">
-              <li>Your name, email address, or billing info.</li>
-              <li>Your OpenAI, Google, or Anthropic account credentials or API keys.</li>
-              <li>Your conversation history or uploaded question papers.</li>
+            <ul className="space-y-1.5 pl-2 text-xs">
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>No user profiles, email lists, or sign-up forms.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>No storage of downloaded videos, reels, photos, or MP3 audio tracks.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>No storage or retention of converted PDF notes, question papers, or uploaded images.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>No third-party invasive trackers, spyware, or fingerprinting scripts.</span>
+              </li>
             </ul>
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-base font-semibold text-slate-900 dark:text-[#E8EDF5]">
-              2. How Public Links Are Fetched
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#E8EDF5]">
+              2. Social Media Downloader Privacy
             </h2>
             <p>
-              When you paste a public share link, our server fetches the publicly exposed conversation payload. The response is parsed to generate a structured JSON document representing the user and assistant turns. This payload is transmitted directly back to your browser, which constructs and saves the PDF.
+              When you enter a public Instagram, Facebook, or YouTube URL, our tools facilitate direct streaming to your personal device. We do not maintain any cache, archive, or library of the media you download. Once your download completes, all transmission streams terminate immediately.
             </p>
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-base font-semibold text-slate-900 dark:text-[#E8EDF5]">
-              3. Client-Side Rendering Guarantee
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#E8EDF5]">
+              3. Client-Side PDF Tools Security
             </h2>
             <p>
-              The actual PDF file creation (font embedding, table construction, and page numbering) happens directly inside your web browser using Vector PDF libraries. The final PDF is never uploaded to any cloud bucket or server.
+              When you merge multiple PDFs, compress file sizes, or convert photos to PDF, the computation is performed natively inside your browser using JavaScript and HTML5 Canvas. Your documents are never sent across the internet to an external server.
             </p>
           </div>
-        </div>
 
-        {/* Action CTA */}
-        <div className="text-center pt-2">
-          <Link
-            href="/"
-            className="h-10 px-6 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs sm:text-sm font-medium rounded-[2px] inline-flex items-center gap-2 transition-colors"
-          >
-            <span>Back to Converter</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+          <div className="space-y-2">
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#E8EDF5]">
+              4. External Links and Copyright
+            </h2>
+            <p>
+              {APP_CONFIG.brandName} is designed strictly for personal study, offline archiving, and educational use. Users are responsible for complying with the copyright and intellectual property policies of the respective media owners.
+            </p>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-[#263448]">
+            <h2 className="text-base font-bold text-slate-900 dark:text-[#E8EDF5]">
+              5. Contact Regarding Privacy
+            </h2>
+            <p>
+              If you have any questions regarding privacy or data handling, you can reach out directly to developer Priyal Kumar via{' '}
+              <a
+                href={APP_CONFIG.author.linkedinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-[#3B82F6] hover:underline font-semibold"
+              >
+                LinkedIn
+              </a>
+              .
+            </p>
+          </div>
         </div>
       </main>
 

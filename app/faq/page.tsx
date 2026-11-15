@@ -32,6 +32,21 @@ export default function FaqPage() {
       a: 'We support ChatGPT (chatgpt.com/share/...), Claude (claude.ai/share/...), Google Gemini (gemini.google.com/share/...), and Perplexity AI. Additionally, our "Direct Text / Markdown" tab works for ANY AI including DeepSeek, Copilot, Llama, and Mistral.',
     },
     {
+      category: 'Social Media',
+      q: 'How does Qwik Save download Instagram Reels, Facebook & YouTube videos?',
+      a: 'Simply paste the public link of any Instagram Reel, Facebook Video/Reel, or YouTube Short. Qwik Save instantly extracts the raw, high-definition MP4 stream directly from the content delivery network with zero watermarks and multiple resolution options.',
+    },
+    {
+      category: 'PDF Tools',
+      q: 'How do PDF Merge and Compress work without uploading to a third-party server?',
+      a: 'All PDF operations (Merge, Compress, and PDF to Image) run 100% locally in your web browser via web-assembly and client-side JavaScript. Your confidential documents, notes, and records never touch any external server.',
+    },
+    {
+      category: 'Audio Extraction',
+      q: 'Can I extract MP3 audio from any video link or file?',
+      a: 'Yes. You can paste any Instagram, Facebook, or YouTube video URL or upload a local MP4/MOV file. The built-in audio engine extracts crystal-clear audio tracks and downloads them instantly as MP3/WAV.',
+    },
+    {
       category: 'Academic & Notes',
       q: 'Can I convert long exam revision notes (50+ pages)?',
       a: 'Yes! Our PDF engine is tested and optimized for heavy study guides, including 60+ page multi-unit question papers with hundreds of questions, answers, formulas, and diagrams.',

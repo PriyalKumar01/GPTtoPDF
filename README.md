@@ -1,186 +1,155 @@
-# AI Chat to PDF — Academic Document Converter
+# Qwik Save — Save in One Click & Productivity Suite
 
 <div align="center">
-  <img src="public/images/brand-banner.jpg" width="420" alt="AI Chat to PDF Logo" style="border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);" />
-  <p><strong>Universal, Frictionless Web App to Turn AI Conversations into Academic Study PDFs</strong></p>
-  <p><em>No login • No sign-up • 100% Free Forever • Client-Side Privacy</em></p>
-  <p>🚀 <strong>Live Website:</strong> <a href="https://www.ai-chat2pdf.live"><strong>https://www.ai-chat2pdf.live</strong></a></p>
 
-  <p>
-    <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-16.4.6_(Turbopack)-black?style=flat-square&logo=next.js" alt="Next.js" /></a>
-    <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-5.0_Strict-blue?style=flat-square&logo=typescript" alt="TypeScript" /></a>
-    <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/TailwindCSS-3.4_Modern_Slate-38bdf8?style=flat-square&logo=tailwindcss" alt="TailwindCSS" /></a>
-    <a href="https://github.com/parallax/jsPDF"><img src="https://img.shields.io/badge/jsPDF-Vector_Engine-red?style=flat-square" alt="jsPDF" /></a>
-    <a href="https://college-study.netlify.app/"><img src="https://img.shields.io/badge/Partnered_With-College_Study-0284c7?style=flat-square" alt="College Study" /></a>
-    <a href="https://www.linkedin.com/in/priyal-kumar-singh/"><img src="https://img.shields.io/badge/Developer-Priyal_Kumar-0A66C2?style=flat-square&logo=linkedin" alt="Developer LinkedIn" /></a>
-  </p>
+![Qwik Save Banner](public/images/qwik-save-banner.png)
+
+**Save in One Click** — An all-in-one high-performance web platform and mobile application combining enterprise AI-to-PDF conversion, multi-platform HD social media streaming downloads, and complete client-side PDF document manipulation.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4.6-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-38bdf8)](https://tailwindcss.com/)
+[![Built in Collaboration with](https://img.shields.io/badge/Partner-College%20Study-0284c7)](https://college-study.netlify.app/)
+
 </div>
 
 ---
 
-## 📖 Overview
+## 👨‍💻 Project Developer & Attribution
 
-**AI Chat to PDF** is a high-performance web application engineered specifically for university students, educators, and developers. During mid-semesters, end-semesters, and revision sessions, students use AI assistants (ChatGPT, Claude, Gemini, DeepSeek) to generate question papers, solutions, and notes. 
-
-Raw browser screenshots or `Ctrl+P` result in messy chat bubbles, unsearchable text, or cut-off tables. **AI Chat to PDF** solves this by converting public shared chat links directly into **typeset, printable academic PDFs** with:
-- High-resolution embedded diagrams & flowcharts
-- MS Word Classic Drop-Shadow page borders
-- Full inline message editing freedom before download
-- Cute, responsive real-time loading feedback
-- Permanent clickable attribution footers with author LinkedIn links
+- **Lead Architect & Developer:** **Priyal Kumar**
+  - **LinkedIn:** [linkedin.com/in/priyal-kumar-780186291](https://www.linkedin.com/in/priyal-kumar-780186291/)
+  - **Portfolio & Works:** [priyalkumar01.github.io](https://priyalkumar01.github.io/priyalkumar.github.io/)
+- **Academic Platform Collaboration:** **[College Study](https://college-study.netlify.app/)** — Comprehensive semester study resources, notes, and technical tools.
 
 ---
 
-## 📸 User Interface & PDF Preview
+## 🏛️ System Architecture
 
-<div align="center">
-  <table>
-    <tr>
-      <td width="50%" align="center">
-        <strong>Clean Desktop & Mobile UI</strong><br/><br/>
-        <img src="public/images/ui-navbar.jpg" alt="AI Chat to PDF Interface" width="100%" />
-      </td>
-      <td width="50%" align="center">
-        <strong>Typeset Academic PDF with Diagrams</strong><br/><br/>
-        <img src="public/images/pdf-preview.jpg" alt="Generated Academic PDF" width="100%" />
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" align="center">
-        <strong>Preserved Visual Flowcharts & Testing Models</strong><br/><br/>
-        <img src="public/images/diagram-preview.jpg" alt="Embedded Diagrams Preview" width="55%" />
-      </td>
-    </tr>
-  </table>
-</div>
+```mermaid
+flowchart TD
+    User([User Browser / Mobile APK]) -->|Direct User Interaction| UI[Next.js 16 + Tailwind Responsive UI]
+    
+    subgraph Frontend Core
+        UI --> AIConv[AI Chat to PDF & Modular Notes Builder]
+        UI --> SocialDL[Multi-Platform Downloader Interface]
+        UI --> PDFStudio[Client-Side PDF Document Studio]
+    end
 
----
+    subgraph PDF Processing Engines [100% Client-Side Privacy]
+        AIConv --> jsPDF[jsPDF & AutoTable + Qwik Save Watermark]
+        PDFStudio --> pdfLib[pdf-lib Document Assembly Engine]
+        PDFStudio --> pdfJs[PDF.js Canvas Thumbnail Renderer]
+        PDFStudio --> img2pdf[Canvas Image-to-PDF Matrix]
+    end
 
-## ✨ Key Capabilities & Features
+    subgraph Server-Side Streaming Engines
+        SocialDL --> API_Router[/Next.js API Edge & Server Routes/]
+        API_Router --> SnapSave[SnapSave Media Extraction Engine]
+        API_Router --> YTDLP[yt-dlp Stream Resolvers]
+        API_Router --> Cheerio[Cheerio SSR Metadata Parser]
+        API_Router --> ProxyDL[Streaming Range Pipe /api/proxy-download]
+    end
 
-### 1. 🤖 Universal Multi-AI Platform Support
-- **ChatGPT (OpenAI)**: `chatgpt.com/share/...` and `chat.openai.com/share/...` (Supports GPT-4o, o1-preview, Canvas, and GPT-3.5).
-- **Claude (Anthropic)**: `claude.ai/share/...` (Supports Claude 3.5 Sonnet, Opus, and Haiku).
-- **Google Gemini**: `gemini.google.com/share/...` (Supports Gemini 1.5 Pro and Flash).
-- **Perplexity AI**: `perplexity.ai/search/...` (Extracts citations and structured answers).
-- **Direct Text / Markdown Tab**: Instant paste for DeepSeek, Microsoft Copilot, Mistral, Llama, or raw notes.
-
-### 2. ✏️ Live Document Preview & Inline Text Editing
-- **Edit Anything**: Edit user prompts or assistant answers in an inline markdown textarea before generating the PDF.
-- **Quick Clean AI Pleasantries**: One-click cleanup to strip AI filler phrases (*"Sure, here is..."*, *"If you like I want to explore this much in detail..."*).
-- **Add Custom Notes**: Add custom question sets, formulas, or personal notes to the document.
-- **Accurate Page Estimation**: Strips base64 image strings before counting characters, calculating true page counts (~28 pages for comprehensive 60k-character notes instead of inflated ~430 pages).
-
-### 3. 🎨 Cute Professional Animated Loader
-- When converting or extracting notes, a charming animated AI-to-PDF mascot appears with:
-  - Bouncing document character with blinking eyes
-  - Orbiting sparkle stars and shimmering gradient progress bar
-  - Multi-stage real-time milestones: *Reading Share Link → Parsing Diagrams → Typesetting PDF*
-
-### 4. 📄 MS Word Classic Shadow Border & Typography
-- **Shadow Border**: Dual-layer frame with crisp primary border line and solid 1.0mm drop shadow on right and bottom edges.
-- **Footer Margin Clearance**: Footer sits comfortably at `274.5mm` with a generous 5.5mm breathing room above the `290mm` bottom border line, completely eliminating any border overlap or line-cutting.
-- **Font Scaling & Typography**: Switch between Modern Sans (Inter), Classic Academic Serif (Times), and Technical Monospace (Courier) in Compact (9pt), Standard (10pt), or Large (11.5pt) sizes.
-
-### 5. 🎓 Partnered with College Study Hub
-- Official promotion of **[College Study](https://college-study.netlify.app/)** — access free engineering semester notes, previous year question papers (PYQs), branch syllabus breakdowns, and exam preparation material.
-- Header badge optionally displayed across all pages or strictly on the front cover.
-
-### 6. 🔗 Permanent Clickable Brand Footer on Every Page
-- **App Brand Lockup**: Official icon + **AI Chat to PDF** [PDF] linking to the website.
-- **Developer Attribution**: **Developer: Priyal Kumar** linking directly to Priyal's LinkedIn profile.
-- **Academic Pagination**: Clean page numbering (`Page 01 of 28`).
-
-### 7. 🔒 100% Client-Side Privacy & Zero Login
-- No account registration, email verification, passwords, or credit cards.
-- Outbound link queries use strict Anti-SSRF guards.
-- Final PDF is rendered inside browser memory using vector jsPDF; conversations are never stored in a database.
-
----
-
-## 📁 Project Structure
-
-```
-GPTtoPDF/
-├── app/
-│   ├── api/extract/route.ts        # Secure backend API: SSRF protection & multi-AI parser
-│   ├── faq/page.tsx                # 2-column wide FAQ knowledge base
-│   ├── features/page.tsx           # Feature highlights & comparison table
-│   ├── how-it-works/page.tsx       # 3-step student workflow guide
-│   ├── privacy/page.tsx            # Zero-storage privacy & security architecture
-│   ├── supported-platforms/page.tsx# Large official AI logos & College Study partnership
-│   ├── globals.css                 # Structured slate backgrounds (#EEF2F6 & #090E17)
-│   ├── layout.tsx                  # Root layout, theme sync, and SEO metadata
-│   └── page.tsx                    # Clean converter home page
-├── components/
-│   ├── Navbar.tsx                  # Brand logo, animated hover underline, Developer link
-│   ├── ConverterHero.tsx           # URL input, clipboard paste, sample notes, CuteLoader
-│   ├── CuteLoader.tsx              # Bouncing document mascot & gradient progress bar
-│   ├── ConversationPreview.tsx     # Full inline editor, customizer panel & PDF trigger
-│   ├── CollegeStudyPromo.tsx       # College Study partnership promotion banner
-│   └── Footer.tsx                  # Footer branding and Priyal Kumar LinkedIn link
-├── lib/
-│   ├── app-logo-b64.ts             # Embedded Base64 for app logo icon in PDF footer
-│   ├── college-study-logo-b64.ts   # Embedded Base64 for College Study header logo
-│   ├── config.ts                   # App URLs, developer LinkedIn, and default PDF options
-│   ├── extract-ai.ts               # Universal multi-platform extractor & page estimator
-│   ├── extract-chatgpt.ts          # Dedicated ChatGPT scraper and SSRF guard
-│   ├── pdf-generator.ts            # jsPDF typesetting engine, shadow borders & footers
-│   ├── sample-data.ts              # Pre-loaded exam revision sets
-│   ├── theme-context.tsx           # Dark/light theme context provider
-│   └── types.ts                    # TypeScript schema definitions
-├── public/
-│   └── images/                     # App icons, logos, and UI screenshot assets
-├── scripts/
-│   ├── test-diagram-in-pipeline.ts # Automated test for multi-page PDF generation
-│   └── generate-commit-history.js  # Git commit history generator
-├── package.json                    # Dependencies & Next.js scripts
-└── tailwind.config.js              # Theme colors & 2px sharp square borders
+    ProxyDL -->|Direct Clean MP4 / MP3 File Stream| User
+    jsPDF -->|Instant Client-Generated Document| User
+    pdfLib -->|Custom Reordered Merged PDF| User
 ```
 
 ---
 
-## 🛠️ Local Development & Setup
+## 🚀 Key Feature Modules
+
+### 1. 🤖 AI Chat to PDF & Academic Notes Builder
+- **Direct Multi-LLM Parsing:** Converts public share links from ChatGPT (`chatgpt.com/share`), Claude (`claude.ai/share`), Google Gemini, and DeepSeek into structured, print-ready PDF documents.
+- **Modular Notes Builder:** Build custom revision and exam question sheets topic-by-topic:
+  - Formats **Questions / Topics** into highlighted cards with left accent markers.
+  - Zero "User" or "Assistant" labels for pure academic styling.
+  - Built-in formatting tools: **Bold** (`**text**`), *Italic* (`*text*`), and Bullet points (`• `).
+- **Brand Watermark:** Every generated page includes a subtle, non-intrusive background watermark (~18% opacity) featuring **Qwik Save — Save in One Click**.
+- **MS Word Shadow & Clean Border Frames:** Choose between classic academic drop-shadow border styles or minimalist single-line borders.
+
+### 2. 📸 Instagram Downloader (Insta Save)
+- Supports **Reels, Video Posts, Multi-photo Carousels, and Audio Tracks**.
+- Extracts the uncompressed raw MP4 video stream directly from Instagram CDN with zero watermarks.
+- Generates direct high-speed download links for both 1080p Full HD video and high-resolution cover photos.
+
+### 3. 📘 Facebook Video & Reel Downloader
+- Handles **Facebook Reels (`/reel/`), Watch videos (`/watch/`), and Mobile Share Links (`/share/v/`, `/share/r/`)**.
+- Resolves HTTP 302 canonical URLs and extracts HD (720p/1080p) and SD (360p) streams.
+- Performs instant HEAD requests to compute and display exact file size (e.g. `4.20 MB`, `2.15 MB`) on quality selection badges.
+
+### 4. 🔴 YouTube Downloader
+- Full support for **YouTube Shorts** and long videos (documentaries, lectures, podcasts).
+- Provides instant MP4 video downloads and direct MP3 audio extraction.
+
+### 5. 📑 Complete Client-Side PDF Tools Suite
+- **Merge PDF with Top-to-Bottom Page Sequencing:**
+  - Visual top-to-bottom stack displaying page-by-page previews of all uploaded documents.
+  - Granular page actions: **Move Up**, **Move Down**, **Rotate 90° Clockwise**, and **Delete Page**.
+  - Merges only the active pages in exact custom sequence.
+- **Compress PDF:** Reduces file weight by 50% to 80% without noticeable degradation.
+- **Image to PDF (JPG/PNG to PDF):** Merge, rotate, and convert multiple photos into an A4/Letter PDF.
+- **PDF to Image:** Extract pages into high-resolution JPG or PNG graphics.
+
+### 6. 🛠️ Utilities
+- **Audio Extractor:** Decodes MP3/WAV audio directly from video files in your browser or from video URLs.
+- **QR Code Studio:** Instant offline SVG and PNG QR code generator for URLs, WiFi credentials, and texts.
+
+---
+
+## 🔒 Privacy & Security Guarantee
+
+1. **Client-Side Document Assembly:** PDF conversions and merges are processed entirely inside browser memory using Web Workers, HTML5 Canvas, and WebAssembly. No sensitive student notes or uploaded documents are ever sent to external servers.
+2. **SSRF Guard:** Server-side fetchers validate URL destinations to protect against private IP traversal and internal network SSRF attempts.
+3. **Zero Storage Policy:** Media proxy endpoints pipe chunked streams on-the-fly (`Transfer-Encoding: chunked`) without writing files to local disk.
+
+---
+
+## 🛠️ Tech Stack & Dependencies
+
+| Layer | Technology |
+|---|---|
+| **Framework** | Next.js 16.4.6 (App Router + Turbopack) |
+| **Language** | TypeScript 5.x |
+| **Styling** | Tailwind CSS 3.4 with dark/light themes |
+| **PDF Generation** | jsPDF, jsPDF-AutoTable, pdf-lib, PDF.js |
+| **Media Extraction** | SnapSave Media Downloader, yt-dlp, Cheerio |
+| **Icons & Typography** | Lucide React, Custom Brand SVG Icons |
+| **Android App** | Android Native WebView with Kotlin & Android SDK 35/36 |
+
+---
+
+## 📦 Getting Started
 
 ### Prerequisites
-- Node.js `v18.0.0` or higher
-- npm / yarn / pnpm
+- Node.js 18.x or newer
+- Python 3.10+ (for yt-dlp binary bridge fallback)
 
-### 1. Installation
+### Installation
 ```bash
-git clone https://github.com/your-username/GPTtoPDF.git
+# Clone the repository
+git clone https://github.com/priyalkumar01/GPTtoPDF.git
 cd GPTtoPDF
-npm install
-```
 
-### 2. Run Local Development Server
-```bash
+# Install dependencies
+npm install
+
+# Run development server
 npm run dev
 ```
+
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 3. Run Production Build
+### Production Build
 ```bash
 npm run build
-```
-
-### 4. Verify PDF Generation via Test Script
-```bash
-npx tsx scripts/test-diagram-in-pipeline.ts
+npm start
 ```
 
 ---
 
-## 👨‍💻 Developer & Attribution
+## 📄 License
 
-Developed with ❤️ for students preparing for exams by:
-
-**Priyal Kumar Singh**  
-- **LinkedIn**: [linkedin.com/in/priyal-kumar-singh/](https://www.linkedin.com/in/priyal-kumar-singh/)  
-- **Email**: `230104043@hbtu.ac.in`  
-- **Academic Partner**: [College Study Hub](https://college-study.netlify.app/)
-
----
-
-## 📜 License
-This project is open-source and free for all students and educators under the [MIT License](LICENSE).
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
