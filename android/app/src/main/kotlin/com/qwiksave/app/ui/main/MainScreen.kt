@@ -8,10 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -214,7 +210,7 @@ fun MainScreen(
                         trailingIcon = {
                             if (inputUrl.isNotEmpty()) {
                                 IconButton(onClick = { inputUrl = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    Text("✕", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                                 }
                             }
                         },
@@ -338,7 +334,7 @@ fun MainScreen(
                                     colors = ButtonDefaults.buttonColors(containerColor = currentThemeColor),
                                     shape = RoundedCornerShape(2.dp)
                                 ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = "Download")
+                                    Text("⬇", fontSize = 14.sp)
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Save Video (${media.fileSizeMb ?: "HD MP4"})",
