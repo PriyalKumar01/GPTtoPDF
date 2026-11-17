@@ -80,13 +80,19 @@ class QwikSaveClient(
 
     /**
      * Extract Instagram Reel, Post, or Carousel video stream.
-     * Uses on-device WebView interception first (100% bypasses datacenter IP bans),
-     * followed by backend API fallback.
+     * Uses backend API first (matching website verification),
+     * followed by on-device WebView fallback if server is rate-limited.
      */
     suspend fun extractInstagram(context: Context, reelUrl: String): Result<ExtractedMedia> {
         val cleanUrl = reelUrl.trim()
 
-        // Tier 1: On-Device WebView extraction (Runs on user's real mobile carrier/residential network)
+        // Tier 1: Try backend server (/api/instagram) - exactly what works on website!
+        val serverResult = extractInstagram(cleanUrl)
+        if (serverResult.isSuccess) {
+            return serverResult
+        }
+
+        // Tier 2: On-Device WebView extraction (Runs on user's real mobile carrier network if server blocked)
         try {
             val deviceResult = InstagramWebViewExtractor.extractFromDevice(context, cleanUrl, timeoutMs = 12000)
             if (deviceResult.isSuccess) {
@@ -94,8 +100,7 @@ class QwikSaveClient(
             }
         } catch (_: Exception) {}
 
-        // Tier 2: Backend server fallback
-        return extractInstagram(cleanUrl)
+        return serverResult
     }
 
     /**
@@ -567,10 +572,24 @@ class QwikSaveClient(
         onError: (String) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
-            var currentUrl = mediaUrl
+            // 1. Sanitize media URL - remove any partial byte-range fragment parameters that cause 0-second corrupt files
+            val cleanMediaUrl = mediaUrl
+                .replace(Regex("&?bytestart=\\d+"), "")
+                .replace(Regex("&?byteend=\\d+"), "")
+                .replace(Regex("\\?&"), "?")
+                .trimEnd('?', '&')
+
+            // 2. Resolve relative URL to absolute URL if needed
+            val resolvedUrl = if (cleanMediaUrl.startsWith("http://") || cleanMediaUrl.startsWith("https://")) {
+                cleanMediaUrl
+            } else {
+                "$baseUrl${if (cleanMediaUrl.startsWith("/")) "" else "/"}$cleanMediaUrl"
+            }
+
+            var currentUrl = resolvedUrl
             var connection: HttpURLConnection? = null
             var redirectCount = 0
-            val isSnap = mediaUrl.contains("rapidcdn.app") || mediaUrl.contains("snapsave.app")
+            val isSnap = currentUrl.contains("rapidcdn.app") || currentUrl.contains("snapsave.app")
 
             while (redirectCount < 6) {
                 val url = URL(currentUrl)
@@ -604,10 +623,10 @@ class QwikSaveClient(
             var conn = connection ?: return@withContext Result.failure(Exception("Could not connect to media stream"))
 
             // CRITICAL: If direct upstream stream returned 401, 403, or failed, fallback to server proxy-download!
-            if (conn.responseCode !in 200..299 && !mediaUrl.contains("/api/proxy-download")) {
+            if (conn.responseCode !in 200..299 && !resolvedUrl.contains("/api/proxy-download")) {
                 try {
                     conn.disconnect()
-                    val proxyUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(mediaUrl, "UTF-8")}&filename=${java.net.URLEncoder.encode(filename, "UTF-8")}"
+                    val proxyUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(resolvedUrl, "UTF-8")}&filename=${java.net.URLEncoder.encode(filename, "UTF-8")}"
                     conn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
                         setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
                         setRequestProperty("Accept", "*/*")
@@ -632,11 +651,12 @@ class QwikSaveClient(
                 else -> "video/mp4"
             }
 
+            // Reject any empty or incomplete fragments (minimum 64KB for playable videos)
             val minBytes = when {
                 isPdf -> 100L
                 isImage -> 500L
                 isAudio -> 1024L
-                else -> 15 * 1024L
+                else -> 64 * 1024L
             }
 
             var savedFile: File? = null

@@ -103,26 +103,41 @@ async function extractViaInstagramUrlDirect(url: string): Promise<InstagramResul
 }
 
 /**
- * Engine 2: SnapSave API (works for Instagram too sometimes)
+ * Engine 2: SnapSave API (handles Reels, Videos, and Carousel Photos)
  */
 async function extractViaSnapSave(url: string, shortcode: string): Promise<InstagramResult | null> {
   try {
     const { snapsave } = await import('snapsave-media-downloader');
-    const snapData = await snapsave(url) as any;
+    const snapData = (await snapsave(url)) as any;
 
     if (snapData?.success && snapData?.data?.media?.length > 0) {
-      const firstMedia = snapData.data.media[0];
-      if (firstMedia?.url) {
-        const thumb = snapData.data.preview || '';
+      const mediaList = snapData.data.media;
+      const mediaItems: InstagramMediaItem[] = [];
+
+      for (const item of mediaList) {
+        if (!item?.url) continue;
+        const isVid = item.url.includes('.mp4') || item.type === 'video';
+        mediaItems.push({
+          type: isVid ? 'video' : 'photo',
+          url: item.url,
+          thumbnailUrl: item.thumbnail || snapData.data.preview || item.url,
+        });
+      }
+
+      if (mediaItems.length > 0) {
+        const thumb = snapData.data.preview || mediaItems[0].thumbnailUrl || '';
+        const isMultiple = mediaItems.length > 1;
+        const firstIsVideo = mediaItems[0].type === 'video';
+
         return {
           id: shortcode,
           shortcode,
-          type: 'reel',
-          caption: snapData.data.description || 'Instagram Reel',
+          type: isMultiple ? 'carousel' : (firstIsVideo ? 'reel' : 'post'),
+          caption: snapData.data.description || (isMultiple ? 'Instagram Carousel' : 'Instagram Media'),
           author: { username: 'instagram_creator' },
           thumbnailUrl: thumb,
-          mediaItems: [{ type: 'video', url: firstMedia.url, thumbnailUrl: thumb }],
-          downloadUrl: firstMedia.url,
+          mediaItems,
+          downloadUrl: mediaItems[0].url,
         };
       }
     }
@@ -207,71 +222,95 @@ async function extractViaGraphQL(shortcode: string): Promise<InstagramResult | n
 }
 
 /**
- * Engine 4: Embed endpoint approach
+ * Engine 4: Embed endpoint approach (supports both /p/ posts and /reel/)
  */
-async function extractViaEmbed(shortcode: string): Promise<InstagramResult | null> {
+async function extractViaEmbed(shortcode: string, isPost = false): Promise<InstagramResult | null> {
   try {
-    const embedUrl = `https://www.instagram.com/reel/${shortcode}/embed/captioned/`;
-    const res = await fetch(embedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram/303.0.0.11.111',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        Referer: 'https://www.instagram.com/',
-      },
-      signal: AbortSignal.timeout(8000),
-    });
+    const embedUrls = isPost
+      ? [
+          `https://www.instagram.com/p/${shortcode}/embed/captioned/`,
+          `https://www.instagram.com/reel/${shortcode}/embed/captioned/`
+        ]
+      : [
+          `https://www.instagram.com/reel/${shortcode}/embed/captioned/`,
+          `https://www.instagram.com/p/${shortcode}/embed/captioned/`
+        ];
 
-    if (!res.ok) return null;
-    const html = await res.text();
-    const $ = cheerio.load(html);
+    for (const embedUrl of embedUrls) {
+      const res = await fetch(embedUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram/303.0.0.11.111',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          Referer: 'https://www.instagram.com/',
+        },
+        signal: AbortSignal.timeout(8000),
+      });
 
-    const videoSrc = $('video source').first().attr('src') || $('video').first().attr('src');
-    const posterUrl = $('video').first().attr('poster') || $('img').first().attr('src') || '';
-    const username = $('a.UsernameText').text() || 'instagram_creator';
-    const caption = $('.Caption').text().trim() || '';
+      if (!res.ok) continue;
+      const html = await res.text();
+      const $ = cheerio.load(html);
 
-    if (videoSrc) {
-      return {
-        id: shortcode,
-        shortcode,
-        type: 'reel',
-        caption,
-        author: { username },
-        thumbnailUrl: posterUrl,
-        mediaItems: [{ type: 'video', url: videoSrc, thumbnailUrl: posterUrl }],
-        downloadUrl: videoSrc,
-      };
-    }
+      const videoSrc = $('video source').first().attr('src') || $('video').first().attr('src');
+      const posterUrl = $('video').first().attr('poster') || $('img').first().attr('src') || '';
+      const username = $('a.UsernameText').text().trim() || 'instagram_creator';
+      const caption = $('.Caption').text().trim() || '';
 
-    // Photo post check via embed
-    const imageSrc = $('img.EmbeddedMediaImage').attr('src') || $('img').first().attr('src') || posterUrl;
-    if (imageSrc && imageSrc.startsWith('http')) {
-      return {
-        id: shortcode,
-        shortcode,
-        type: 'post',
-        caption,
-        author: { username },
-        thumbnailUrl: imageSrc,
-        mediaItems: [{ type: 'photo', url: imageSrc, thumbnailUrl: imageSrc }],
-        downloadUrl: imageSrc,
-      };
-    }
+      if (videoSrc) {
+        return {
+          id: shortcode,
+          shortcode,
+          type: 'reel',
+          caption,
+          author: { username },
+          thumbnailUrl: posterUrl,
+          mediaItems: [{ type: 'video', url: videoSrc, thumbnailUrl: posterUrl }],
+          downloadUrl: videoSrc,
+        };
+      }
 
-    // Check JSON data in script tags
-    const videoUrlMatches = [...html.matchAll(/"video_url"\s*:\s*"([^"]+)"/g)];
-    if (videoUrlMatches.length > 0) {
-      const cleanedUrl = videoUrlMatches[0][1].replace(/\\u0026/g, '&').replace(/\\/g, '');
-      return {
-        id: shortcode,
-        shortcode,
-        type: 'reel',
-        caption,
-        author: { username },
-        thumbnailUrl: posterUrl,
-        mediaItems: [{ type: 'video', url: cleanedUrl, thumbnailUrl: posterUrl }],
-        downloadUrl: cleanedUrl,
-      };
+      // Check JSON data in script tags for video_url or display_url
+      const videoUrlMatches = [...html.matchAll(/"video_url"\s*:\s*"([^"]+)"/g)];
+      if (videoUrlMatches.length > 0) {
+        const cleanedUrl = videoUrlMatches[0][1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+        return {
+          id: shortcode,
+          shortcode,
+          type: 'reel',
+          caption,
+          author: { username },
+          thumbnailUrl: posterUrl,
+          mediaItems: [{ type: 'video', url: cleanedUrl, thumbnailUrl: posterUrl }],
+          downloadUrl: cleanedUrl,
+        };
+      }
+
+      // Extract all embedded images (for single photo or carousel)
+      const foundImages: string[] = [];
+      $('img.EmbeddedMediaImage, img').each((_, el) => {
+        const src = $(el).attr('src');
+        if (src && src.startsWith('http') && !src.includes('rsrc.php') && !src.includes('150x150') && !foundImages.includes(src)) {
+          foundImages.push(src);
+        }
+      });
+
+      if (foundImages.length > 0) {
+        const mediaItems: InstagramMediaItem[] = foundImages.map((u) => ({
+          type: 'photo',
+          url: u,
+          thumbnailUrl: u,
+        }));
+
+        return {
+          id: shortcode,
+          shortcode,
+          type: mediaItems.length > 1 ? 'carousel' : 'post',
+          caption,
+          author: { username },
+          thumbnailUrl: foundImages[0],
+          mediaItems,
+          downloadUrl: foundImages[0],
+        };
+      }
     }
   } catch {
     // silent
@@ -285,9 +324,10 @@ export async function extractInstagramMedia(inputUrl: string): Promise<Instagram
     throw new Error('Please enter a valid Instagram reel, post, video, or story link.');
   }
 
-  const { shortcode } = match;
+  const { shortcode, type } = match;
+  const isPost = type === 'post';
 
-  // Engine 1: instagram-url-direct (most reliable)
+  // Engine 1: instagram-url-direct (most reliable for Reels)
   const directResult = await extractViaInstagramUrlDirect(inputUrl);
   if (directResult) return directResult;
 
@@ -315,7 +355,7 @@ export async function extractInstagramMedia(inputUrl: string): Promise<Instagram
     // continue
   }
 
-  // Engine 3: snapsave
+  // Engine 3: snapsave (supports Reels, Videos, and Carousel Photos)
   const snapResult = await extractViaSnapSave(inputUrl, shortcode);
   if (snapResult) return snapResult;
 
@@ -323,8 +363,8 @@ export async function extractInstagramMedia(inputUrl: string): Promise<Instagram
   const gqlResult = await extractViaGraphQL(shortcode);
   if (gqlResult) return gqlResult;
 
-  // Engine 5: Embed
-  const embedResult = await extractViaEmbed(shortcode);
+  // Engine 5: Embed (with /p/ and /reel/ support)
+  const embedResult = await extractViaEmbed(shortcode, isPost);
   if (embedResult) return embedResult;
 
   throw new Error(

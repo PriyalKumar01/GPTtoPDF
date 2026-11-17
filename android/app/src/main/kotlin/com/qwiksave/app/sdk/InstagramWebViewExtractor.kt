@@ -75,9 +75,13 @@ object InstagramWebViewExtractor {
                                 request: WebResourceRequest?
                             ): WebResourceResponse? {
                                 val reqUrl = request?.url?.toString() ?: ""
-                                if (reqUrl.contains(".mp4") ||
-                                    (reqUrl.contains("cdninstagram.com") && reqUrl.contains("bytestart")) ||
-                                    (reqUrl.contains("fbcdn.net") && reqUrl.contains(".mp4"))
+                                // Only capture complete, un-chunked standalone MP4 files
+                                // Strictly reject byte-range fragments (bytestart/byteend) and audio chunks that cause 0-second corrupt files
+                                if (reqUrl.contains(".mp4", ignoreCase = true) &&
+                                    !reqUrl.contains("bytestart=") &&
+                                    !reqUrl.contains("byteend=") &&
+                                    !reqUrl.contains(".m4s") &&
+                                    !reqUrl.contains("audio", ignoreCase = true)
                                 ) {
                                     synchronized(detectedVideos) {
                                         if (!detectedVideos.contains(reqUrl)) {
@@ -98,27 +102,37 @@ object InstagramWebViewExtractor {
                                             var items = [];
                                             var seen = {};
 
-                                            // 1. Videos on page
-                                            var vids = document.querySelectorAll('video');
-                                            for (var i = 0; i < vids.length; i++) {
-                                                var vSrc = vids[i].src;
-                                                if (vSrc && vSrc.startsWith('http') && !seen[vSrc]) {
-                                                    seen[vSrc] = true;
-                                                    items.push({ url: vSrc, isVideo: true });
+                                            function addMedia(rawUrl, isVid) {
+                                                if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.startsWith('http')) return;
+                                                // Strip byte-range fragment parameters to get the full stream
+                                                var clean = rawUrl.replace(/&?bytestart=\d+/g, '').replace(/&?byteend=\d+/g, '').replace(/\?&/g, '?').replace(/[?&]$/, '');
+                                                if (!seen[clean] && !clean.includes('150x150') && !clean.includes('s150x150') && !clean.includes('rsrc.php')) {
+                                                    seen[clean] = true;
+                                                    items.push({ url: clean, isVideo: !!isVid });
                                                 }
                                             }
 
-                                            // 2. Meta og:video
-                                            var ogV = document.querySelector('meta[property="og:video"]');
-                                            if (ogV && ogV.content && !seen[ogV.content]) {
-                                                seen[ogV.content] = true;
-                                                items.push({ url: ogV.content, isVideo: true });
+                                            // 1. Videos on page (Reels / Video Posts)
+                                            var vids = document.querySelectorAll('video');
+                                            for (var i = 0; i < vids.length; i++) {
+                                                var vSrc = vids[i].src || vids[i].currentSrc;
+                                                if (!vSrc) {
+                                                    var srcEl = vids[i].querySelector('source');
+                                                    if (srcEl) vSrc = srcEl.src;
+                                                }
+                                                addMedia(vSrc, true);
                                             }
 
-                                            // 3. Images on post / carousel
-                                            var imgs = document.querySelectorAll('article img, div._aagv img, div[role="presentation"] img, div[role="button"] img');
-                                            for (var j = 0; j < imgs.length; j++) {
-                                                var img = imgs[j];
+                                            // 2. Meta og:video tag
+                                            var ogV = document.querySelector('meta[property="og:video"]');
+                                            if (ogV && ogV.content) {
+                                                addMedia(ogV.content, true);
+                                            }
+
+                                            // 3. Carousel slides & post images (highest resolution from srcset)
+                                            var slideImgs = document.querySelectorAll('article ul li img, article img[srcset], div._aagv img, div[role="presentation"] img, div[role="button"] img');
+                                            for (var j = 0; j < slideImgs.length; j++) {
+                                                var img = slideImgs[j];
                                                 var bestSrc = '';
                                                 var srcset = img.getAttribute('srcset');
                                                 if (srcset) {
@@ -131,18 +145,14 @@ object InstagramWebViewExtractor {
                                                 if (!bestSrc && img.src && img.src.startsWith('http')) {
                                                     bestSrc = img.src;
                                                 }
-                                                if (bestSrc && !seen[bestSrc] && !bestSrc.includes('150x150') && !bestSrc.includes('s150x150')) {
-                                                    seen[bestSrc] = true;
-                                                    items.push({ url: bestSrc, isVideo: false });
-                                                }
+                                                addMedia(bestSrc, false);
                                             }
 
-                                            // 4. Meta og:image
+                                            // 4. Fallback og:image
                                             if (items.length === 0) {
                                                 var ogI = document.querySelector('meta[property="og:image"]');
-                                                if (ogI && ogI.content && !seen[ogI.content]) {
-                                                    seen[ogI.content] = true;
-                                                    items.push({ url: ogI.content, isVideo: false });
+                                                if (ogI && ogI.content) {
+                                                    addMedia(ogI.content, false);
                                                 }
                                             }
 
@@ -169,20 +179,7 @@ object InstagramWebViewExtractor {
 
                                             val mediaItemList = mutableListOf<MediaItem>()
 
-                                            // Add intercepted videos if not present
-                                            synchronized(detectedVideos) {
-                                                for (vUrl in detectedVideos) {
-                                                    mediaItemList.add(
-                                                        MediaItem(
-                                                            url = vUrl,
-                                                            isVideo = true,
-                                                            previewUrl = "https://www.instagram.com/p/$shortcode/media/?size=l",
-                                                            quality = "1080p Full HD"
-                                                        )
-                                                    )
-                                                }
-                                            }
-
+                                            // 1. Process DOM items first (photos and videos explicitly on page)
                                             if (jsItems != null) {
                                                 for (k in 0 until jsItems.length()) {
                                                     val itm = jsItems.getJSONObject(k)
@@ -201,9 +198,31 @@ object InstagramWebViewExtractor {
                                                 }
                                             }
 
+                                            // 2. If it is a Reel or video is needed and not found in DOM, check clean intercepted videos
+                                            if (mediaItemList.isEmpty() || (isReel && mediaItemList.none { it.isVideo })) {
+                                                synchronized(detectedVideos) {
+                                                    for (vUrl in detectedVideos) {
+                                                        val cleanVUrl = vUrl.replace(Regex("&?bytestart=\\d+"), "")
+                                                            .replace(Regex("&?byteend=\\d+"), "")
+                                                            .replace(Regex("\\?&"), "?")
+                                                            .trimEnd('?', '&')
+                                                        if (mediaItemList.none { it.url == cleanVUrl }) {
+                                                            mediaItemList.add(
+                                                                0, // Insert video at top for reels
+                                                                MediaItem(
+                                                                    url = cleanVUrl,
+                                                                    isVideo = true,
+                                                                    previewUrl = "https://www.instagram.com/p/$shortcode/media/?size=l",
+                                                                    quality = "1080p Full HD"
+                                                                )
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
                                             if (mediaItemList.isNotEmpty()) {
                                                 val primary = mediaItemList[0]
-                                                val hasAnyVideo = mediaItemList.any { it.isVideo }
                                                 val finalIsVideo = if (isReel) true else primary.isVideo
 
                                                 finishWithMedia(
@@ -225,7 +244,10 @@ object InstagramWebViewExtractor {
                                                 // If still no items, check if we intercepted any video
                                                 synchronized(detectedVideos) {
                                                     if (detectedVideos.isNotEmpty()) {
-                                                        val v = detectedVideos[0]
+                                                        val v = detectedVideos[0].replace(Regex("&?bytestart=\\d+"), "")
+                                                            .replace(Regex("&?byteend=\\d+"), "")
+                                                            .replace(Regex("\\?&"), "?")
+                                                            .trimEnd('?', '&')
                                                         finishWithMedia(
                                                             ExtractedMedia(
                                                                 id = shortcode,
@@ -249,7 +271,10 @@ object InstagramWebViewExtractor {
                                         } catch (parseErr: Exception) {
                                             synchronized(detectedVideos) {
                                                 if (detectedVideos.isNotEmpty()) {
-                                                    val v = detectedVideos[0]
+                                                    val v = detectedVideos[0].replace(Regex("&?bytestart=\\d+"), "")
+                                                        .replace(Regex("&?byteend=\\d+"), "")
+                                                        .replace(Regex("\\?&"), "?")
+                                                        .trimEnd('?', '&')
                                                     finishWithMedia(
                                                         ExtractedMedia(
                                                             id = shortcode,

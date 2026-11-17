@@ -392,7 +392,7 @@ fun ExploreTabContent(
                                 coroutineScope.launch {
                                     val url = quickInputUrl.lowercase()
                                     val result = when {
-                                        url.contains("instagram.com") -> client.extractInstagram(quickInputUrl)
+                                        url.contains("instagram.com") -> client.extractInstagram(context, quickInputUrl)
                                         url.contains("facebook.com") || url.contains("fb.watch") -> {
                                             val fbList = client.extractFacebook(quickInputUrl)
                                             fbList.map { it.firstOrNull() ?: throw Exception("No media formats found") }
@@ -1752,7 +1752,7 @@ fun SocialMediaTabContent(
                                         isLoading = false
                                         res.onSuccess {
                                             extractedResult = it
-                                            statusMessage = "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
+                                            statusMessage = if (it.items.size > 1) "Ready: Carousel (${it.items.size} items) 📸" else if (!it.isVideo) "Ready: High-Res Photo 🖼️" else "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
                                             scrollState.animateScrollTo(scrollState.maxValue)
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
                                     }
@@ -1770,7 +1770,7 @@ fun SocialMediaTabContent(
                                         isLoading = false
                                         res.onSuccess {
                                             extractedResult = it
-                                            statusMessage = "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
+                                            statusMessage = if (it.items.size > 1) "Ready: Carousel (${it.items.size} items) 📸" else if (!it.isVideo) "Ready: High-Res Photo 🖼️" else "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
                                             scrollState.animateScrollTo(scrollState.maxValue)
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
                                     }
