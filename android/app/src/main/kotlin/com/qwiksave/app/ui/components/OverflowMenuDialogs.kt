@@ -46,16 +46,13 @@ fun TopBarOverflowMenu(
     Box(modifier = modifier) {
         IconButton(
             onClick = { expanded = true },
-            modifier = Modifier
-                .size(36.dp)
-                .background(Color(0xFF1E293B), RoundedCornerShape(4.dp))
-                .border(1.dp, Color(0xFF334155), RoundedCornerShape(4.dp))
+            modifier = Modifier.size(36.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "Options Menu",
                 tint = Color.White,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
 

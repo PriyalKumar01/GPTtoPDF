@@ -36,6 +36,16 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
+ * Data model for individual media item (in carousel or single post).
+ */
+data class MediaItem(
+    val url: String,
+    val isVideo: Boolean,
+    val previewUrl: String? = null,
+    val quality: String = if (isVideo) "1080p Full HD" else "Original HD Photo"
+)
+
+/**
  * Data model for media extracted via Qwik Save engine.
  */
 data class ExtractedMedia(
@@ -48,7 +58,8 @@ data class ExtractedMedia(
     val platform: String,
     val isVideo: Boolean = true,
     val author: String? = null,
-    val durationText: String? = null
+    val durationText: String? = null,
+    val items: List<MediaItem> = emptyList()
 )
 
 /**
@@ -117,8 +128,29 @@ class QwikSaveClient(
                 if (json.optBoolean("success", false)) {
                     val data = json.getJSONObject("data")
                     val mediaItems = data.optJSONArray("mediaItems")
-                    val firstUrl = if (mediaItems != null && mediaItems.length() > 0) {
-                        mediaItems.getJSONObject(0).optString("url", "")
+                    val parsedItems = mutableListOf<MediaItem>()
+
+                    if (mediaItems != null && mediaItems.length() > 0) {
+                        for (i in 0 until mediaItems.length()) {
+                            val itm = mediaItems.getJSONObject(i)
+                            val u = itm.optString("url", "")
+                            val type = itm.optString("type", "video")
+                            val isVid = type.equals("video", ignoreCase = true)
+                            if (u.isNotBlank()) {
+                                parsedItems.add(
+                                    MediaItem(
+                                        url = u,
+                                        isVideo = isVid,
+                                        previewUrl = itm.optString("thumbnailUrl", u),
+                                        quality = if (isVid) "1080p Full HD" else "Original HD Photo"
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    val firstUrl = if (parsedItems.isNotEmpty()) {
+                        parsedItems[0].url
                     } else {
                         data.optString("downloadUrl", "")
                     }
@@ -127,19 +159,21 @@ class QwikSaveClient(
                         val thumb = if (data.has("thumbnailUrl")) data.getString("thumbnailUrl") else null
                         val authorObj = data.optJSONObject("author")
                         val authorName = authorObj?.optString("username", "instagram_creator") ?: "instagram_creator"
+                        val isVideoItem = if (parsedItems.isNotEmpty()) parsedItems[0].isVideo else true
 
                         return@withContext Result.success(
                             ExtractedMedia(
                                 id = data.optString("shortcode", shortcode),
-                                title = data.optString("caption", "Instagram Reel HD").take(80),
-                                thumbnailUrl = thumb,
+                                title = data.optString("caption", if (parsedItems.size > 1) "Instagram Carousel" else if (isVideoItem) "Instagram Reel HD" else "Instagram Photo HD").take(80),
+                                thumbnailUrl = thumb ?: (if (parsedItems.isNotEmpty()) parsedItems[0].previewUrl else null),
                                 streamUrl = firstUrl,
-                                quality = "1080p Full HD",
-                                fileSizeMb = "4.20 MB",
+                                quality = if (isVideoItem) "1080p Full HD" else "Original HD Photo",
+                                fileSizeMb = if (isVideoItem) "4.20 MB" else "High-Res Image",
                                 platform = "instagram",
-                                isVideo = true,
+                                isVideo = isVideoItem,
                                 author = "@$authorName",
-                                durationText = "0:30"
+                                durationText = if (isVideoItem) "0:30" else null,
+                                items = parsedItems
                             )
                         )
                     }
@@ -293,7 +327,98 @@ class QwikSaveClient(
         val videoId = extractYouTubeId(cleanUrl)
         val defaultThumb = if (videoId.length == 11) "https://i.ytimg.com/vi/$videoId/hqdefault.jpg" else "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=500&q=80"
 
-        // Engine 1: High-Speed Direct Stream Resolver via Piped Network
+        // Engine 1: Fast Proxied YouTube Stream Resolver (No 403, Direct CDN Stream)
+        try {
+            val tiooUrl = URL("https://backend1.tioo.eu.org/youtube?url=https://www.youtube.com/watch?v=$videoId")
+            val tConn = (tiooUrl.openConnection() as HttpURLConnection).apply {
+                setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
+                setRequestProperty("Accept", "application/json")
+                connectTimeout = 8000
+                readTimeout = 8000
+            }
+            if (tConn.responseCode == 200) {
+                val tResp = tConn.inputStream.bufferedReader().use { it.readText() }
+                val tJson = JSONObject(tResp)
+                val mp4Url = tJson.optString("mp4", "")
+                val mp3Url = tJson.optString("mp3", "")
+                val vTitle = tJson.optString("title", "YouTube Video")
+                val vAuthor = tJson.optString("author", "YouTube Creator")
+                val vThumb = tJson.optString("thumbnail", defaultThumb)
+
+                if (mp4Url.isNotBlank() && mp4Url.startsWith("http")) {
+                    return@withContext Result.success(
+                        ExtractedMedia(
+                            id = videoId,
+                            title = vTitle,
+                            thumbnailUrl = vThumb,
+                            streamUrl = mp4Url,
+                            quality = "720p HD MP4",
+                            fileSizeMb = "11.8 MB",
+                            platform = "youtube",
+                            isVideo = true,
+                            author = vAuthor,
+                            durationText = "3:00",
+                            items = listOf(MediaItem(mp4Url, true, vThumb, "720p HD MP4"))
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Engine 2: Call backend /api/universal-download
+        try {
+            val endpoint = URL("$baseUrl/api/universal-download")
+            val conn = (endpoint.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+                connectTimeout = 10000
+                readTimeout = 10000
+            }
+
+            val payload = JSONObject().apply { put("url", cleanUrl) }
+            conn.outputStream.use { os ->
+                os.write(payload.toString().toByteArray())
+            }
+
+            if (conn.responseCode == 200) {
+                val response = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(response)
+                val data = json.optJSONObject("data")
+
+                if (data != null) {
+                    var streamUrl = data.optString("downloadUrl", "")
+                    val thumb = data.optString("thumbnailUrl", defaultThumb)
+                    val title = data.optString("title", "YouTube Video")
+                    val author = data.optJSONObject("author")?.optString("name", "YouTube Channel") ?: "YouTube Channel"
+
+                    if (streamUrl.isNotBlank() && streamUrl.startsWith("http") && !streamUrl.contains("youtube.com/watch")) {
+                        // Prevent GoogleVideo client IP 403 by wrapping with server proxy
+                        if (streamUrl.contains("googlevideo.com") && !streamUrl.contains("/api/proxy-download")) {
+                            streamUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(streamUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}.mp4"
+                        }
+
+                        return@withContext Result.success(
+                            ExtractedMedia(
+                                id = videoId,
+                                title = title,
+                                thumbnailUrl = thumb,
+                                streamUrl = streamUrl,
+                                quality = "1080p Full HD",
+                                fileSizeMb = data.optString("filesizeMb", "9.20 MB"),
+                                platform = "youtube",
+                                isVideo = true,
+                                author = author,
+                                durationText = "1:30",
+                                items = listOf(MediaItem(streamUrl, true, thumb, "1080p Full HD"))
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Engine 3: High-Speed Direct Stream Resolver via Piped Network
         val pipedEndpoints = listOf(
             "https://api.piped.private.coffee/streams/$videoId",
             "https://pipedapi.kavin.rocks/streams/$videoId"
@@ -326,18 +451,24 @@ class QwikSaveClient(
                             }
                         }
                         if (pickedUrl.isNotBlank()) {
+                            val finalStreamUrl = if (pickedUrl.contains("googlevideo.com")) {
+                                "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(pickedUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}.mp4"
+                            } else {
+                                pickedUrl
+                            }
                             return@withContext Result.success(
                                 ExtractedMedia(
                                     id = videoId,
                                     title = vTitle,
                                     thumbnailUrl = defaultThumb,
-                                    streamUrl = pickedUrl,
+                                    streamUrl = finalStreamUrl,
                                     quality = "$pickedQuality Full HD",
                                     fileSizeMb = "9.80 MB",
                                     platform = "youtube",
                                     isVideo = true,
                                     author = vAuthor,
-                                    durationText = "1:20"
+                                    durationText = "1:20",
+                                    items = listOf(MediaItem(finalStreamUrl, true, defaultThumb, "$pickedQuality Full HD"))
                                 )
                             )
                         }
@@ -345,53 +476,6 @@ class QwikSaveClient(
                 }
             } catch (_: Exception) {}
         }
-
-        // Engine 2: Call backend /api/universal-download
-        try {
-            val endpoint = URL("$baseUrl/api/universal-download")
-            val conn = (endpoint.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json")
-                doOutput = true
-                connectTimeout = 8000
-                readTimeout = 8000
-            }
-
-            val payload = JSONObject().apply { put("url", cleanUrl) }
-            conn.outputStream.use { os ->
-                os.write(payload.toString().toByteArray())
-            }
-
-            if (conn.responseCode == 200) {
-                val response = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(response)
-                val data = json.optJSONObject("data")
-
-                if (data != null) {
-                    val streamUrl = data.optString("downloadUrl", "")
-                    val thumb = data.optString("thumbnailUrl", defaultThumb)
-                    val title = data.optString("title", "YouTube Video")
-                    val author = data.optJSONObject("author")?.optString("name", "YouTube Channel") ?: "YouTube Channel"
-
-                    if (streamUrl.isNotBlank() && streamUrl.startsWith("http") && !streamUrl.contains("youtube.com/watch")) {
-                        return@withContext Result.success(
-                            ExtractedMedia(
-                                id = videoId,
-                                title = title,
-                                thumbnailUrl = thumb,
-                                streamUrl = streamUrl,
-                                quality = "1080p Full HD",
-                                fileSizeMb = data.optString("filesizeMb", "9.20 MB"),
-                                platform = "youtube",
-                                isVideo = true,
-                                author = author,
-                                durationText = "1:30"
-                            )
-                        )
-                    }
-                }
-            }
-        } catch (_: Exception) {}
 
         // Verified direct sample fallback (zero 0-second file)
         Result.success(
@@ -447,8 +531,9 @@ class QwikSaveClient(
                 // Critical upstream headers to prevent CDN 403 Forbidden / Download unsuccessful
                 addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
                 addRequestHeader("Accept", "*/*")
-                if (downloadUrl.contains("facebook.com") || downloadUrl.contains("fbcdn.net") || downloadUrl.contains("rapidcdn.app")) {
-                    addRequestHeader("Referer", "https://www.facebook.com/")
+                if (downloadUrl.contains("rapidcdn.app") || downloadUrl.contains("snapsave.app")) {
+                    addRequestHeader("Referer", "https://snapsave.app/")
+                    addRequestHeader("Origin", "https://snapsave.app")
                 } else if (downloadUrl.contains("instagram.com") || downloadUrl.contains("cdninstagram.com")) {
                     addRequestHeader("Referer", "https://www.instagram.com/")
                 }
@@ -485,22 +570,22 @@ class QwikSaveClient(
             var currentUrl = mediaUrl
             var connection: HttpURLConnection? = null
             var redirectCount = 0
+            val isSnap = mediaUrl.contains("rapidcdn.app") || mediaUrl.contains("snapsave.app")
 
             while (redirectCount < 6) {
                 val url = URL(currentUrl)
                 connection = (url.openConnection() as HttpURLConnection).apply {
                     setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
                     setRequestProperty("Accept", "*/*")
-                    if (currentUrl.contains("rapidcdn.app") || currentUrl.contains("snapsave.app")) {
+                    if (isSnap || currentUrl.contains("rapidcdn.app") || currentUrl.contains("snapsave.app")) {
                         setRequestProperty("Referer", "https://snapsave.app/")
                         setRequestProperty("Origin", "https://snapsave.app")
-                    } else if (currentUrl.contains("facebook.com") || currentUrl.contains("fbcdn.net")) {
-                        setRequestProperty("Referer", "https://www.facebook.com/")
                     } else if (currentUrl.contains("instagram.com") || currentUrl.contains("cdninstagram.com")) {
                         setRequestProperty("Referer", "https://www.instagram.com/")
                     } else if (currentUrl.contains("googlevideo.com") || currentUrl.contains("youtube.com")) {
                         setRequestProperty("Referer", "https://www.youtube.com/")
                     }
+                    // For fbcdn.net, omitting Referer avoids Facebook hotlink 403
                     connectTimeout = 15000
                     readTimeout = 30000
                     instanceFollowRedirects = false
@@ -516,7 +601,23 @@ class QwikSaveClient(
                 }
             }
 
-            val conn = connection ?: return@withContext Result.failure(Exception("Could not connect to media stream"))
+            var conn = connection ?: return@withContext Result.failure(Exception("Could not connect to media stream"))
+
+            // CRITICAL: If direct upstream stream returned 401, 403, or failed, fallback to server proxy-download!
+            if (conn.responseCode !in 200..299 && !mediaUrl.contains("/api/proxy-download")) {
+                try {
+                    conn.disconnect()
+                    val proxyUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(mediaUrl, "UTF-8")}&filename=${java.net.URLEncoder.encode(filename, "UTF-8")}"
+                    conn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
+                        setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
+                        setRequestProperty("Accept", "*/*")
+                        connectTimeout = 25000
+                        readTimeout = 60000
+                        instanceFollowRedirects = true
+                    }
+                } catch (_: Exception) {}
+            }
+
             if (conn.responseCode !in 200..299) {
                 return@withContext Result.failure(Exception("Server returned HTTP ${conn.responseCode}"))
             }
@@ -529,6 +630,13 @@ class QwikSaveClient(
                 isPdf -> "application/pdf"
                 isImage -> "image/jpeg"
                 else -> "video/mp4"
+            }
+
+            val minBytes = when {
+                isPdf -> 100L
+                isImage -> 500L
+                isAudio -> 1024L
+                else -> 15 * 1024L
             }
 
             var savedFile: File? = null
@@ -593,8 +701,8 @@ class QwikSaveClient(
                         }
                         output.flush()
 
-                        // CRITICAL CHECK: Real video/media files are NEVER less than 15 KB!
-                        if (!isPdf && totalBytes < 15 * 1024) {
+                        // CRITICAL CHECK: Incomplete or empty download check
+                        if (totalBytes < minBytes) {
                             contentResolver.delete(itemUri, null, null)
                             return@withContext Result.failure(Exception("Stream returned incomplete or corrupt file (${totalBytes} bytes)."))
                         }
@@ -641,7 +749,7 @@ class QwikSaveClient(
                         }
                         output.flush()
 
-                        if (!isPdf && totalBytes < 15 * 1024) {
+                        if (totalBytes < minBytes) {
                             targetFile.delete()
                             return@withContext Result.failure(Exception("Stream returned incomplete or corrupt file (${totalBytes} bytes)."))
                         }

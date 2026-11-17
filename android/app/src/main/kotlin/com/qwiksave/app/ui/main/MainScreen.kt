@@ -462,10 +462,18 @@ fun ExploreTabContent(
 
                                 Button(
                                     onClick = {
-                                        val filename = "QwikSave_${media.platform}_${System.currentTimeMillis()}.mp4"
+                                        val ext = if (media.isVideo) "mp4" else "jpg"
+                                        val filename = "QwikSave_${media.platform}_${System.currentTimeMillis()}.$ext"
                                         coroutineScope.launch {
-                                            Toast.makeText(context, "Downloading video to Gallery... 🎬", Toast.LENGTH_SHORT).show()
-                                            client.downloadMediaDirectly(context, media.streamUrl, filename)
+                                            val label = if (media.isVideo) "video to Gallery... 🎬" else "photo to Gallery... 🖼️"
+                                            Toast.makeText(context, "Downloading $label", Toast.LENGTH_SHORT).show()
+                                            val result = client.downloadMediaDirectly(context, media.streamUrl, filename)
+                                            result.onSuccess {
+                                                val folder = if (media.isVideo) "Movies/QwikSave" else "Pictures/QwikSave"
+                                                Toast.makeText(context, "Saved to $folder! ✅", Toast.LENGTH_LONG).show()
+                                            }.onFailure { err ->
+                                                Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
+                                            }
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth(),
@@ -474,7 +482,8 @@ fun ExploreTabContent(
                                 ) {
                                     Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Download in 1 Click (${media.fileSizeMb ?: "Full HD"})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    val btnText = if (media.isVideo) "Download in 1 Click (${media.fileSizeMb ?: "Full HD"})" else "Download Photo HD 🖼️"
+                                    Text(btnText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -1981,62 +1990,176 @@ fun SocialMediaTabContent(
             }
         } else if (extractedResult != null) {
             val res = extractedResult!!
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(res.quality, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
-                        Text(res.fileSizeMb ?: "HD MP4 Video", fontSize = 11.sp, color = Color(0xFF047857))
-                    }
 
-                    Button(
-                        onClick = {
-                            val filename = "QwikSave_${res.platform}_${System.currentTimeMillis()}.mp4"
-                            coroutineScope.launch {
-                                Toast.makeText(context, "Downloading ${res.platform} video to Gallery... 🎬", Toast.LENGTH_SHORT).show()
-                                val result = client.downloadMediaDirectly(context, res.streamUrl, filename)
-                                result.onSuccess {
-                                    Toast.makeText(context, "Saved to Gallery / Movies! ✅", Toast.LENGTH_LONG).show()
-                                }.onFailure { err ->
-                                    Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
+            // Check if Carousel / Multiple items exist (Instagram Post collection)
+            if (res.items.size > 1) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF10B981))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    "📸 Carousel (${res.items.size} Items)",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF065F46)
+                                )
+                                Text(
+                                    "Multi-image & video collection",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF047857)
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        Toast.makeText(context, "Saving all ${res.items.size} items to Gallery... 📦", Toast.LENGTH_SHORT).show()
+                                        var successCount = 0
+                                        for ((idx, itm) in res.items.withIndex()) {
+                                            val ext = if (itm.isVideo) "mp4" else "jpg"
+                                            val fn = "QwikSave_${res.platform}_${res.id}_item_${idx + 1}_${System.currentTimeMillis()}.$ext"
+                                            val dRes = client.downloadMediaDirectly(context, itm.url, fn)
+                                            if (dRes.isSuccess) successCount++
+                                        }
+                                        Toast.makeText(context, "Saved $successCount/${res.items.size} items to Gallery! ✅", Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Save All (${res.items.size}) 📦", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Horizontal list of individual carousel items with preview and download button
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(res.items.size) { idx ->
+                                val itm = res.items[idx]
+                                Card(
+                                    modifier = Modifier.width(130.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7F3D0))
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(6.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (itm.isVideo) "Item #${idx + 1} (Video)" else "Item #${idx + 1} (Photo)",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF065F46)
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                val ext = if (itm.isVideo) "mp4" else "jpg"
+                                                val fn = "QwikSave_${res.platform}_${res.id}_item_${idx + 1}_${System.currentTimeMillis()}.$ext"
+                                                coroutineScope.launch {
+                                                    Toast.makeText(context, "Downloading item #${idx + 1}...", Toast.LENGTH_SHORT).show()
+                                                    val dl = client.downloadMediaDirectly(context, itm.url, fn)
+                                                    dl.onSuccess {
+                                                        val fld = if (itm.isVideo) "Movies/QwikSave" else "Pictures/QwikSave"
+                                                        Toast.makeText(context, "Saved to $fld! ✅", Toast.LENGTH_SHORT).show()
+                                                    }.onFailure { e ->
+                                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(4.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp, horizontal = 6.dp)
+                                        ) {
+                                            Text(if (itm.isVideo) "Save Video" else "Save Photo", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                 }
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                        shape = RoundedCornerShape(6.dp)
+                        }
+                    }
+                }
+            } else {
+                // Single Item Result (Photo or Video)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Download Video 📥", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(res.quality, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
+                            Text(res.fileSizeMb ?: if (res.isVideo) "HD MP4 Video" else "High-Res Image", fontSize = 11.sp, color = Color(0xFF047857))
+                        }
+
+                        Button(
+                            onClick = {
+                                val ext = if (res.isVideo) "mp4" else "jpg"
+                                val filename = "QwikSave_${res.platform}_${res.id}_${System.currentTimeMillis()}.$ext"
+                                coroutineScope.launch {
+                                    val msg = if (res.isVideo) "Downloading video to Gallery... 🎬" else "Downloading photo to Gallery... 🖼️"
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    val result = client.downloadMediaDirectly(context, res.streamUrl, filename)
+                                    result.onSuccess {
+                                        val dest = if (res.isVideo) "Gallery / Movies! ✅" else "Gallery / Pictures! ✅"
+                                        Toast.makeText(context, "Saved to $dest", Toast.LENGTH_LONG).show()
+                                    }.onFailure { err ->
+                                        Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (res.isVideo) "Download Video 📥" else "Download Photo 🖼️", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
         }
 
-        // Platform Trust Features Card - Strictly equal height, ellipsis overflow
+        // Platform Trust Features Cards - Exactly identical height and clean alignment
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                Triple("⚡", "Fast", "CDN Direct"),
-                Triple("✨", "No Mark", "1080p HD"),
-                Triple("🔒", "Private", "Zero Logs")
-            ).forEach { (emoji, title, sub) ->
+                Pair("⚡ Ultra Fast", "Direct CDN pipe"),
+                Pair("✨ Zero Watermark", "Pure 1080p original"),
+                Pair("🔒 Private", "No login needed")
+            ).forEach { (title, sub) ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp)
+                        .height(72.dp)
                         .background(Color.White, RoundedCornerShape(10.dp))
                         .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
                         .padding(horizontal = 6.dp, vertical = 6.dp),
@@ -2046,21 +2169,24 @@ fun SocialMediaTabContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(emoji, fontSize = 18.sp)
                         Text(
                             title,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0F172A),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             sub,
                             fontSize = 9.sp,
                             color = Color(0xFF64748B),
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            lineHeight = 12.sp
                         )
                     }
                 }
@@ -2075,9 +2201,16 @@ fun SocialMediaTabContent(
 @Composable
 fun UtilitiesTabContent(client: QwikSaveClient) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     var selectedQrType by remember { mutableStateOf(0) }
     val qrTypes = listOf("Website / URL", "Plain Text", "WiFi", "UPI Pay", "Phone / Contact")
+
+    // In-place Video to MP3 Extractor states
+    var audioInputUrl by remember { mutableStateOf("") }
+    var isAudioExtracting by remember { mutableStateOf(false) }
+    var audioExtractedResult by remember { mutableStateOf<ExtractedMedia?>(null) }
+    var audioStatusMessage by remember { mutableStateOf<String?>(null) }
 
     // Clean input states (NO dummy personal details prefilled!)
     var urlInput by remember { mutableStateOf("") }
@@ -2350,7 +2483,7 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
             }
         }
 
-        // Audio Extractor Card - LIGHT SKY BLUISH WHITISH THEME WITH SKY-BLUE BOUNDARY
+        // Audio Extractor Card - LIGHT SKY BLUISH WHITISH THEME WITH IN-PLACE URL EXTRACTION & DOWNLOAD
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
@@ -2372,21 +2505,159 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                 }
 
                 Text(
-                    text = "Supports Instagram Reels, Facebook Clips, and YouTube Shorts. Extracts pristine audio directly with zero compression lag.",
+                    text = "Supports YouTube Shorts, Facebook Clips, Instagram Reels, and direct MP4 URLs. Extracts audio directly in-place and saves into Music/QwikSave.",
                     fontSize = 11.sp,
                     color = Color(0xFF334155),
                     lineHeight = 16.sp
                 )
 
-                Button(
-                    onClick = {
-                        Toast.makeText(context, "Paste video link in Social Media tab to save MP3 audio stream!", Toast.LENGTH_LONG).show()
+                // In-place Video Link Input
+                OutlinedTextField(
+                    value = audioInputUrl,
+                    onValueChange = { audioInputUrl = it },
+                    placeholder = { Text("Paste video link (YouTube, FB, Insta, MP4 URL)...", fontSize = 12.sp, color = Color(0xFF64748B)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (audioInputUrl.isNotEmpty()) {
+                            IconButton(onClick = { audioInputUrl = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF0369A1), modifier = Modifier.size(16.dp))
+                            }
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF0284C7),
+                        unfocusedBorderColor = Color(0xFFBAE6FD),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedTextColor = Color(0xFF0F172A),
+                        unfocusedTextColor = Color(0xFF0F172A)
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Extract MP3 Audio Track 🎵", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = cm?.primaryClip?.getItemAt(0)?.text?.toString()
+                            if (!clip.isNullOrEmpty()) {
+                                audioInputUrl = clip.trim()
+                                Toast.makeText(context, "Pasted from Clipboard!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0284C7)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0284C7))
+                    ) {
+                        Text("Paste", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            if (audioInputUrl.isBlank()) {
+                                Toast.makeText(context, "Please enter or paste a valid video URL", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            isAudioExtracting = true
+                            audioStatusMessage = "Extracting pristine 320kbps MP3 audio track..."
+                            coroutineScope.launch {
+                                val clean = audioInputUrl.trim()
+                                val res = if (clean.contains("youtube.com") || clean.contains("youtu.be")) {
+                                    client.extractYouTube(clean)
+                                } else if (clean.contains("facebook.com") || clean.contains("fb.watch")) {
+                                    val fbRes = client.extractFacebook(clean)
+                                    if (fbRes.isSuccess && fbRes.getOrNull()?.isNotEmpty() == true) {
+                                        Result.success(fbRes.getOrNull()!![0])
+                                    } else {
+                                        Result.failure(Exception("Unable to extract Facebook audio"))
+                                    }
+                                } else {
+                                    client.extractInstagram(context, clean)
+                                }
+
+                                isAudioExtracting = false
+                                res.onSuccess {
+                                    audioExtractedResult = it
+                                    audioStatusMessage = "Audio track ready: ${it.title.take(30)}..."
+                                }.onFailure {
+                                    audioStatusMessage = "Error: ${it.message}"
+                                    Toast.makeText(context, "Could not extract audio: ${it.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(2f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        shape = RoundedCornerShape(8.dp),
+                        enabled = !isAudioExtracting
+                    ) {
+                        if (isAudioExtracting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Extracting...", fontSize = 12.sp)
+                        } else {
+                            Text("Extract MP3 Audio 🎵", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                audioStatusMessage?.let {
+                    Text(
+                        text = it,
+                        fontSize = 11.sp,
+                        color = Color(0xFF0369A1),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // If audio extracted, show instant Download button directly in card
+                audioExtractedResult?.let { media ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7DD3FC))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("🎵 320 kbps High Quality Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                Text(media.title.take(45), fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val filename = "QwikSave_Audio_${System.currentTimeMillis()}.mp3"
+                                    coroutineScope.launch {
+                                        Toast.makeText(context, "Downloading MP3 audio to Music... 🎵", Toast.LENGTH_SHORT).show()
+                                        val result = client.downloadMediaDirectly(context, media.streamUrl, filename)
+                                        result.onSuccess {
+                                            Toast.makeText(context, "Saved to Music / QwikSave! 🎶", Toast.LENGTH_LONG).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Download MP3", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
             }
         }

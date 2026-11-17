@@ -63,7 +63,53 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid YouTube video link format');
       }
 
-      // Engine 1: High-speed Piped Direct Stream Resolver (No bot block, direct CDN MP4)
+      // Engine 1: Fast Proxied YouTube Stream Resolver (Bypasses GoogleVideo 403 & IP binding)
+      try {
+        const tiooRes = await fetch(`https://backend1.tioo.eu.org/youtube?url=https://www.youtube.com/watch?v=${videoId}`, {
+          signal: AbortSignal.timeout(8000),
+        });
+        if (tiooRes.ok) {
+          const tiooData = await tiooRes.json();
+          if (tiooData && (tiooData.mp4 || tiooData.mp3)) {
+            const vUrl = tiooData.mp4 || tiooData.mp3;
+            return NextResponse.json({
+              success: true,
+              data: {
+                id: videoId,
+                platform: 'youtube',
+                platformName: trimmedUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
+                title: tiooData.title || 'YouTube Video',
+                author: {
+                  name: tiooData.author || 'YouTube Creator',
+                  username: '',
+                },
+                thumbnailUrl:
+                  tiooData.thumbnail ||
+                  `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                downloadUrl: vUrl,
+                audioUrl: tiooData.mp3 || undefined,
+                duration: 180,
+                youtubeId: videoId,
+                formats: [
+                  {
+                    formatId: 'yt_hd',
+                    qualityLabel: '720p HD MP4 (Direct Stream)',
+                    resolution: '720p',
+                    filesizeMb: '11.8 MB',
+                    url: vUrl,
+                    hasVideo: true,
+                    hasAudio: true,
+                  }
+                ],
+              },
+            });
+          }
+        }
+      } catch (tiooErr) {
+        console.warn('Tioo YouTube API failed:', tiooErr);
+      }
+
+      // Engine 2: High-speed Piped Direct Stream Resolver (No bot block, direct CDN MP4)
       try {
         const pipedEndpoints = [
           `https://api.piped.private.coffee/streams/${videoId}`,
@@ -86,17 +132,28 @@ export async function POST(request: NextRequest) {
               const bestStream = streamList[0];
 
               if (bestStream && bestStream.url) {
-                const formats = streamList.map((s: any, idx: number) => ({
-                  formatId: `yt_${s.quality || idx}`,
-                  qualityLabel: `${s.quality || 'HD'} (${s.format || 'MP4'})`,
-                  resolution: s.quality || '720p',
-                  filesizeMb: s.contentLength
-                    ? (s.contentLength / (1024 * 1024)).toFixed(2) + ' MB'
-                    : undefined,
-                  url: s.url,
-                  hasVideo: true,
-                  hasAudio: !s.videoOnly,
-                }));
+                // If stream is googlevideo, wrap with proxy-download to prevent client IP 403
+                const rawUrl = bestStream.url;
+                const safeDownloadUrl = rawUrl.includes('googlevideo.com')
+                  ? `/api/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=QwikSave_YouTube_${videoId}.mp4`
+                  : rawUrl;
+
+                const formats = streamList.map((s: any, idx: number) => {
+                  const sUrl = s.url?.includes('googlevideo.com')
+                    ? `/api/proxy-download?url=${encodeURIComponent(s.url)}&filename=QwikSave_YouTube_${videoId}_${idx}.mp4`
+                    : s.url;
+                  return {
+                    formatId: `yt_${s.quality || idx}`,
+                    qualityLabel: `${s.quality || 'HD'} (${s.format || 'MP4'})`,
+                    resolution: s.quality || '720p',
+                    filesizeMb: s.contentLength
+                      ? (s.contentLength / (1024 * 1024)).toFixed(2) + ' MB'
+                      : undefined,
+                    url: sUrl,
+                    hasVideo: true,
+                    hasAudio: !s.videoOnly,
+                  };
+                });
 
                 const audioStream = pipedData.audioStreams?.find((a: any) =>
                   a.mimeType?.includes('audio')
@@ -116,7 +173,7 @@ export async function POST(request: NextRequest) {
                     thumbnailUrl:
                       pipedData.thumbnailUrl ||
                       `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-                    downloadUrl: bestStream.url,
+                    downloadUrl: safeDownloadUrl,
                     audioUrl: audioStream,
                     duration: pipedData.duration,
                     youtubeId: videoId,

@@ -177,6 +177,27 @@ async function extractViaGraphQL(shortcode: string): Promise<InstagramResult | n
           mediaItems: [{ type: 'video', url: videoUrl, thumbnailUrl: thumbnail }],
           downloadUrl: videoUrl,
         };
+      } else if (displayUrl) {
+        // Photo or carousel post
+        const sidecarEdges = media.edge_sidecar_to_children?.edges || [];
+        const mediaItems: InstagramMediaItem[] = sidecarEdges.length > 0
+          ? sidecarEdges.map((e: any) => ({
+              type: (e.node?.is_video ? 'video' : 'photo') as 'video' | 'photo',
+              url: e.node?.video_url || e.node?.display_url || '',
+              thumbnailUrl: e.node?.display_url || '',
+            })).filter((m: any) => m.url)
+          : [{ type: 'photo', url: displayUrl, thumbnailUrl: displayUrl }];
+
+        return {
+          id: shortcode,
+          shortcode,
+          type: sidecarEdges.length > 1 ? 'carousel' : 'post',
+          caption: captionEdge,
+          author: { username: ownerUsername },
+          thumbnailUrl: thumbnail,
+          mediaItems,
+          downloadUrl: mediaItems[0]?.url || displayUrl,
+        };
       }
     }
   } catch {
@@ -219,6 +240,21 @@ async function extractViaEmbed(shortcode: string): Promise<InstagramResult | nul
         thumbnailUrl: posterUrl,
         mediaItems: [{ type: 'video', url: videoSrc, thumbnailUrl: posterUrl }],
         downloadUrl: videoSrc,
+      };
+    }
+
+    // Photo post check via embed
+    const imageSrc = $('img.EmbeddedMediaImage').attr('src') || $('img').first().attr('src') || posterUrl;
+    if (imageSrc && imageSrc.startsWith('http')) {
+      return {
+        id: shortcode,
+        shortcode,
+        type: 'post',
+        caption,
+        author: { username },
+        thumbnailUrl: imageSrc,
+        mediaItems: [{ type: 'photo', url: imageSrc, thumbnailUrl: imageSrc }],
+        downloadUrl: imageSrc,
       };
     }
 

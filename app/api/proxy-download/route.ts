@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Universal Proxy Download Route
- * Bypasses CORS and CDN hotlink protections (Instagram/Facebook/YouTube/etc.)
+ * Bypasses CORS, IP binding, and CDN hotlink protections (Instagram/Facebook/YouTube/etc.)
  * by fetching media upstream and piping it with Content-Disposition: attachment.
  */
 export async function GET(request: NextRequest) {
@@ -40,23 +40,37 @@ export async function GET(request: NextRequest) {
       'Accept-Language': 'en-US,en;q=0.9',
     };
 
-    if (parsedUrl.hostname.includes('cdninstagram') || parsedUrl.hostname.includes('instagram')) {
-      headers['Referer'] = 'https://www.instagram.com/';
-      headers['Origin'] = 'https://www.instagram.com';
-    } else if (parsedUrl.hostname.includes('fbcdn') || parsedUrl.hostname.includes('facebook')) {
-      headers['Referer'] = 'https://www.facebook.com/';
-      headers['Origin'] = 'https://www.facebook.com';
-    } else if (parsedUrl.hostname.includes('rapidcdn') || parsedUrl.hostname.includes('snapsave')) {
+    if (parsedUrl.hostname.includes('rapidcdn') || parsedUrl.hostname.includes('snapsave')) {
       headers['Referer'] = 'https://snapsave.app/';
       headers['Origin'] = 'https://snapsave.app';
+    } else if (parsedUrl.hostname.includes('cdninstagram') || parsedUrl.hostname.includes('instagram')) {
+      headers['Referer'] = 'https://www.instagram.com/';
+      headers['Origin'] = 'https://www.instagram.com';
     } else if (parsedUrl.hostname.includes('googlevideo') || parsedUrl.hostname.includes('youtube')) {
       headers['Referer'] = 'https://www.youtube.com/';
     }
+    // Note: for fbcdn.net, omitting Referer avoids Facebook CDN hotlink 403
 
-    const response = await fetch(mediaUrl, {
+    let response = await fetch(mediaUrl, {
       headers,
       redirect: 'follow',
     });
+
+    // If upstream returns 403 or 401, retry with clean browser headers without referer
+    if (!response.ok && (response.status === 403 || response.status === 401)) {
+      const cleanHeaders: Record<string, string> = {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: '*/*',
+      };
+      const retryResponse = await fetch(mediaUrl, {
+        headers: cleanHeaders,
+        redirect: 'follow',
+      });
+      if (retryResponse.ok && retryResponse.body) {
+        response = retryResponse;
+      }
+    }
 
     if (!response.ok || !response.body) {
       return NextResponse.json(
