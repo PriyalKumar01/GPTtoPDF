@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- YouTube Red pill/rectangle -->
+    <path
+        android:fillColor="#FFFF0000"
+        android:pathData="M23.498,6.186 C23.238,5.213 22.473,4.448 21.5,4.188 C19.74,3.717 12,3.717 12,3.717 C12,3.717 4.26,3.717 2.5,4.188 C1.527,4.448 0.762,5.213 0.502,6.186 C0.031,7.946 0.031,11.643 0.031,11.643 C0.031,11.643 0.031,15.34 0.502,17.1 C0.762,18.073 1.527,18.838 2.5,19.098 C4.26,19.569 12,19.569 12,19.569 C12,19.569 19.74,19.569 21.5,19.098 C22.473,18.838 23.238,18.073 23.498,17.1 C23.969,15.34 23.969,11.643 23.969,11.643 C23.969,11.643 23.969,7.946 23.498,6.186 Z" />
+    <!-- White center play triangle -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9.6,15.2 L15.8,11.6 L9.6,8 Z" />
+</vector>

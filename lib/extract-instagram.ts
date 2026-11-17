@@ -35,8 +35,6 @@ export interface InstagramResult {
 
 const USER_AGENT_DESKTOP =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-const USER_AGENT_MOBILE =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1';
 
 export function extractInstagramShortcode(rawUrl: string): { shortcode: string; type: string } | null {
   try {
@@ -66,48 +64,94 @@ export function extractInstagramShortcode(rawUrl: string): { shortcode: string; 
   }
 }
 
-async function getGuestCookies(): Promise<{ cookieHeader: string; csrf: string }> {
+/**
+ * Engine 1: instagram-url-direct package (most reliable, no login needed)
+ */
+async function extractViaInstagramUrlDirect(url: string): Promise<InstagramResult | null> {
   try {
-    const res = await fetch('https://www.instagram.com/', {
-      headers: {
-        'User-Agent': USER_AGENT_DESKTOP,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
-      next: { revalidate: 3600 },
-    });
-    const rawCookies = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
-    const cookieHeader = rawCookies.map((c) => c.split(';')[0]).join('; ');
-    const csrfMatch = cookieHeader.match(/csrftoken=([^;]+)/);
-    const csrf = csrfMatch ? csrfMatch[1] : '';
-    return { cookieHeader, csrf };
-  } catch {
-    return { cookieHeader: '', csrf: '' };
+    const pkg = await import('instagram-url-direct');
+    const fn = (pkg as any).default?.instagramGetUrl || (pkg as any).instagramGetUrl || (pkg as any).default;
+    if (typeof fn === 'function') {
+      const result = await fn(url);
+      const urlList: string[] = result?.url_list || (Array.isArray(result) ? result.map((r: any) => r.url || r) : []);
+      if (urlList.length > 0) {
+        const shortcode = extractInstagramShortcode(url)?.shortcode || `ig_${Date.now()}`;
+        const firstUrl = urlList[0];
+
+        const mediaItems: InstagramMediaItem[] = urlList.map((mediaUrl: string) => ({
+          type: (mediaUrl.includes('.mp4') ? 'video' : 'photo') as 'video' | 'photo',
+          url: mediaUrl,
+          thumbnailUrl: mediaUrl,
+        }));
+
+        return {
+          id: shortcode,
+          shortcode,
+          type: 'reel',
+          caption: 'Instagram Reel',
+          author: { username: 'instagram_creator' },
+          thumbnailUrl: firstUrl,
+          mediaItems,
+          downloadUrl: firstUrl,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('instagram-url-direct failed:', err);
   }
+  return null;
 }
 
 /**
- * Strategy 1: GraphQL Query with user or guest session
+ * Engine 2: SnapSave API (works for Instagram too sometimes)
  */
-async function extractViaGraphQL(shortcode: string, cookieHeader: string, csrf: string): Promise<InstagramResult | null> {
+async function extractViaSnapSave(url: string, shortcode: string): Promise<InstagramResult | null> {
   try {
-    const docIds = ['8845758582119845', '10015901848480474', '25531498899829322'];
-    const customCookie = process.env.INSTAGRAM_COOKIE || cookieHeader;
+    const { snapsave } = await import('snapsave-media-downloader');
+    const snapData = await snapsave(url) as any;
 
+    if (snapData?.success && snapData?.data?.media?.length > 0) {
+      const firstMedia = snapData.data.media[0];
+      if (firstMedia?.url) {
+        const thumb = snapData.data.preview || '';
+        return {
+          id: shortcode,
+          shortcode,
+          type: 'reel',
+          caption: snapData.data.description || 'Instagram Reel',
+          author: { username: 'instagram_creator' },
+          thumbnailUrl: thumb,
+          mediaItems: [{ type: 'video', url: firstMedia.url, thumbnailUrl: thumb }],
+          downloadUrl: firstMedia.url,
+        };
+      }
+    }
+  } catch {
+    // silent
+  }
+  return null;
+}
+
+/**
+ * Engine 3: GraphQL with optional env cookie
+ */
+async function extractViaGraphQL(shortcode: string): Promise<InstagramResult | null> {
+  try {
+    const cookieHeader = process.env.INSTAGRAM_COOKIE || '';
+    const csrf = cookieHeader.match(/csrftoken=([^;]+)/)?.[1] || 'missing';
+
+    const docIds = ['8845758582119845', '10015901848480474'];
     for (const docId of docIds) {
-      const url = `https://www.instagram.com/graphql/query/?doc_id=${docId}&variables=${encodeURIComponent(
-        JSON.stringify({ shortcode })
-      )}`;
-
-      const res = await fetch(url, {
+      const apiUrl = `https://www.instagram.com/graphql/query/?doc_id=${docId}&variables=${encodeURIComponent(JSON.stringify({ shortcode }))}`;
+      const res = await fetch(apiUrl, {
         headers: {
           'User-Agent': USER_AGENT_DESKTOP,
           'X-IG-App-ID': '936619743392459',
-          'X-ASBD-ID': '129477',
           'X-CSRFToken': csrf,
-          Cookie: customCookie,
+          Cookie: cookieHeader,
           Accept: '*/*',
         },
-        next: { revalidate: 0 },
+        signal: AbortSignal.timeout(8000),
       });
 
       if (!res.ok) continue;
@@ -116,200 +160,87 @@ async function extractViaGraphQL(shortcode: string, cookieHeader: string, csrf: 
       if (!media) continue;
 
       const isVideo = media.is_video;
-      const primaryVideoUrl = media.video_url;
-      const displayUrl = media.display_url;
-      const mediaItems: InstagramMediaItem[] = [];
+      const videoUrl = media.video_url || '';
+      const displayUrl = media.display_url || '';
+      const thumbnail = media.thumbnail_src || displayUrl;
+      const captionEdge = media.edge_media_to_caption?.edges?.[0]?.node?.text || '';
+      const ownerUsername = media.owner?.username || 'instagram_creator';
 
-      const children = media.edge_sidecar_to_children?.edges;
-      if (Array.isArray(children) && children.length > 0) {
-        children.forEach((edge: any) => {
-          const node = edge.node;
-          if (node.is_video && node.video_url) {
-            mediaItems.push({
-              type: 'video',
-              url: node.video_url,
-              thumbnailUrl: node.display_url,
-              width: node.dimensions?.width,
-              height: node.dimensions?.height,
-            });
-          } else if (node.display_url) {
-            mediaItems.push({
-              type: 'photo',
-              url: node.display_url,
-              thumbnailUrl: node.display_url,
-            });
-          }
-        });
-      } else {
-        if (isVideo && primaryVideoUrl) {
-          mediaItems.push({
-            type: 'video',
-            url: primaryVideoUrl,
-            thumbnailUrl: displayUrl,
-          });
-        } else if (displayUrl) {
-          mediaItems.push({
-            type: 'photo',
-            url: displayUrl,
-            thumbnailUrl: displayUrl,
-          });
-        }
-      }
-
-      if (mediaItems.length > 0) {
+      if (isVideo && videoUrl) {
         return {
-          id: media.id || shortcode,
+          id: shortcode,
           shortcode,
-          type: mediaItems.length > 1 ? 'carousel' : isVideo ? 'reel' : 'post',
-          caption: media.edge_media_to_caption?.edges?.[0]?.node?.text,
-          author: {
-            username: media.owner?.username || 'instagram_user',
-            fullName: media.owner?.full_name,
-            avatarUrl: media.owner?.profile_pic_url,
-            isVerified: media.owner?.is_verified,
-          },
-          metrics: {
-            likes: media.edge_media_preview_like?.count,
-            views: media.video_view_count,
-            comments: media.edge_media_to_comment?.count,
-          },
-          thumbnailUrl: displayUrl || mediaItems[0].thumbnailUrl || '',
-          mediaItems,
-          downloadUrl: mediaItems[0].url,
+          type: 'reel',
+          caption: captionEdge,
+          author: { username: ownerUsername },
+          thumbnailUrl: thumbnail,
+          mediaItems: [{ type: 'video', url: videoUrl, thumbnailUrl: thumbnail }],
+          downloadUrl: videoUrl,
         };
       }
     }
-    return null;
   } catch {
-    return null;
+    // silent
   }
+  return null;
 }
 
 /**
- * Strategy 2: Embed Scraping
+ * Engine 4: Embed endpoint approach
  */
 async function extractViaEmbed(shortcode: string): Promise<InstagramResult | null> {
   try {
-    const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
+    const embedUrl = `https://www.instagram.com/reel/${shortcode}/embed/captioned/`;
     const res = await fetch(embedUrl, {
       headers: {
-        'User-Agent': USER_AGENT_DESKTOP,
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram/303.0.0.11.111',
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
+        Referer: 'https://www.instagram.com/',
       },
-      next: { revalidate: 0 },
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!res.ok) return null;
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    const directVideoUrl = $('video.EmbeddedMediaVideo, video').attr('src');
-    const posterUrl = $('video').attr('poster') || $('img.EmbeddedMediaImage').attr('src') || '';
-    const caption = $('.Caption').text().trim() || $('div[class*="Caption"]').text().trim();
-    const username = $('.UsernameText').text().trim() || 'instagram_creator';
-    const avatar = $('img.Avatar').attr('src') || '';
+    const videoSrc = $('video source').first().attr('src') || $('video').first().attr('src');
+    const posterUrl = $('video').first().attr('poster') || $('img').first().attr('src') || '';
+    const username = $('a.UsernameText').text() || 'instagram_creator';
+    const caption = $('.Caption').text().trim() || '';
 
-    if (directVideoUrl) {
+    if (videoSrc) {
       return {
         id: shortcode,
         shortcode,
         type: 'reel',
-        caption: caption || undefined,
-        author: { username, avatarUrl: avatar || undefined },
+        caption,
+        author: { username },
         thumbnailUrl: posterUrl,
-        mediaItems: [{ type: 'video', url: directVideoUrl, thumbnailUrl: posterUrl }],
-        downloadUrl: directVideoUrl,
+        mediaItems: [{ type: 'video', url: videoSrc, thumbnailUrl: posterUrl }],
+        downloadUrl: videoSrc,
       };
     }
 
-    const videoUrlMatches = [
-      ...html.matchAll(/"video_url"\s*:\s*"([^"]+)"/g),
-      ...html.matchAll(/\\\"video_url\\\"\s*:\s*\\\"([^\\\"]+)\\\"/g),
-    ];
+    // Check JSON data in script tags
+    const videoUrlMatches = [...html.matchAll(/"video_url"\s*:\s*"([^"]+)"/g)];
     if (videoUrlMatches.length > 0) {
-      const rawMatch = videoUrlMatches[0][1];
-      const cleanedUrl = rawMatch.replace(/\\u0026/g, '&').replace(/\\/g, '');
+      const cleanedUrl = videoUrlMatches[0][1].replace(/\\u0026/g, '&').replace(/\\/g, '');
       return {
         id: shortcode,
         shortcode,
         type: 'reel',
-        caption: caption || undefined,
-        author: { username, avatarUrl: avatar || undefined },
+        caption,
+        author: { username },
         thumbnailUrl: posterUrl,
         mediaItems: [{ type: 'video', url: cleanedUrl, thumbnailUrl: posterUrl }],
         downloadUrl: cleanedUrl,
       };
     }
-
-    return null;
   } catch {
-    return null;
+    // silent
   }
-}
-
-/**
- * Strategy 3: OpenGraph & Social Crawler Unfurling
- */
-async function extractViaOpenGraph(shortcode: string): Promise<InstagramResult | null> {
-  try {
-    const url = `https://www.instagram.com/reel/${shortcode}/`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
-      next: { revalidate: 0 },
-    });
-
-    if (!res.ok) return null;
-    const html = await res.text();
-    const $ = cheerio.load(html);
-
-    const ogVideo =
-      $('meta[property="og:video"]').attr('content') ||
-      $('meta[property="og:video:secure_url"]').attr('content');
-    const ogImage = $('meta[property="og:image"]').attr('content') || '';
-    const ogTitle = $('meta[property="og:title"]').attr('content') || 'Instagram Reel';
-    const ogDesc = $('meta[property="og:description"]').attr('content') || '';
-
-    // If og:video exists, return complete result
-    if (ogVideo) {
-      return {
-        id: shortcode,
-        shortcode,
-        type: 'reel',
-        title: ogTitle,
-        caption: ogDesc,
-        author: { username: ogTitle.split('•')?.[0]?.trim() || 'instagram_creator' },
-        thumbnailUrl: ogImage,
-        mediaItems: [{ type: 'video', url: ogVideo, thumbnailUrl: ogImage }],
-        downloadUrl: ogVideo,
-      };
-    }
-
-    // If at least og:image and ogTitle were retrieved, we can provide post metadata
-    if (ogImage && ogTitle) {
-      return {
-        id: shortcode,
-        shortcode,
-        type: 'reel',
-        title: ogTitle,
-        caption: ogDesc,
-        author: { username: ogTitle.split('on Instagram')?.[0]?.trim() || 'instagram_creator' },
-        thumbnailUrl: ogImage,
-        mediaItems: [{ type: 'photo', url: ogImage, thumbnailUrl: ogImage }],
-        downloadUrl: ogImage,
-        requiresAuth: true,
-        notice:
-          'Instagram has activated temporary rate-limiting for automated video streaming on this post. You can download the high-resolution cover photo below or open the post directly.',
-      };
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 export async function extractInstagramMedia(inputUrl: string): Promise<InstagramResult> {
@@ -320,10 +251,14 @@ export async function extractInstagramMedia(inputUrl: string): Promise<Instagram
 
   const { shortcode } = match;
 
-  // Tier 1: High-reliability direct media engine (yt-dlp)
+  // Engine 1: instagram-url-direct (most reliable)
+  const directResult = await extractViaInstagramUrlDirect(inputUrl);
+  if (directResult) return directResult;
+
+  // Engine 2: yt-dlp (server must have yt-dlp installed)
   try {
-    const ytdlp = await extractWithYtDlp(inputUrl, 25000);
-    if (ytdlp && ytdlp.videoUrl) {
+    const ytdlp = await extractWithYtDlp(inputUrl, 20000);
+    if (ytdlp?.videoUrl) {
       return {
         id: ytdlp.id || shortcode,
         shortcode,
@@ -334,40 +269,29 @@ export async function extractInstagramMedia(inputUrl: string): Promise<Instagram
           username: ytdlp.channel || ytdlp.uploader || 'instagram_creator',
           fullName: ytdlp.uploader,
         },
-        metrics: {
-          likes: ytdlp.likeCount,
-          comments: ytdlp.commentCount,
-        },
+        metrics: { likes: ytdlp.likeCount, comments: ytdlp.commentCount },
         thumbnailUrl: ytdlp.thumbnailUrl,
-        mediaItems: [
-          {
-            type: 'video',
-            url: ytdlp.videoUrl,
-            thumbnailUrl: ytdlp.thumbnailUrl,
-          },
-        ],
+        mediaItems: [{ type: 'video', url: ytdlp.videoUrl, thumbnailUrl: ytdlp.thumbnailUrl }],
         downloadUrl: ytdlp.videoUrl,
       };
     }
   } catch {
-    // continue to fallbacks
+    // continue
   }
 
-  // Tier 2: GraphQL query with cookies
-  const { cookieHeader, csrf } = await getGuestCookies();
-  let result = await extractViaGraphQL(shortcode, cookieHeader, csrf);
-  if (!result) {
-    result = await extractViaEmbed(shortcode);
-  }
-  if (!result) {
-    result = await extractViaOpenGraph(shortcode);
-  }
+  // Engine 3: snapsave
+  const snapResult = await extractViaSnapSave(inputUrl, shortcode);
+  if (snapResult) return snapResult;
 
-  if (!result) {
-    throw new Error(
-      'Instagram bot protection blocked this request. The post might be private or Instagram temporarily restricted public access from this server IP.'
-    );
-  }
+  // Engine 4: GraphQL
+  const gqlResult = await extractViaGraphQL(shortcode);
+  if (gqlResult) return gqlResult;
 
-  return result;
+  // Engine 5: Embed
+  const embedResult = await extractViaEmbed(shortcode);
+  if (embedResult) return embedResult;
+
+  throw new Error(
+    'Instagram bot protection blocked this request. The post might be private or Instagram temporarily restricted access from this server. Try again in a few seconds.'
+  );
 }

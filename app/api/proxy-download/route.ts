@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Universal Proxy Download Route
- * Bypasses CORS and CDN hotlink protections (Instagram/Facebook/etc.)
+ * Bypasses CORS and CDN hotlink protections (Instagram/Facebook/YouTube/etc.)
  * by fetching media upstream and piping it with Content-Disposition: attachment.
  */
 export async function GET(request: NextRequest) {
@@ -46,6 +46,11 @@ export async function GET(request: NextRequest) {
     } else if (parsedUrl.hostname.includes('fbcdn') || parsedUrl.hostname.includes('facebook')) {
       headers['Referer'] = 'https://www.facebook.com/';
       headers['Origin'] = 'https://www.facebook.com';
+    } else if (parsedUrl.hostname.includes('rapidcdn') || parsedUrl.hostname.includes('snapsave')) {
+      headers['Referer'] = 'https://snapsave.app/';
+      headers['Origin'] = 'https://snapsave.app';
+    } else if (parsedUrl.hostname.includes('googlevideo') || parsedUrl.hostname.includes('youtube')) {
+      headers['Referer'] = 'https://www.youtube.com/';
     }
 
     const response = await fetch(mediaUrl, {
@@ -60,13 +65,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const contentType =
-      response.headers.get('content-type') ||
-      (filename.endsWith('.jpg') || filename.endsWith('.jpeg')
-        ? 'image/jpeg'
-        : filename.endsWith('.png')
-        ? 'image/png'
-        : 'video/mp4');
+    // Ensure proper media content type for media players
+    let contentType = response.headers.get('content-type') || '';
+    if (filename.endsWith('.mp4') || (!contentType || contentType === 'application/octet-stream')) {
+      if (filename.endsWith('.mp4')) contentType = 'video/mp4';
+      else if (filename.endsWith('.mp3')) contentType = 'audio/mpeg';
+      else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) contentType = 'image/jpeg';
+      else if (filename.endsWith('.png')) contentType = 'image/png';
+      else if (filename.endsWith('.pdf')) contentType = 'application/pdf';
+      else contentType = 'video/mp4';
+    }
 
     const contentLength = response.headers.get('content-length');
 

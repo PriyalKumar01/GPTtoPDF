@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Facebook official Blue circle -->
+    <path
+        android:fillColor="#FF1877F2"
+        android:pathData="M12,2 C6.48,2 2,6.48 2,12 C2,16.99 5.66,21.13 10.44,21.88 L10.44,14.89 L7.9,14.89 L7.9,12 L10.44,12 L10.44,9.79 C10.44,7.28 11.93,5.9 14.22,5.9 C15.31,5.9 16.45,6.1 16.45,6.1 L16.45,8.56 L15.19,8.56 C13.95,8.56 13.56,9.33 13.56,10.12 L13.56,12 L16.33,12 L15.89,14.89 L13.56,14.89 L13.56,21.88 C18.34,21.13 22,16.99 22,12 C22,6.48 17.52,2 12,2 Z" />
+    <!-- White official F glyph -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15.89,14.89 L16.33,12 L13.56,12 L13.56,10.12 C13.56,9.33 13.95,8.56 15.19,8.56 L16.45,8.56 L16.45,6.1 C16.45,6.1 15.31,5.9 14.22,5.9 C11.93,5.9 10.44,7.28 10.44,9.79 L10.44,12 L7.9,12 L7.9,14.89 L10.44,14.89 L10.44,21.88 C10.95,21.96 11.47,22 12,22 C12.53,22 13.05,21.96 13.56,21.88 L13.56,14.89 L15.89,14.89 Z" />
+</vector>

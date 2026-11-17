@@ -687,7 +687,7 @@ export class NotesPdfGenerator {
       try {
         this.doc.addImage(
           APP_LOGO_BASE64,
-          'JPEG',
+          'PNG',
           logoX + 0.6,
           logoY + 0.6,
           logoBoxSize - 1.2,
@@ -706,7 +706,7 @@ export class NotesPdfGenerator {
 
       // Brand Title + Red PDF Badge (Line 1)
       const textX = logoX + logoBoxSize + 2.5;
-      const titleStr = 'AI Chat to PDF';
+      const titleStr = 'Qwik Save';
       this.doc.setFont('helvetica', 'bold');
       this.doc.setFontSize(8.2);
       this.doc.setTextColor(15, 23, 42); // slate-900 (#0F172A)
