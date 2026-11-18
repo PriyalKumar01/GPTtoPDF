@@ -146,26 +146,13 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-[#263448] bg-white/95 dark:bg-[#090D14]/95 backdrop-blur-md transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        {/* Brand Logo - Navigates to Explore All Features */}
-        <Link href="/tools" className="flex items-center gap-2.5 text-slate-900 dark:text-[#E8EDF5] group shrink-0">
+        {/* Brand Logo - Wide Horizontal Brand Logo (Matching Footer, Save in One Click) */}
+        <Link href="/tools" className="flex items-center group shrink-0">
           <img
-            src="/images/app-logo.png"
+            src="/images/qwik-save-banner.png"
             alt="Qwik Save - Save in One Click"
-            className="w-8 h-8 rounded-[3px] object-contain shadow-xs border border-slate-200 dark:border-[#263448] bg-white dark:bg-[#111A29] p-0.5"
+            className="h-8 sm:h-9 w-auto object-contain rounded-[2px]"
           />
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5 leading-none">
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-[#E8EDF5]">
-                {APP_CONFIG.brandName}
-              </span>
-              <span className="text-[9px] font-bold uppercase px-1 py-0.2 rounded-[2px] bg-red-100 dark:bg-red-950/80 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/60 leading-tight">
-                PRO
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-500 dark:text-[#94A3B8] font-medium tracking-tight mt-0.5 leading-none">
-              {APP_CONFIG.tagline}
-            </span>
-          </div>
         </Link>
 
         {/* Desktop Navigation - Left Aligned directly after Logo */}
