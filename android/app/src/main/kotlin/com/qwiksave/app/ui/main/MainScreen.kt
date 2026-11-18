@@ -71,6 +71,7 @@ fun MainScreen(
     var selectedBottomTab by remember { mutableStateOf(0) }
     var selectedSocialPlatform by remember { mutableStateOf(0) } // 0=Instagram, 1=Facebook, 2=YouTube
     var selectedPdfSubTab by remember { mutableStateOf(0) } // 0=AI Notes, 1=Image to PDF, 2=Merge, 3=Compress, 4=PDF to Image
+    var isMusicHubOpen by remember { mutableStateOf(false) }
 
     val activeDialog = remember { mutableStateOf(ActiveDialog.NONE) }
     val client = remember { QwikSaveClient() }
@@ -89,16 +90,20 @@ fun MainScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBarSection(
-                userName = userName,
-                activeDialog = activeDialog
-            )
+            if (!isMusicHubOpen) {
+                TopAppBarSection(
+                    userName = userName,
+                    activeDialog = activeDialog
+                )
+            }
         },
         bottomBar = {
-            BottomNavigationSection(
-                selectedTab = selectedBottomTab,
-                onTabSelected = { selectedBottomTab = it }
-            )
+            if (!isMusicHubOpen) {
+                BottomNavigationSection(
+                    selectedTab = selectedBottomTab,
+                    onTabSelected = { selectedBottomTab = it }
+                )
+            }
         }
     ) { innerPadding ->
         Box(
@@ -107,35 +112,43 @@ fun MainScreen(
                 .padding(innerPadding)
                 .background(Color(0xFFF8FAFC))
         ) {
-            when (selectedBottomTab) {
-                0 -> ExploreTabContent(
+            if (isMusicHubOpen) {
+                MusicHubScreen(
                     client = client,
-                    onNavigateToSocial = { platform ->
-                        selectedSocialPlatform = platform
-                        selectedBottomTab = 2
-                    },
-                    onNavigateToPdf = { subTab ->
-                        selectedPdfSubTab = subTab
-                        selectedBottomTab = 1
-                    },
-                    onNavigateToUtilities = {
-                        selectedBottomTab = 3
-                    }
+                    onBack = { isMusicHubOpen = false }
                 )
-                1 -> PdfToolsTabContent(
-                    client = client,
-                    selectedSubTab = selectedPdfSubTab,
-                    onSubTabChange = { selectedPdfSubTab = it }
-                )
-                2 -> SocialMediaTabContent(
-                    client = client,
-                    selectedPlatform = selectedSocialPlatform,
-                    onPlatformChange = { selectedSocialPlatform = it }
-                )
-                3 -> UtilitiesTabContent(client = client)
-            }
+            } else {
+                when (selectedBottomTab) {
+                    0 -> ExploreTabContent(
+                        client = client,
+                        onNavigateToSocial = { platform ->
+                            selectedSocialPlatform = platform
+                            selectedBottomTab = 2
+                        },
+                        onNavigateToPdf = { subTab ->
+                            selectedPdfSubTab = subTab
+                            selectedBottomTab = 1
+                        },
+                        onNavigateToUtilities = {
+                            selectedBottomTab = 3
+                        }
+                    )
+                    1 -> PdfToolsTabContent(
+                        client = client,
+                        selectedSubTab = selectedPdfSubTab,
+                        onSubTabChange = { selectedPdfSubTab = it }
+                    )
+                    2 -> SocialMediaTabContent(
+                        client = client,
+                        selectedPlatform = selectedSocialPlatform,
+                        onPlatformChange = { selectedSocialPlatform = it },
+                        onOpenMusicHub = { isMusicHubOpen = true }
+                    )
+                    3 -> UtilitiesTabContent(client = client)
+                }
 
-            OverflowDialogHost(activeDialog = activeDialog)
+                OverflowDialogHost(activeDialog = activeDialog)
+            }
         }
     }
 }
@@ -183,9 +196,8 @@ fun TopAppBarSection(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color(0xFF1E293B))
                         .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 9.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "Hello, $userName 👋",
@@ -195,18 +207,6 @@ fun TopAppBarSection(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF10B981), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "PRO",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White
-                        )
-                    }
                 }
 
                 TopBarOverflowMenu(activeDialog = activeDialog)
@@ -2049,7 +2049,8 @@ fun AsyncThumbnail(
 fun SocialMediaTabContent(
     client: QwikSaveClient,
     selectedPlatform: Int,
-    onPlatformChange: (Int) -> Unit
+    onPlatformChange: (Int) -> Unit,
+    onOpenMusicHub: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -2819,6 +2820,126 @@ fun SocialMediaTabContent(
                             overflow = TextOverflow.Ellipsis,
                             lineHeight = 12.sp
                         )
+                    }
+                }
+            }
+        }
+
+        // Rectangular Spotify Music Hub Banner Card (Greenish Spotify Vibe for Travel Songs)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenMusicHub() },
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFF0F172A),
+                                Color(0xFF064E3B),
+                                Color(0xFF065F46)
+                            )
+                        ),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .border(
+                        1.5.dp,
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFF10B981), Color(0xFF1DB954))
+                        ),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        // Glowing Music Headphones Icon
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF1DB954).copy(alpha = 0.2f))
+                                .border(1.dp, Color(0xFF1DB954), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Headphones,
+                                contentDescription = null,
+                                tint = Color(0xFF1DB954),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Qwik Music Hub",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFF1DB954))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        "90s & TRENDING",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Spotify vibe • Travel songs, Liked playlist & Offline download 🚗",
+                                fontSize = 10.5.sp,
+                                color = Color(0xFFE2E8F0),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    // Green Pill Button
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFF1DB954))
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Open",
+                                color = Color.Black,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                 }
             }

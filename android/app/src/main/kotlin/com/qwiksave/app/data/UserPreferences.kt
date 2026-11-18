@@ -57,4 +57,53 @@ object UserPreferences {
             .putBoolean(KEY_ONBOARDING_DONE, true)
             .apply()
     }
+
+    private const val KEY_LIKED_SONG_IDS = "liked_song_ids_set"
+    private const val KEY_DOWNLOADED_SONGS = "downloaded_songs_map"
+
+    fun getLikedSongIds(context: Context): Set<String> {
+        return getPrefs(context).getStringSet(KEY_LIKED_SONG_IDS, emptySet()) ?: emptySet()
+    }
+
+    fun toggleLikedSong(context: Context, songId: String): Boolean {
+        val current = getLikedSongIds(context).toMutableSet()
+        val isNowLiked = if (current.contains(songId)) {
+            current.remove(songId)
+            false
+        } else {
+            current.add(songId)
+            true
+        }
+        getPrefs(context).edit().putStringSet(KEY_LIKED_SONG_IDS, current).apply()
+        return isNowLiked
+    }
+
+    fun isSongLiked(context: Context, songId: String): Boolean {
+        return getLikedSongIds(context).contains(songId)
+    }
+
+    fun getDownloadedSongPaths(context: Context): Map<String, String> {
+        val str = getPrefs(context).getString(KEY_DOWNLOADED_SONGS, "{}") ?: "{}"
+        return try {
+            val json = org.json.JSONObject(str)
+            val map = mutableMapOf<String, String>()
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                map[k] = json.getString(k)
+            }
+            map
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun saveDownloadedSong(context: Context, songId: String, localPath: String) {
+        try {
+            val str = getPrefs(context).getString(KEY_DOWNLOADED_SONGS, "{}") ?: "{}"
+            val json = org.json.JSONObject(str)
+            json.put(songId, localPath)
+            getPrefs(context).edit().putString(KEY_DOWNLOADED_SONGS, json.toString()).apply()
+        } catch (_: Exception) {}
+    }
 }

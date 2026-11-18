@@ -118,7 +118,92 @@ export async function POST(request: NextRequest) {
         console.warn('Primary yt-dlp resolver failed, trying fallbacks:', ytdlpErr);
       }
 
-      // Engine 2: Fast Proxied YouTube Stream Resolver (via btch-downloader / vidsnap proxy)
+      // Engine 2: Direct Mobile Web Player Scraper (Zero bot block, Full Audio & Video for long dramas/movies/lectures)
+      try {
+        const ytWatchRes = await fetch(`https://m.youtube.com/watch?v=${videoId}`, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          signal: AbortSignal.timeout(9000),
+        });
+
+        if (ytWatchRes.ok) {
+          const ytHtml = await ytWatchRes.text();
+          const prMatch = ytHtml.match(/ytInitialPlayerResponse\s*=\s*(\{.+?\});/);
+          if (prMatch) {
+            const pr = JSON.parse(prMatch[1]);
+            const details = pr.videoDetails || {};
+            const streamingData = pr.streamingData || {};
+            const progressiveFormats = streamingData.formats || [];
+            const validFormats = progressiveFormats.filter((f: any) => f.url);
+
+            if (validFormats.length > 0) {
+              const durSec = parseInt(details.lengthSeconds || '0', 10);
+              const h = Math.floor(durSec / 3600);
+              const m = Math.floor((durSec % 3600) / 60);
+              const s = Math.floor(durSec % 60);
+              const durStr =
+                h > 0
+                  ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+                  : `${m}:${s.toString().padStart(2, '0')}`;
+
+              const safeFormats = validFormats.map((f: any, idx: number) => {
+                const rawUrl = f.url;
+                const safeUrl = rawUrl.includes('googlevideo.com')
+                  ? `/api/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=QwikSave_YouTube_${videoId}_${idx + 1}.mp4`
+                  : rawUrl;
+                const sizeBytes = f.contentLength ? parseInt(f.contentLength, 10) : 0;
+                const sizeMb = sizeBytes > 0
+                  ? (sizeBytes / (1024 * 1024)).toFixed(2) + ' MB'
+                  : durSec > 0
+                  ? (durSec * 0.15).toFixed(1) + ' MB'
+                  : 'HD Stream';
+
+                return {
+                  formatId: `yt_${f.itag || idx}`,
+                  qualityLabel: `${f.qualityLabel || '720p HD MP4'} (${sizeMb})`,
+                  resolution: f.qualityLabel || '720p HD',
+                  filesizeMb: sizeMb,
+                  url: safeUrl,
+                  directUrl: rawUrl,
+                  hasVideo: true,
+                  hasAudio: true,
+                };
+              });
+
+              return NextResponse.json({
+                success: true,
+                data: {
+                  id: videoId,
+                  platform: 'youtube',
+                  platformName: trimmedUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
+                  title: details.title || 'YouTube Video',
+                  author: {
+                    name: details.author || 'YouTube Channel',
+                    username: '',
+                  },
+                  thumbnailUrl:
+                    details.thumbnail?.thumbnails?.slice(-1)[0]?.url ||
+                    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                  downloadUrl: safeFormats[0].url,
+                  directDownloadUrl: validFormats[0].url,
+                  duration: durSec,
+                  durationText: durStr,
+                  youtubeId: videoId,
+                  filesizeMb: safeFormats[0].filesizeMb,
+                  formats: safeFormats,
+                },
+              });
+            }
+          }
+        }
+      } catch (mYtErr) {
+        console.warn('Direct mobile YouTube extractor in universal route failed:', mYtErr);
+      }
+
+      // Engine 3: Fast Proxied YouTube Stream Resolver (via btch-downloader / vidsnap proxy)
       try {
         const btch = await import('btch-downloader');
         const ytFn = (btch as any).default?.youtube || (btch as any).youtube;

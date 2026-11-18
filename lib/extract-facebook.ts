@@ -151,6 +151,7 @@ export async function extractFacebookMedia(inputUrl: string): Promise<FacebookRe
             name: 'Facebook Creator',
           },
           thumbnailUrl:
+            (snapData.data as any).preview ||
             (snapData.data as any).thumbnail ||
             (snapData.data as any).thumb ||
             (snapData.data as any).image ||

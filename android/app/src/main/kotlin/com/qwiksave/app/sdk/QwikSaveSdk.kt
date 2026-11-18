@@ -349,7 +349,7 @@ class QwikSaveClient(
                 val data = json.optJSONObject("data")
 
                 if (data != null) {
-                    var streamUrl = data.optString("downloadUrl", "")
+                    var streamUrl = data.optString("directDownloadUrl", data.optString("downloadUrl", ""))
                     if (streamUrl.startsWith("/")) {
                         streamUrl = "$baseUrl$streamUrl"
                     }
@@ -372,12 +372,9 @@ class QwikSaveClient(
                     if (rawFormats != null && rawFormats.length() > 0) {
                         for (i in 0 until rawFormats.length()) {
                             val f = rawFormats.getJSONObject(i)
-                            var fUrl = f.optString("url", "")
+                            var fUrl = f.optString("directUrl", f.optString("url", ""))
                             if (fUrl.startsWith("/")) {
                                 fUrl = "$baseUrl$fUrl"
-                            }
-                            if (fUrl.contains("googlevideo.com") && !fUrl.contains("/api/proxy-download")) {
-                                fUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(fUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}_${i + 1}.mp4"
                             }
                             val qLabel = f.optString("qualityLabel", f.optString("resolution", "HD MP4"))
                             val fSize = f.optString("filesizeMb", "")
@@ -389,13 +386,8 @@ class QwikSaveClient(
                     }
 
                     if (streamUrl.isNotBlank() && streamUrl.startsWith("http") && !streamUrl.contains("youtube.com/watch")) {
-                        // Prevent GoogleVideo client IP 403 by wrapping with server proxy if needed
-                        if (streamUrl.contains("googlevideo.com") && !streamUrl.contains("/api/proxy-download") && !streamUrl.contains("api.vidsnap.app")) {
-                            streamUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(streamUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}.mp4"
-                        }
-
                         if (formatsList.isEmpty()) {
-                            formatsList.add(MediaItem(streamUrl, true, thumb, "1080p Full HD"))
+                            formatsList.add(MediaItem(streamUrl, true, thumb, "HD MP4 ($sizeMb)"))
                         }
 
                         return@withContext Result.success(
@@ -404,7 +396,7 @@ class QwikSaveClient(
                                 title = title,
                                 thumbnailUrl = thumb,
                                 streamUrl = streamUrl,
-                                quality = "1080p Full HD",
+                                quality = "HD MP4",
                                 fileSizeMb = sizeMb,
                                 platform = "youtube",
                                 isVideo = true,
@@ -413,6 +405,69 @@ class QwikSaveClient(
                                 items = formatsList
                             )
                         )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // Engine 2: Direct Mobile Web Player Scraper on Android Device (Zero IP mismatch, Direct CDN Stream)
+        try {
+            val mobileUrl = URL("https://m.youtube.com/watch?v=$videoId")
+            val mConn = (mobileUrl.openConnection() as HttpURLConnection).apply {
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                connectTimeout = 12000
+                readTimeout = 15000
+            }
+            if (mConn.responseCode == 200) {
+                val html = mConn.inputStream.bufferedReader().use { it.readText() }
+                val match = Regex("ytInitialPlayerResponse\\s*=\\s*(\\{.+?\\});").find(html)
+                if (match != null) {
+                    val pr = JSONObject(match.groupValues[1])
+                    val details = pr.optJSONObject("videoDetails")
+                    val streamingData = pr.optJSONObject("streamingData")
+                    val formats = streamingData?.optJSONArray("formats")
+                    if (formats != null && formats.length() > 0) {
+                        val mFormatsList = mutableListOf<MediaItem>()
+                        var firstStream = ""
+                        val title = details?.optString("title", "YouTube Video") ?: "YouTube Video"
+                        val author = details?.optString("author", "YouTube Channel") ?: "YouTube Channel"
+                        val durSec = details?.optString("lengthSeconds", "0")?.toIntOrNull() ?: 0
+                        val h = durSec / 3600
+                        val m = (durSec % 3600) / 60
+                        val s = durSec % 60
+                        val durStr = if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
+                        val thumb = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+
+                        for (i in 0 until formats.length()) {
+                            val f = formats.getJSONObject(i)
+                            val sUrl = f.optString("url", "")
+                            if (sUrl.isNotBlank()) {
+                                if (firstStream.isBlank()) firstStream = sUrl
+                                val qLabel = f.optString("qualityLabel", "HD MP4")
+                                val clen = f.optLong("contentLength", 0L)
+                                val sizeText = if (clen > 0) String.format("%.2f MB", clen / (1024.0 * 1024.0)) else "HD Stream"
+                                mFormatsList.add(MediaItem(sUrl, true, thumb, "$qLabel ($sizeText)"))
+                            }
+                        }
+
+                        if (firstStream.isNotBlank()) {
+                            return@withContext Result.success(
+                                ExtractedMedia(
+                                    id = videoId,
+                                    title = title,
+                                    thumbnailUrl = thumb,
+                                    streamUrl = firstStream,
+                                    quality = mFormatsList.firstOrNull()?.quality ?: "HD MP4",
+                                    fileSizeMb = mFormatsList.firstOrNull()?.quality ?: "HD Stream",
+                                    platform = "youtube",
+                                    isVideo = true,
+                                    author = author,
+                                    durationText = durStr,
+                                    items = mFormatsList
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -552,21 +607,19 @@ class QwikSaveClient(
         onSuccess: (File?) -> Unit = {},
         onError: (String) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
+        val cleanMediaUrl = mediaUrl
+            .replace(Regex("&?bytestart=\\d+"), "")
+            .replace(Regex("&?byteend=\\d+"), "")
+            .replace(Regex("\\?&"), "?")
+            .trimEnd('?', '&')
+
+        val resolvedUrl = if (cleanMediaUrl.startsWith("http://") || cleanMediaUrl.startsWith("https://")) {
+            cleanMediaUrl
+        } else {
+            "$baseUrl${if (cleanMediaUrl.startsWith("/")) "" else "/"}$cleanMediaUrl"
+        }
+
         try {
-            // 1. Sanitize media URL - remove any partial byte-range fragment parameters that cause 0-second corrupt files
-            val cleanMediaUrl = mediaUrl
-                .replace(Regex("&?bytestart=\\d+"), "")
-                .replace(Regex("&?byteend=\\d+"), "")
-                .replace(Regex("\\?&"), "?")
-                .trimEnd('?', '&')
-
-            // 2. Resolve relative URL to absolute URL if needed
-            val resolvedUrl = if (cleanMediaUrl.startsWith("http://") || cleanMediaUrl.startsWith("https://")) {
-                cleanMediaUrl
-            } else {
-                "$baseUrl${if (cleanMediaUrl.startsWith("/")) "" else "/"}$cleanMediaUrl"
-            }
-
             var currentUrl = resolvedUrl
             var connection: HttpURLConnection? = null
             var redirectCount = 0
@@ -784,6 +837,18 @@ class QwikSaveClient(
             }
             Result.success(savedFile ?: File(filename))
         } catch (e: Exception) {
+            // If in-app stream encountered unexpected end of stream or connection interruption,
+            // seamlessly hand over to Android system DownloadManager for resilient background download!
+            try {
+                val dlId = enqueueDownload(context, resolvedUrl, filename, "Downloading Video")
+                if (dlId > 0) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Downloading in background! Check notification bar 📥", Toast.LENGTH_LONG).show()
+                    }
+                    return@withContext Result.success(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "QwikSave/$filename"))
+                }
+            } catch (_: Exception) {}
+
             withContext(Dispatchers.Main) {
                 onError(e.message ?: "Download failed")
                 Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -927,12 +992,14 @@ class QwikSaveClient(
     }
 
     /**
-     * Compress PDF: Downsample pages with selectable quality level (High, Medium, Light).
+     * Compress PDF: Downsample pages with selectable quality level (High, Balanced, Light).
+     * Uses High-DPI supersampling (150-180 DPI) and anti-aliased bitmap filtering so text and diagrams
+     * remain 100% crystal clear and sharp while reducing file size significantly.
      */
     suspend fun compressPdf(
         context: Context,
         pdfUri: Uri,
-        compressionLevel: Int = 1, // 0 = High (35%), 1 = Medium (55%), 2 = Light (80%)
+        compressionLevel: Int = 1, // 0 = High, 1 = Balanced, 2 = Light
         outputFileName: String = "QwikSave_Compressed.pdf"
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
@@ -942,28 +1009,34 @@ class QwikSaveClient(
             val renderer = PdfRenderer(pfd)
             val pdfDocument = PdfDocument()
 
-            val qualityPercent = when (compressionLevel) {
-                0 -> 35
-                2 -> 80
-                else -> 55
+            // High-DPI supersampling factors: Standard PDF is 72 DPI (595x842).
+            // Multiplying by 1.85x - 2.40x produces 150-180 DPI crisp bitmaps so small text never blurs!
+            val (scaleFactor, qualityPercent) = when (compressionLevel) {
+                0 -> Pair(1.85f, 72) // High Compression: 1.85x scale, 72% JPEG quality (Compact file, sharp text)
+                2 -> Pair(2.40f, 90) // Light Compression: 2.40x scale, 90% JPEG quality (Near lossless clarity)
+                else -> Pair(2.10f, 82) // Balanced Compression: 2.10x scale, 82% JPEG quality (Optimal balance)
             }
-            val scaleFactor = when (compressionLevel) {
-                0 -> 0.75f
-                2 -> 1.0f
-                else -> 0.88f
+
+            val filterPaint = Paint().apply {
+                isFilterBitmap = true
+                isAntiAlias = true
+                isDither = true
             }
 
             for (i in 0 until renderer.pageCount) {
                 val page = renderer.openPage(i)
-                val targetW = (page.width * scaleFactor).toInt()
-                val targetH = (page.height * scaleFactor).toInt()
+                val origW = page.width
+                val origH = page.height
+
+                val targetW = (origW * scaleFactor).toInt().coerceAtLeast(800)
+                val targetH = (origH * scaleFactor).toInt().coerceAtLeast(1100)
 
                 val rawBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
                 rawBitmap.eraseColor(Color.WHITE)
                 page.render(rawBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                 page.close()
 
-                // Compress via JPEG stream
+                // Compress via JPEG stream with optimal DCT compression
                 val stream = ByteArrayOutputStream()
                 rawBitmap.compress(Bitmap.CompressFormat.JPEG, qualityPercent, stream)
                 val compressedBytes = stream.toByteArray()
@@ -971,12 +1044,12 @@ class QwikSaveClient(
 
                 val compressedBitmap = BitmapFactory.decodeByteArray(compressedBytes, 0, compressedBytes.size)
 
-                val pageInfo = PdfDocument.PageInfo.Builder(595, 842, i + 1).create()
+                val pageInfo = PdfDocument.PageInfo.Builder(origW, origH, i + 1).create()
                 val newPage = pdfDocument.startPage(pageInfo)
                 val canvas = newPage.canvas
 
-                val destRect = RectF(0f, 0f, 595f, 842f)
-                canvas.drawBitmap(compressedBitmap, null, destRect, null)
+                val destRect = RectF(0f, 0f, origW.toFloat(), origH.toFloat())
+                canvas.drawBitmap(compressedBitmap, null, destRect, filterPaint)
                 pdfDocument.finishPage(newPage)
                 compressedBitmap.recycle()
             }
