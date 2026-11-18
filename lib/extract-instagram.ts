@@ -53,8 +53,11 @@ export function extractInstagramShortcode(rawUrl: string): { shortcode: string; 
     const storyMatch = pathname.match(/\/stories\/[^/]+\/([0-9]+)/);
     if (storyMatch) return { shortcode: storyMatch[1], type: 'story' };
 
+    const highlightMatch = pathname.match(/\/(?:s|stories\/highlights)\/([A-Za-z0-9_=-]+)/);
+    if (highlightMatch) return { shortcode: highlightMatch[1], type: 'story' };
+
     const parts = pathname.split('/').filter(Boolean);
-    if (parts.length >= 2 && ['p', 'reel', 'reels', 'tv'].includes(parts[0])) {
+    if (parts.length >= 2 && ['p', 'reel', 'reels', 'tv', 'stories', 's'].includes(parts[0])) {
       return { shortcode: parts[1], type: parts[0] };
     }
 
@@ -318,8 +321,29 @@ async function extractViaEmbed(shortcode: string, isPost = false): Promise<Insta
   return null;
 }
 
+async function resolveInstagramUrl(rawUrl: string): Promise<string> {
+  if (rawUrl.includes('/s/')) {
+    try {
+      const res = await fetch(rawUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': USER_AGENT_DESKTOP,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(6000),
+      });
+      return res.url || rawUrl;
+    } catch {
+      return rawUrl;
+    }
+  }
+  return rawUrl;
+}
+
 export async function extractInstagramMedia(inputUrl: string): Promise<InstagramResult> {
-  const match = extractInstagramShortcode(inputUrl);
+  const targetUrl = await resolveInstagramUrl(inputUrl);
+  const match = extractInstagramShortcode(targetUrl) || extractInstagramShortcode(inputUrl);
   if (!match) {
     throw new Error('Please enter a valid Instagram reel, post, video, or story link.');
   }
@@ -328,12 +352,12 @@ export async function extractInstagramMedia(inputUrl: string): Promise<Instagram
   const isPost = type === 'post';
 
   // Engine 1: instagram-url-direct (most reliable for Reels)
-  const directResult = await extractViaInstagramUrlDirect(inputUrl);
+  const directResult = await extractViaInstagramUrlDirect(targetUrl);
   if (directResult) return directResult;
 
   // Engine 2: yt-dlp (server must have yt-dlp installed)
   try {
-    const ytdlp = await extractWithYtDlp(inputUrl, 20000);
+    const ytdlp = await extractWithYtDlp(targetUrl, 20000);
     if (ytdlp?.videoUrl) {
       return {
         id: ytdlp.id || shortcode,
@@ -356,7 +380,7 @@ export async function extractInstagramMedia(inputUrl: string): Promise<Instagram
   }
 
   // Engine 3: snapsave (supports Reels, Videos, and Carousel Photos)
-  const snapResult = await extractViaSnapSave(inputUrl, shortcode);
+  const snapResult = await extractViaSnapSave(targetUrl, shortcode);
   if (snapResult) return snapResult;
 
   // Engine 4: GraphQL

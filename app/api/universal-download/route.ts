@@ -63,39 +63,57 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid YouTube video link format');
       }
 
-      // Engine 1: Fast Proxied YouTube Stream Resolver (Bypasses GoogleVideo 403 & IP binding)
+      // Engine 1: Fast Proxied YouTube Stream Resolver (via btch-downloader / vidsnap proxy)
       try {
-        const tiooRes = await fetch(`https://backend1.tioo.eu.org/youtube?url=https://www.youtube.com/watch?v=${videoId}`, {
-          signal: AbortSignal.timeout(8000),
-        });
-        if (tiooRes.ok) {
-          const tiooData = await tiooRes.json();
-          if (tiooData && (tiooData.mp4 || tiooData.mp3)) {
-            const vUrl = tiooData.mp4 || tiooData.mp3;
+        const btch = await import('btch-downloader');
+        const ytFn = (btch as any).default?.youtube || (btch as any).youtube;
+        if (typeof ytFn === 'function') {
+          const ytRes = await ytFn(`https://www.youtube.com/watch?v=${videoId}`);
+          if (ytRes && ytRes.status && (ytRes.mp4 || ytRes.mp3)) {
+            const vUrl = ytRes.mp4 || ytRes.mp3;
+            // Parse duration from URL if available (e.g. dur=213.089)
+            let durSec = 180;
+            const durMatch = vUrl.match(/[?&]dur(?:%3D|=)([0-9.]+)/);
+            if (durMatch) {
+              durSec = Math.round(parseFloat(durMatch[1]));
+            }
+            const h = Math.floor(durSec / 3600);
+            const m = Math.floor((durSec % 3600) / 60);
+            const s = Math.floor(durSec % 60);
+            const durStr = h > 0
+              ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+              : `${m}:${s.toString().padStart(2, '0')}`;
+
+            // Approximate file size based on duration and 720p/1080p bitrate (~2.5 Mbps)
+            const approxBytes = durSec * 320 * 1024;
+            const sizeMb = approxBytes > 1024 * 1024 * 1024
+              ? (approxBytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+              : (approxBytes / (1024 * 1024)).toFixed(1) + ' MB';
+
             return NextResponse.json({
               success: true,
               data: {
                 id: videoId,
                 platform: 'youtube',
                 platformName: trimmedUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
-                title: tiooData.title || 'YouTube Video',
+                title: ytRes.title || 'YouTube Video',
                 author: {
-                  name: tiooData.author || 'YouTube Creator',
+                  name: ytRes.author || 'YouTube Creator',
                   username: '',
                 },
-                thumbnailUrl:
-                  tiooData.thumbnail ||
-                  `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                thumbnailUrl: ytRes.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
                 downloadUrl: vUrl,
-                audioUrl: tiooData.mp3 || undefined,
-                duration: 180,
+                audioUrl: ytRes.mp3 || undefined,
+                duration: durSec,
+                durationText: durStr,
                 youtubeId: videoId,
+                filesizeMb: sizeMb,
                 formats: [
                   {
                     formatId: 'yt_hd',
                     qualityLabel: '720p HD MP4 (Direct Stream)',
-                    resolution: '720p',
-                    filesizeMb: '11.8 MB',
+                    resolution: '720p HD',
+                    filesizeMb: sizeMb,
                     url: vUrl,
                     hasVideo: true,
                     hasAudio: true,
@@ -105,8 +123,8 @@ export async function POST(request: NextRequest) {
             });
           }
         }
-      } catch (tiooErr) {
-        console.warn('Tioo YouTube API failed:', tiooErr);
+      } catch (btchErr) {
+        console.warn('btch YouTube API failed:', btchErr);
       }
 
       // Engine 2: High-speed Piped Direct Stream Resolver (No bot block, direct CDN MP4)

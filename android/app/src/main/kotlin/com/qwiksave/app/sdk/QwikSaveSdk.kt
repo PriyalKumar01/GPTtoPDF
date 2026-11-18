@@ -46,6 +46,14 @@ data class MediaItem(
 )
 
 /**
+ * Data model for Academic Exam / Lecture Structured Question
+ */
+data class ExamQuestionItem(
+    val question: String,
+    val answer: String
+)
+
+/**
  * Data model for media extracted via Qwik Save engine.
  */
 data class ExtractedMedia(
@@ -262,11 +270,21 @@ class QwikSaveClient(
                     val thumb = if (data.has("thumbnailUrl")) data.getString("thumbnailUrl") else null
                     val authorName = data.optJSONObject("author")?.optString("name", "Facebook Creator") ?: "Facebook Creator"
 
+                    val durText = data.optString("duration", data.optString("durationText", "▶ Full Video"))
                     for (i in 0 until formats.length()) {
                         val f = formats.getJSONObject(i)
                         val cdnUrl = f.getString("url")
-                        val quality = f.optString("quality", if (i == 0) "1080p Full HD" else "720p HD")
-                        val sizeText = f.optString("filesizeMb", if (i == 0) "12.4 MB" else "6.8 MB")
+                        val rawLabel = f.optString("label", f.optString("quality", ""))
+                        val quality = when {
+                            rawLabel.contains("1080") -> "1080p Full HD"
+                            rawLabel.contains("720") -> "720p HD"
+                            rawLabel.contains("480") -> "480p SD"
+                            rawLabel.contains("360") -> "360p SD"
+                            i == 0 -> "1080p Full HD"
+                            i == 1 -> "720p HD"
+                            else -> "480p SD"
+                        }
+                        val sizeText = f.optString("filesizeMb", if (i == 0) "18.4 MB" else "9.2 MB")
 
                         list.add(
                             ExtractedMedia(
@@ -279,7 +297,7 @@ class QwikSaveClient(
                                 platform = "facebook",
                                 isVideo = true,
                                 author = authorName,
-                                durationText = data.optString("duration", "1:15")
+                                durationText = durText
                             )
                         )
                     }
@@ -332,53 +350,16 @@ class QwikSaveClient(
         val videoId = extractYouTubeId(cleanUrl)
         val defaultThumb = if (videoId.length == 11) "https://i.ytimg.com/vi/$videoId/hqdefault.jpg" else "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=500&q=80"
 
-        // Engine 1: Fast Proxied YouTube Stream Resolver (No 403, Direct CDN Stream)
-        try {
-            val tiooUrl = URL("https://backend1.tioo.eu.org/youtube?url=https://www.youtube.com/watch?v=$videoId")
-            val tConn = (tiooUrl.openConnection() as HttpURLConnection).apply {
-                setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
-                setRequestProperty("Accept", "application/json")
-                connectTimeout = 8000
-                readTimeout = 8000
-            }
-            if (tConn.responseCode == 200) {
-                val tResp = tConn.inputStream.bufferedReader().use { it.readText() }
-                val tJson = JSONObject(tResp)
-                val mp4Url = tJson.optString("mp4", "")
-                val mp3Url = tJson.optString("mp3", "")
-                val vTitle = tJson.optString("title", "YouTube Video")
-                val vAuthor = tJson.optString("author", "YouTube Creator")
-                val vThumb = tJson.optString("thumbnail", defaultThumb)
-
-                if (mp4Url.isNotBlank() && mp4Url.startsWith("http")) {
-                    return@withContext Result.success(
-                        ExtractedMedia(
-                            id = videoId,
-                            title = vTitle,
-                            thumbnailUrl = vThumb,
-                            streamUrl = mp4Url,
-                            quality = "720p HD MP4",
-                            fileSizeMb = "11.8 MB",
-                            platform = "youtube",
-                            isVideo = true,
-                            author = vAuthor,
-                            durationText = "3:00",
-                            items = listOf(MediaItem(mp4Url, true, vThumb, "720p HD MP4"))
-                        )
-                    )
-                }
-            }
-        } catch (_: Exception) {}
-
-        // Engine 2: Call backend /api/universal-download
+        // Tier 1: Call backend /api/universal-download (High-Speed Vidsnap & btch stream with accurate dynamic duration)
         try {
             val endpoint = URL("$baseUrl/api/universal-download")
             val conn = (endpoint.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
                 doOutput = true
-                connectTimeout = 10000
-                readTimeout = 10000
+                connectTimeout = 12000
+                readTimeout = 15000
             }
 
             val payload = JSONObject().apply { put("url", cleanUrl) }
@@ -396,10 +377,20 @@ class QwikSaveClient(
                     val thumb = data.optString("thumbnailUrl", defaultThumb)
                     val title = data.optString("title", "YouTube Video")
                     val author = data.optJSONObject("author")?.optString("name", "YouTube Channel") ?: "YouTube Channel"
+                    val durText = data.optString("durationText", null) ?: run {
+                        val sec = data.optInt("duration", 0)
+                        if (sec > 0) {
+                            val h = sec / 3600
+                            val m = (sec % 3600) / 60
+                            val s = sec % 60
+                            if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
+                        } else "▶ HD Video"
+                    }
+                    val sizeMb = data.optString("filesizeMb", "Full HD Stream")
 
                     if (streamUrl.isNotBlank() && streamUrl.startsWith("http") && !streamUrl.contains("youtube.com/watch")) {
-                        // Prevent GoogleVideo client IP 403 by wrapping with server proxy
-                        if (streamUrl.contains("googlevideo.com") && !streamUrl.contains("/api/proxy-download")) {
+                        // Prevent GoogleVideo client IP 403 by wrapping with server proxy if needed
+                        if (streamUrl.contains("googlevideo.com") && !streamUrl.contains("/api/proxy-download") && !streamUrl.contains("api.vidsnap.app")) {
                             streamUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(streamUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}.mp4"
                         }
 
@@ -410,11 +401,11 @@ class QwikSaveClient(
                                 thumbnailUrl = thumb,
                                 streamUrl = streamUrl,
                                 quality = "1080p Full HD",
-                                fileSizeMb = data.optString("filesizeMb", "9.20 MB"),
+                                fileSizeMb = sizeMb,
                                 platform = "youtube",
                                 isVideo = true,
                                 author = author,
-                                durationText = "1:30",
+                                durationText = durText,
                                 items = listOf(MediaItem(streamUrl, true, thumb, "1080p Full HD"))
                             )
                         )
@@ -1080,11 +1071,20 @@ class QwikSaveClient(
 
     /**
      * Create formatted Academic PDF from AI study notes, matching the website's layout.
+     * Supports Custom Title, Subtitle, Student/Prof Name, Watermark, Page Borders (Shadow/Clean),
+     * College Study Partner Header, Custom Footer, and Structured Question Builder.
      */
     suspend fun createAcademicNotesPdf(
         context: Context,
         title: String,
-        content: String,
+        content: String = "",
+        subtitle: String? = null,
+        studentName: String? = null,
+        watermarkText: String? = null,
+        borderStyle: String = "shadow", // "shadow", "clean", "none"
+        includePartnerBadge: Boolean = true,
+        footerText: String? = null,
+        questions: List<ExamQuestionItem> = emptyList(),
         outputFileName: String = "QwikSave_Notes.pdf"
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
@@ -1096,27 +1096,34 @@ class QwikSaveClient(
 
             val titlePaint = TextPaint().apply {
                 color = Color.rgb(15, 23, 42)
-                textSize = 17f
+                textSize = 16f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                isAntiAlias = true
+            }
+
+            val subtitlePaint = TextPaint().apply {
+                color = Color.rgb(71, 85, 105)
+                textSize = 11f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 isAntiAlias = true
             }
 
             val questionTitlePaint = TextPaint().apply {
                 color = Color.rgb(15, 23, 42)
-                textSize = 12f
+                textSize = 11.5f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 isAntiAlias = true
             }
 
             val metaPaint = TextPaint().apply {
                 color = Color.rgb(100, 116, 139)
-                textSize = 9f
+                textSize = 8.5f
                 isAntiAlias = true
             }
 
             val bodyPaint = TextPaint().apply {
                 color = Color.rgb(51, 65, 85)
-                textSize = 10.5f
+                textSize = 10f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 isAntiAlias = true
             }
@@ -1154,7 +1161,50 @@ class QwikSaveClient(
                 BitmapFactory.decodeResource(context.resources, R.drawable.app_logo_transparent)
             } catch (_: Exception) { null }
 
-            val paragraphs = content.split("\n\n").filter { it.isNotBlank() }
+            fun applyPageDecorations(c: Canvas) {
+                // 1. Watermark if enabled (non-blank & not "zero watermark")
+                if (!watermarkText.isNullOrBlank() &&
+                    !watermarkText.equals("zero", ignoreCase = true) &&
+                    !watermarkText.equals("zero watermark", ignoreCase = true) &&
+                    !watermarkText.equals("none", ignoreCase = true)
+                ) {
+                    val wmPaint = TextPaint().apply {
+                        color = Color.argb(28, 100, 116, 139)
+                        textSize = 38f
+                        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        isAntiAlias = true
+                        textAlign = Paint.Align.CENTER
+                    }
+                    c.save()
+                    c.rotate(-45f, pageWidth / 2f, pageHeight / 2f)
+                    c.drawText(watermarkText.uppercase(), pageWidth / 2f, pageHeight / 2f, wmPaint)
+                    c.restore()
+                }
+
+                // 2. Page Border (MS Word Shadow Box or Clean Line)
+                if (borderStyle.equals("shadow", ignoreCase = true)) {
+                    val shadowPaint = Paint().apply {
+                        color = Color.rgb(203, 213, 225)
+                        style = Paint.Style.STROKE
+                        strokeWidth = 2.5f
+                    }
+                    val bPaint = Paint().apply {
+                        color = Color.rgb(15, 23, 42)
+                        style = Paint.Style.STROKE
+                        strokeWidth = 1.2f
+                    }
+                    c.drawRect(margin + 2.5f, margin + 2.5f, pageWidth - margin + 2.5f, pageHeight - margin + 2.5f, shadowPaint)
+                    c.drawRect(margin, margin, pageWidth - margin, pageHeight - margin, bPaint)
+                } else if (borderStyle.equals("clean", ignoreCase = true)) {
+                    val bPaint = Paint().apply {
+                        color = Color.rgb(71, 85, 105)
+                        style = Paint.Style.STROKE
+                        strokeWidth = 1.2f
+                    }
+                    c.drawRect(margin, margin, pageWidth - margin, pageHeight - margin, bPaint)
+                }
+            }
+
             val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
             val dateStr = dateFormat.format(Date())
 
@@ -1163,108 +1213,185 @@ class QwikSaveClient(
             var page = pdfDocument.startPage(pageInfo)
             var canvas = page.canvas
 
+            applyPageDecorations(canvas)
+
             // Page 1 Header
-            var yPosition = margin
+            var yPosition = margin + 12f
 
             // Partner Badge Top Right
-            val badgeW = 140f
-            val badgeH = 22f
-            val badgeX = pageWidth - margin - badgeW
-            val badgeRect = RectF(badgeX, yPosition, badgeX + badgeW, yPosition + badgeH)
-            canvas.drawRoundRect(badgeRect, 6f, 6f, partnerBgPaint)
-            canvas.drawRoundRect(badgeRect, 6f, 6f, partnerBorderPaint)
-            canvas.drawText("🎓 College Study Partner", badgeX + 10f, yPosition + 14f, partnerTextPaint)
+            if (includePartnerBadge) {
+                val badgeW = 140f
+                val badgeH = 22f
+                val badgeX = pageWidth - margin - badgeW - 10f
+                val badgeRect = RectF(badgeX, yPosition, badgeX + badgeW, yPosition + badgeH)
+                canvas.drawRoundRect(badgeRect, 6f, 6f, partnerBgPaint)
+                canvas.drawRoundRect(badgeRect, 6f, 6f, partnerBorderPaint)
+                canvas.drawText("🎓 College Study Partner", badgeX + 10f, yPosition + 14f, partnerTextPaint)
+            }
 
             // Document Title
-            canvas.drawText(title.ifBlank { "Qwik Save AI Study Notes" }, margin, yPosition + 16f, titlePaint)
-            yPosition += 28f
+            canvas.drawText(title.ifBlank { "Qwik Save AI Study Notes" }, margin + 12f, yPosition + 16f, titlePaint)
+            yPosition += 26f
 
-            // Meta line
-            canvas.drawText("Qwik Save Academic Format • $dateStr", margin, yPosition + 8f, metaPaint)
+            // Subtitle / Subject
+            if (!subtitle.isNullOrBlank()) {
+                canvas.drawText("Subject: $subtitle", margin + 12f, yPosition + 10f, subtitlePaint)
+                yPosition += 18f
+            }
+
+            // Student / Faculty Name & Date
+            val authorPart = if (!studentName.isNullOrBlank()) "Candidate/Faculty: $studentName • " else ""
+            canvas.drawText("${authorPart}Academic Revision • $dateStr", margin + 12f, yPosition + 8f, metaPaint)
             yPosition += 16f
 
-            // Header line
+            // Divider line
             val dividerPaint = Paint().apply {
                 color = Color.rgb(226, 232, 240)
                 strokeWidth = 1f
             }
-            canvas.drawLine(margin, yPosition, pageWidth - margin, yPosition, dividerPaint)
+            canvas.drawLine(margin + 10f, yPosition, pageWidth - margin - 10f, yPosition, dividerPaint)
             yPosition += 16f
 
-            for (paragraph in paragraphs) {
-                val isQuestionOrHeading = paragraph.startsWith("#") || paragraph.startsWith("1.") ||
-                        paragraph.startsWith("2.") || paragraph.startsWith("3.") || paragraph.startsWith("4.") ||
-                        paragraph.startsWith("Q:") || paragraph.startsWith("Question:")
-
-                val cleanText = paragraph.replace(Regex("^#+\\s*"), "").trim()
-
-                if (isQuestionOrHeading) {
+            // If structured questions provided, render Question/Answer blocks
+            if (questions.isNotEmpty()) {
+                for ((idx, qItem) in questions.withIndex()) {
+                    val qTitleText = "Question ${idx + 1}: ${qItem.question}"
                     @Suppress("DEPRECATION")
                     val qLayout = StaticLayout(
-                        cleanText,
+                        qTitleText,
                         questionTitlePaint,
-                        printableWidth - 20,
+                        printableWidth - 36,
                         Layout.Alignment.ALIGN_NORMAL,
                         1.2f,
                         0f,
                         false
                     )
 
-                    val boxHeight = qLayout.height + 14f
-                    if (yPosition + boxHeight + 45f > pageHeight - margin) {
-                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap)
-                        pdfDocument.finishPage(page)
-
-                        currentPageNumber++
-                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
-                        page = pdfDocument.startPage(pageInfo)
-                        canvas = page.canvas
-                        yPosition = margin + 10f
-                    }
-
-                    val boxRect = RectF(margin, yPosition, margin + printableWidth, yPosition + boxHeight)
-                    canvas.drawRoundRect(boxRect, 6f, 6f, calloutBgPaint)
-                    canvas.drawRoundRect(boxRect, 6f, 6f, calloutBorderPaint)
-
-                    canvas.save()
-                    canvas.translate(margin + 10f, yPosition + 7f)
-                    qLayout.draw(canvas)
-                    canvas.restore()
-
-                    yPosition += boxHeight + 10f
-                } else {
                     @Suppress("DEPRECATION")
-                    val bLayout = StaticLayout(
-                        cleanText,
+                    val aLayout = StaticLayout(
+                        qItem.answer,
                         bodyPaint,
-                        printableWidth,
+                        printableWidth - 36,
                         Layout.Alignment.ALIGN_NORMAL,
                         1.25f,
                         0f,
                         false
                     )
 
-                    if (yPosition + bLayout.height + 45f > pageHeight - margin) {
-                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap)
+                    val itemTotalHeight = qLayout.height + 16f + aLayout.height + 20f
+                    if (yPosition + itemTotalHeight + 45f > pageHeight - margin) {
+                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
                         pdfDocument.finishPage(page)
 
                         currentPageNumber++
                         pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
                         page = pdfDocument.startPage(pageInfo)
                         canvas = page.canvas
-                        yPosition = margin + 10f
+                        applyPageDecorations(canvas)
+                        yPosition = margin + 18f
                     }
 
+                    // Question Header Box
+                    val qBoxHeight = qLayout.height + 14f
+                    val qBoxRect = RectF(margin + 12f, yPosition, margin + printableWidth - 12f, yPosition + qBoxHeight)
+                    canvas.drawRoundRect(qBoxRect, 6f, 6f, calloutBgPaint)
+                    canvas.drawRoundRect(qBoxRect, 6f, 6f, calloutBorderPaint)
+
                     canvas.save()
-                    canvas.translate(margin, yPosition)
-                    bLayout.draw(canvas)
+                    canvas.translate(margin + 20f, yPosition + 7f)
+                    qLayout.draw(canvas)
                     canvas.restore()
 
-                    yPosition += bLayout.height + 12f
+                    yPosition += qBoxHeight + 8f
+
+                    // Answer Text
+                    canvas.save()
+                    canvas.translate(margin + 20f, yPosition)
+                    aLayout.draw(canvas)
+                    canvas.restore()
+
+                    yPosition += aLayout.height + 16f
+                }
+            } else {
+                // Freeform text/markdown notes
+                val paragraphs = content.split("\n\n").filter { it.isNotBlank() }
+                for (paragraph in paragraphs) {
+                    val isQuestionOrHeading = paragraph.startsWith("#") || paragraph.startsWith("1.") ||
+                            paragraph.startsWith("2.") || paragraph.startsWith("3.") || paragraph.startsWith("4.") ||
+                            paragraph.startsWith("Q:") || paragraph.startsWith("Question:")
+
+                    val cleanText = paragraph.replace(Regex("^#+\\s*"), "").trim()
+
+                    if (isQuestionOrHeading) {
+                        @Suppress("DEPRECATION")
+                        val qLayout = StaticLayout(
+                            cleanText,
+                            questionTitlePaint,
+                            printableWidth - 36,
+                            Layout.Alignment.ALIGN_NORMAL,
+                            1.2f,
+                            0f,
+                            false
+                        )
+
+                        val boxHeight = qLayout.height + 14f
+                        if (yPosition + boxHeight + 45f > pageHeight - margin) {
+                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
+                            pdfDocument.finishPage(page)
+
+                            currentPageNumber++
+                            pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                            page = pdfDocument.startPage(pageInfo)
+                            canvas = page.canvas
+                            applyPageDecorations(canvas)
+                            yPosition = margin + 18f
+                        }
+
+                        val boxRect = RectF(margin + 12f, yPosition, margin + printableWidth - 12f, yPosition + boxHeight)
+                        canvas.drawRoundRect(boxRect, 6f, 6f, calloutBgPaint)
+                        canvas.drawRoundRect(boxRect, 6f, 6f, calloutBorderPaint)
+
+                        canvas.save()
+                        canvas.translate(margin + 20f, yPosition + 7f)
+                        qLayout.draw(canvas)
+                        canvas.restore()
+
+                        yPosition += boxHeight + 10f
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val bLayout = StaticLayout(
+                            cleanText,
+                            bodyPaint,
+                            printableWidth - 24,
+                            Layout.Alignment.ALIGN_NORMAL,
+                            1.25f,
+                            0f,
+                            false
+                        )
+
+                        if (yPosition + bLayout.height + 45f > pageHeight - margin) {
+                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
+                            pdfDocument.finishPage(page)
+
+                            currentPageNumber++
+                            pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                            page = pdfDocument.startPage(pageInfo)
+                            canvas = page.canvas
+                            applyPageDecorations(canvas)
+                            yPosition = margin + 18f
+                        }
+
+                        canvas.save()
+                        canvas.translate(margin + 12f, yPosition)
+                        bLayout.draw(canvas)
+                        canvas.restore()
+
+                        yPosition += bLayout.height + 12f
+                    }
                 }
             }
 
-            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap)
+            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
             pdfDocument.finishPage(page)
 
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
@@ -1290,18 +1417,19 @@ class QwikSaveClient(
         margin: Float,
         pageWidth: Int,
         pageHeight: Int,
-        logoBitmap: Bitmap?
+        logoBitmap: Bitmap?,
+        customFooter: String? = null
     ) {
         val y = pageHeight - 24f
         val linePaint = Paint().apply {
             color = Color.rgb(226, 232, 240)
             strokeWidth = 1f
         }
-        canvas.drawLine(margin, y - 10f, pageWidth - margin, y - 10f, linePaint)
+        canvas.drawLine(margin + 10f, y - 10f, pageWidth - margin - 10f, y - 10f, linePaint)
 
         // Logo
         if (logoBitmap != null) {
-            val logoDest = RectF(margin, y - 6f, margin + 18f, y + 12f)
+            val logoDest = RectF(margin + 10f, y - 6f, margin + 28f, y + 12f)
             canvas.drawBitmap(logoBitmap, null, logoDest, null)
         }
 
@@ -1323,13 +1451,14 @@ class QwikSaveClient(
             isAntiAlias = true
         }
 
-        val textStartX = margin + 24f
-        canvas.drawText("Qwik Save [PDF]", textStartX, y + 2f, brandPaint)
-        canvas.drawText("Developer: Priyal Kumar", textStartX, y + 12f, devPaint)
+        val textStartX = margin + 34f
+        canvas.drawText("Qwik Save Academic", textStartX, y + 2f, brandPaint)
+        val devLine = if (!customFooter.isNullOrBlank()) customFooter.take(45) else "Developer: Priyal Kumar • ai-chat2pdf.live"
+        canvas.drawText(devLine, textStartX, y + 12f, devPaint)
 
-        val pageStr = "Page $pageNum • ai-chat2pdf.live"
+        val pageStr = "Page $pageNum"
         val pWidth = pageTextPaint.measureText(pageStr)
-        canvas.drawText(pageStr, pageWidth - margin - pWidth, y + 6f, pageTextPaint)
+        canvas.drawText(pageStr, pageWidth - margin - pWidth - 10f, y + 6f, pageTextPaint)
     }
 
     /**

@@ -7,7 +7,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.widget.MediaController
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -41,10 +43,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import com.qwiksave.app.R
 import com.qwiksave.app.data.UserPreferences
+import com.qwiksave.app.sdk.ExamQuestionItem
 import com.qwiksave.app.sdk.ExtractedMedia
 import com.qwiksave.app.sdk.QwikSaveClient
 import com.qwiksave.app.ui.components.*
@@ -169,25 +173,40 @@ fun TopAppBarSection(
                 )
             }
 
-            // Right: Greeting & 3-Dot Overflow Menu
+            // Right: Greeting with Executive PRO Badge & 3-Dot Overflow Menu
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(Color(0xFF1E293B))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 9.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = "Hello, $userName 👋",
-                        color = Color(0xFF38BDF8),
+                        color = Color(0xFFF8FAFC),
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF10B981), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "PRO",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                    }
                 }
 
                 TopBarOverflowMenu(activeDialog = activeDialog)
@@ -226,19 +245,19 @@ fun BottomNavigationSection(
                     Icon(
                         imageVector = icon,
                         contentDescription = title,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(if (isSelected) 26.dp else 22.dp)
                     )
                 },
                 label = {
                     Text(
                         text = title,
                         fontSize = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF38BDF8),
-                    selectedTextColor = Color(0xFF38BDF8),
+                    selectedIconColor = Color.White,
+                    selectedTextColor = Color.White,
                     indicatorColor = Color(0xFF1E293B),
                     unselectedIconColor = Color(0xFF94A3B8),
                     unselectedTextColor = Color(0xFF94A3B8)
@@ -765,6 +784,19 @@ fun PdfToolsTabContent(
     var aiNotesMode by remember { mutableStateOf(0) } // 0 = URL Link, 1 = Direct Text, 2 = Structured Builder
     var aiShareUrl by remember { mutableStateOf("") }
     var notesTitle by remember { mutableStateOf("Computer Science Exam Revision Notes") }
+    var notesSubtitle by remember { mutableStateOf("Unit 1: Fundamentals & Theory") }
+    var notesStudentName by remember { mutableStateOf("") }
+    var notesWatermarkChoice by remember { mutableStateOf(0) } // 0 = Zero Watermark, 1 = Custom Watermark
+    var customWatermarkText by remember { mutableStateOf("CONFIDENTIAL") }
+    var borderStyleChoice by remember { mutableStateOf("shadow") } // "shadow", "clean", "none"
+    var includePartnerBadge by remember { mutableStateOf(true) }
+    var customFooterText by remember { mutableStateOf("Prepared with QwikSave Academic Suite • www.ai-chat2pdf.live") }
+    val structuredQuestions = remember {
+        mutableStateListOf(
+            ExamQuestionItem("Explain Preemptive vs Non-Preemptive Scheduling with examples.", "In preemptive scheduling, CPU can be allocated to higher priority processes, while in non-preemptive scheduling, once a process gets CPU it keeps it until termination or I/O."),
+            ExamQuestionItem("What is Round Robin (RR) Scheduling?", "Round Robin is preemptive scheduling with a fixed time quantum per process in circular FIFO queue.")
+        )
+    }
     var notesContent by remember { mutableStateOf("### Question 1:\nExplain the difference between Preemptive and Non-Preemptive Scheduling with examples.\n\n### Answer:\nIn preemptive scheduling, CPU can be allocated to higher priority processes, while in non-preemptive scheduling, once a process gets CPU it keeps it until termination or I/O.\n\n### Question 2:\nWhat is Round Robin (RR) Scheduling?\n\n### Answer:\nRound Robin is preemptive scheduling with a fixed time quantum per process in circular FIFO queue.") }
     var isNotesGenerating by remember { mutableStateOf(false) }
     var notesPdfFile by remember { mutableStateOf<File?>(null) }
@@ -909,25 +941,202 @@ fun PdfToolsTabContent(
                                 shape = RoundedCornerShape(8.dp)
                             )
                         } else {
-                            // Structured Builder (Subject + Questions & Answers)
+                            // Structured Builder (Subject, Subtitle, Student Name, Watermark, Border & Dynamic Questions)
                             OutlinedTextField(
                                 value = notesTitle,
                                 onValueChange = { notesTitle = it },
                                 label = { Text("Course / Subject Name", fontSize = 11.sp) },
+                                placeholder = { Text("e.g. Operating Systems / Data Structures", fontSize = 12.sp, color = Color.Gray) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             )
 
                             OutlinedTextField(
-                                value = notesContent,
-                                onValueChange = { notesContent = it },
-                                label = { Text("Questions & Answers (Use '### Question' and '### Answer')", fontSize = 11.sp) },
-                                minLines = 6,
-                                maxLines = 10,
+                                value = notesSubtitle,
+                                onValueChange = { notesSubtitle = it },
+                                label = { Text("Unit / Topic / Examination Code", fontSize = 11.sp) },
+                                placeholder = { Text("e.g. Unit 3: Memory Management & Paging", fontSize = 12.sp, color = Color.Gray) },
+                                singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             )
+
+                            OutlinedTextField(
+                                value = notesStudentName,
+                                onValueChange = { notesStudentName = it },
+                                label = { Text("Student / Professor / Faculty Name (Optional)", fontSize = 11.sp) },
+                                placeholder = { Text("e.g. Prof. R. Sharma / Sneha Verma", fontSize = 12.sp, color = Color.Gray) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+
+                            // Watermark Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Page Watermark:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilterChip(
+                                        selected = notesWatermarkChoice == 0,
+                                        onClick = { notesWatermarkChoice = 0 },
+                                        label = { Text("Zero Watermark ✨", fontSize = 11.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFF10B981),
+                                            selectedLabelColor = Color.White
+                                        )
+                                    )
+                                    FilterChip(
+                                        selected = notesWatermarkChoice == 1,
+                                        onClick = { notesWatermarkChoice = 1 },
+                                        label = { Text("Custom Watermark 🏷️", fontSize = 11.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFF10B981),
+                                            selectedLabelColor = Color.White
+                                        )
+                                    )
+                                }
+                                if (notesWatermarkChoice == 1) {
+                                    OutlinedTextField(
+                                        value = customWatermarkText,
+                                        onValueChange = { customWatermarkText = it },
+                                        label = { Text("Watermark Text (45° Diagonal)", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                }
+                            }
+
+                            // Border Selector
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Page Border Style:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf(
+                                        Pair("shadow", "MS Word Shadow"),
+                                        Pair("clean", "Clean Line"),
+                                        Pair("none", "None")
+                                    ).forEach { (key, lbl) ->
+                                        FilterChip(
+                                            selected = borderStyleChoice == key,
+                                            onClick = { borderStyleChoice = key },
+                                            label = { Text(lbl, fontSize = 11.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = Color(0xFF10B981),
+                                                selectedLabelColor = Color.White
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Partner Header Toggle
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF1F5F9))
+                                    .clickable { includePartnerBadge = !includePartnerBadge }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("College Study Partner Header", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                    Text("Official university verification banner at page top", fontSize = 10.sp, color = Color(0xFF64748B))
+                                }
+                                Switch(
+                                    checked = includePartnerBadge,
+                                    onCheckedChange = { includePartnerBadge = it }
+                                )
+                            }
+
+                            // Custom Footer
+                            OutlinedTextField(
+                                value = customFooterText,
+                                onValueChange = { customFooterText = it },
+                                label = { Text("Page Footer Text", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+
+                            // Dynamic Structured Questions Section
+                            HorizontalDivider(color = Color(0xFFE2E8F0))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Exam Questions (${structuredQuestions.size})", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                TextButton(
+                                    onClick = {
+                                        structuredQuestions.add(ExamQuestionItem("New Question ${structuredQuestions.size + 1}", "Write the answer details here..."))
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF10B981))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("+ Add Question", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                                }
+                            }
+
+                            structuredQuestions.forEachIndexed { qIdx, item ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Q${qIdx + 1}: Question & Answer",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1E293B)
+                                            )
+                                            if (structuredQuestions.size > 1) {
+                                                IconButton(
+                                                    onClick = { structuredQuestions.removeAt(qIdx) },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
+                                                }
+                                            }
+                                        }
+
+                                        OutlinedTextField(
+                                            value = item.question,
+                                            onValueChange = { newQ ->
+                                                structuredQuestions[qIdx] = item.copy(question = newQ)
+                                            },
+                                            label = { Text("Question ${qIdx + 1}", fontSize = 10.sp) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(6.dp),
+                                            minLines = 2,
+                                            maxLines = 4
+                                        )
+
+                                        OutlinedTextField(
+                                            value = item.answer,
+                                            onValueChange = { newA ->
+                                                structuredQuestions[qIdx] = item.copy(answer = newA)
+                                            },
+                                            label = { Text("Answer / Explanation ${qIdx + 1}", fontSize = 10.sp) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(6.dp),
+                                            minLines = 3,
+                                            maxLines = 6
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         Button(
@@ -943,12 +1152,35 @@ fun PdfToolsTabContent(
                                     }
 
                                     val cleanFileName = notesTitle.replace(Regex("[^a-zA-Z0-9_-]"), "_") + ".pdf"
-                                    val result = client.createAcademicNotesPdf(
-                                        context = context,
-                                        title = notesTitle,
-                                        content = notesContent,
-                                        outputFileName = cleanFileName
-                                    )
+                                    val result = if (aiNotesMode == 2) {
+                                        client.createAcademicNotesPdf(
+                                            context = context,
+                                            title = notesTitle,
+                                            content = "",
+                                            subtitle = notesSubtitle.ifBlank { null },
+                                            studentName = notesStudentName.ifBlank { null },
+                                            watermarkText = if (notesWatermarkChoice == 1 && customWatermarkText.isNotBlank()) customWatermarkText else null,
+                                            borderStyle = borderStyleChoice,
+                                            includePartnerBadge = includePartnerBadge,
+                                            footerText = customFooterText.ifBlank { null },
+                                            questions = structuredQuestions.toList(),
+                                            outputFileName = cleanFileName
+                                        )
+                                    } else {
+                                        client.createAcademicNotesPdf(
+                                            context = context,
+                                            title = notesTitle,
+                                            content = notesContent,
+                                            subtitle = null,
+                                            studentName = null,
+                                            watermarkText = null,
+                                            borderStyle = "shadow",
+                                            includePartnerBadge = true,
+                                            footerText = customFooterText.ifBlank { null },
+                                            questions = emptyList(),
+                                            outputFileName = cleanFileName
+                                        )
+                                    }
                                     isNotesGenerating = false
                                     result.onSuccess { file ->
                                         notesPdfFile = file
@@ -1551,8 +1783,69 @@ fun openFileWithIntent(context: Context, file: File, mimeType: String) {
     }
 }
 
+
+/**
+ * Lightweight asynchronous thumbnail loader for videos and carousel photos.
+ */
+@Composable
+fun AsyncThumbnail(
+    url: String?,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    placeholderIcon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.Image
+) {
+    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
+    var isLoading by remember(url) { mutableStateOf(!url.isNullOrBlank()) }
+
+    LaunchedEffect(url) {
+        if (!url.isNullOrBlank()) {
+            isLoading = true
+            withContext(Dispatchers.IO) {
+                try {
+                    val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 6000
+                    conn.readTimeout = 6000
+                    conn.inputStream.use { stream ->
+                        bitmap = BitmapFactory.decodeStream(stream)
+                    }
+                } catch (_: Exception) {}
+            }
+            isLoading = false
+        } else {
+            isLoading = false
+        }
+    }
+
+    Box(
+        modifier = modifier.background(Color(0xFF1E293B)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = contentDescription,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                color = Color.White.copy(alpha = 0.7f),
+                strokeWidth = 2.dp
+            )
+        } else {
+            Icon(
+                imageVector = placeholderIcon,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.4f),
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
 /* ===================================================================================
-   TAB 2: SOCIAL MEDIA DOWNLOADER (Themed Pills, Centered Card, Real Video Preview)
+   TAB 2: SOCIAL MEDIA DOWNLOADER (Themed Pills, Dedicated Inputs, Real Video Preview)
    =================================================================================== */
 @Composable
 fun SocialMediaTabContent(
@@ -1566,16 +1859,35 @@ fun SocialMediaTabContent(
 
     val platforms = listOf("Instagram", "Facebook", "YouTube")
 
-    var inputUrl by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var extractedResult by remember { mutableStateOf<ExtractedMedia?>(null) }
+    // Dedicated input states per platform (Prevents cross-tab bleeding)
+    var instaUrl by remember { mutableStateOf("") }
+    var fbUrl by remember { mutableStateOf("") }
+    var ytUrl by remember { mutableStateOf("") }
+
+    // Dedicated extracted media per platform
+    var instaResult by remember { mutableStateOf<ExtractedMedia?>(null) }
     var fbFormats by remember { mutableStateOf<List<ExtractedMedia>>(emptyList()) }
+    var ytResult by remember { mutableStateOf<ExtractedMedia?>(null) }
+
+    var isLoading by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
     val platformColor = when (selectedPlatform) {
         0 -> Color(0xFFE1306C)
         1 -> Color(0xFF1877F2)
         else -> Color(0xFFFF0000)
+    }
+
+    val currentUrl = when (selectedPlatform) {
+        0 -> instaUrl
+        1 -> fbUrl
+        else -> ytUrl
+    }
+
+    val currentMedia = when (selectedPlatform) {
+        0 -> instaResult
+        1 -> fbFormats.firstOrNull()
+        else -> ytResult
     }
 
     Column(
@@ -1588,7 +1900,7 @@ fun SocialMediaTabContent(
         // Space to center the action card comfortably in the screen
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Platform Switcher with Clean Themed Pills (No dark black container)
+        // Platform Switcher with Clean Themed Pills
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1621,8 +1933,6 @@ fun SocialMediaTabContent(
                         )
                         .clickable {
                             onPlatformChange(idx)
-                            extractedResult = null
-                            fbFormats = emptyList()
                             statusMessage = null
                         }
                         .padding(vertical = 10.dp),
@@ -1689,8 +1999,14 @@ fun SocialMediaTabContent(
                 }
 
                 OutlinedTextField(
-                    value = inputUrl,
-                    onValueChange = { inputUrl = it },
+                    value = currentUrl,
+                    onValueChange = { newVal ->
+                        when (selectedPlatform) {
+                            0 -> instaUrl = newVal
+                            1 -> fbUrl = newVal
+                            else -> ytUrl = newVal
+                        }
+                    },
                     placeholder = {
                         Text(
                             text = when (selectedPlatform) {
@@ -1706,8 +2022,14 @@ fun SocialMediaTabContent(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                     trailingIcon = {
-                        if (inputUrl.isNotEmpty()) {
-                            IconButton(onClick = { inputUrl = "" }) {
+                        if (currentUrl.isNotEmpty()) {
+                            IconButton(onClick = {
+                                when (selectedPlatform) {
+                                    0 -> instaUrl = ""
+                                    1 -> fbUrl = ""
+                                    else -> ytUrl = ""
+                                }
+                            }) {
                                 Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
                             }
                         }
@@ -1721,9 +2043,13 @@ fun SocialMediaTabContent(
                     OutlinedButton(
                         onClick = {
                             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            val clip = cm?.primaryClip?.getItemAt(0)?.text?.toString()
+                            val clip = cm?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
                             if (!clip.isNullOrEmpty()) {
-                                inputUrl = clip.trim()
+                                when (selectedPlatform) {
+                                    0 -> instaUrl = clip
+                                    1 -> fbUrl = clip
+                                    else -> ytUrl = clip
+                                }
                                 Toast.makeText(context, "Pasted from Clipboard!", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
@@ -1739,25 +2065,52 @@ fun SocialMediaTabContent(
 
                     Button(
                         onClick = {
-                            if (inputUrl.isBlank()) {
+                            val trimmedUrl = currentUrl.trim()
+                            if (trimmedUrl.isBlank()) {
                                 Toast.makeText(context, "Please enter or paste a valid URL", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
+
+                            // Strict platform URL validation to prevent 403 errors and cross-tab mismatch
+                            when (selectedPlatform) {
+                                0 -> {
+                                    val isInsta = trimmedUrl.contains("instagram.com", ignoreCase = true) || trimmedUrl.contains("instagr.am", ignoreCase = true)
+                                    if (!isInsta) {
+                                        Toast.makeText(context, "Invalid link! Please enter a valid Instagram URL", Toast.LENGTH_LONG).show()
+                                        return@Button
+                                    }
+                                }
+                                1 -> {
+                                    val isFb = trimmedUrl.contains("facebook.com", ignoreCase = true) || trimmedUrl.contains("fb.watch", ignoreCase = true) || trimmedUrl.contains("fb.me", ignoreCase = true)
+                                    if (!isFb) {
+                                        Toast.makeText(context, "Invalid link! Please enter a valid Facebook URL", Toast.LENGTH_LONG).show()
+                                        return@Button
+                                    }
+                                }
+                                2 -> {
+                                    val isYt = trimmedUrl.contains("youtube.com", ignoreCase = true) || trimmedUrl.contains("youtu.be", ignoreCase = true)
+                                    if (!isYt) {
+                                        Toast.makeText(context, "Invalid link! Please enter a valid YouTube URL", Toast.LENGTH_LONG).show()
+                                        return@Button
+                                    }
+                                }
+                            }
+
                             isLoading = true
                             statusMessage = "Extracting video streams..."
                             coroutineScope.launch {
                                 when (selectedPlatform) {
                                     0 -> {
-                                        val res = client.extractInstagram(context, inputUrl)
+                                        val res = client.extractInstagram(context, trimmedUrl)
                                         isLoading = false
                                         res.onSuccess {
-                                            extractedResult = it
+                                            instaResult = it
                                             statusMessage = if (it.items.size > 1) "Ready: Carousel (${it.items.size} items) 📸" else if (!it.isVideo) "Ready: High-Res Photo 🖼️" else "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
                                             scrollState.animateScrollTo(scrollState.maxValue)
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
                                     }
                                     1 -> {
-                                        val res = client.extractFacebook(inputUrl)
+                                        val res = client.extractFacebook(trimmedUrl)
                                         isLoading = false
                                         res.onSuccess {
                                             fbFormats = it
@@ -1766,10 +2119,10 @@ fun SocialMediaTabContent(
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
                                     }
                                     2 -> {
-                                        val res = client.extractYouTube(inputUrl)
+                                        val res = client.extractYouTube(trimmedUrl)
                                         isLoading = false
                                         res.onSuccess {
-                                            extractedResult = it
+                                            ytResult = it
                                             statusMessage = if (it.items.size > 1) "Ready: Carousel (${it.items.size} items) 📸" else if (!it.isVideo) "Ready: High-Res Photo 🖼️" else "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
                                             scrollState.animateScrollTo(scrollState.maxValue)
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
@@ -1803,8 +2156,7 @@ fun SocialMediaTabContent(
             }
         }
 
-        // Live Video Preview Card with Central Play Button Overlay
-        val currentMedia = extractedResult ?: fbFormats.firstOrNull()
+        // Live Video & Audio Preview Player (Watch & Listen directly in-app)
         currentMedia?.let { media ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1813,99 +2165,116 @@ fun SocialMediaTabContent(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column {
-                    // Video Poster Container
-                    var webThumbBitmap by remember(media.thumbnailUrl) { mutableStateOf<Bitmap?>(null) }
-                    LaunchedEffect(media.thumbnailUrl) {
-                        if (!media.thumbnailUrl.isNullOrBlank()) {
-                            withContext(Dispatchers.IO) {
-                                try {
-                                    val conn = URL(media.thumbnailUrl).openConnection() as HttpURLConnection
-                                    conn.connectTimeout = 8000
-                                    conn.readTimeout = 8000
-                                    conn.inputStream.use { stream ->
-                                        webThumbBitmap = BitmapFactory.decodeStream(stream)
+                    var isPlayingPreview by remember(media.streamUrl) { mutableStateOf(false) }
+
+                    if (isPlayingPreview && media.isVideo && media.streamUrl.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(210.dp)
+                                .background(Color.Black),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    VideoView(ctx).apply {
+                                        val controller = MediaController(ctx)
+                                        controller.setAnchorView(this)
+                                        setMediaController(controller)
+                                        setVideoURI(Uri.parse(media.streamUrl))
+                                        setOnPreparedListener { mp ->
+                                            mp.isLooping = true
+                                            start()
+                                        }
+                                        setOnErrorListener { _, _, _ ->
+                                            isPlayingPreview = false
+                                            Toast.makeText(ctx, "Preview playback unavailable for this stream", Toast.LENGTH_SHORT).show()
+                                            true
+                                        }
                                     }
-                                } catch (_: Exception) {}
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+
+                            // Close Preview Button
+                            IconButton(
+                                onClick = { isPlayingPreview = false },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                                    .size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Close Preview", tint = Color.White, modifier = Modifier.size(18.dp))
                             }
                         }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .background(Color.Black),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (webThumbBitmap != null) {
-                            Image(
-                                bitmap = webThumbBitmap!!.asImageBitmap(),
-                                contentDescription = "Video Thumbnail",
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(190.dp)
+                                .background(Color.Black)
+                                .clickable {
+                                    if (media.isVideo && media.streamUrl.isNotBlank()) {
+                                        isPlayingPreview = true
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AsyncThumbnail(
+                                url = media.thumbnailUrl,
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
+                                contentDescription = "Video Thumbnail",
+                                placeholderIcon = Icons.Default.PlayCircle
                             )
-                        } else {
+
+                            // Central Play Indicator
                             Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Brush.verticalGradient(listOf(Color(0xFF1E293B), Color(0xFF0F172A)))),
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.65f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.PlayCircle,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(64.dp)
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Play Video Preview",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(32.dp)
                                 )
                             }
-                        }
 
-                        // Central Play Indicator
-                        Box(
-                            modifier = Modifier
-                                .size(50.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.65f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Playable Video",
-                                tint = Color.White,
-                                modifier = Modifier.size(30.dp)
-                            )
-                        }
+                            // Duration pill top-left
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(8.dp)
+                                    .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = media.durationText ?: "▶ Watch Preview",
+                                    fontSize = 10.sp,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
 
-                        // Duration pill top-left
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(8.dp)
-                                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = media.durationText ?: "▶ 0:45",
-                                fontSize = 10.sp,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Quality pill top-right
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(8.dp)
-                                .background(Color(0xFF059669), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = media.quality,
-                                fontSize = 10.sp,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
+                            // Quality pill top-right
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .background(Color(0xFF059669), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = media.quality,
+                                    fontSize = 10.sp,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
@@ -1935,7 +2304,7 @@ fun SocialMediaTabContent(
             }
         }
 
-        // Available Streams / Download Result Cards - FRESH GREENISH THEME
+        // Available Streams / Download Result Cards
         if (selectedPlatform == 1 && fbFormats.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -1988,52 +2357,160 @@ fun SocialMediaTabContent(
                     }
                 }
             }
-        } else if (extractedResult != null) {
-            val res = extractedResult!!
+        } else {
+            val activeResult = if (selectedPlatform == 0) instaResult else if (selectedPlatform == 2) ytResult else null
+            activeResult?.let { res ->
+                // Check if Carousel / Multiple items exist (Instagram Post collection)
+                if (res.items.size > 1) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF10B981))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text(
+                                        "📸 Carousel (${res.items.size} Items)",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF065F46)
+                                    )
+                                    Text(
+                                        "Multi-image & video collection",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF047857)
+                                    )
+                                }
 
-            // Check if Carousel / Multiple items exist (Instagram Post collection)
-            if (res.items.size > 1) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF10B981))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                Button(
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            Toast.makeText(context, "Saving all ${res.items.size} items to Gallery... 📦", Toast.LENGTH_SHORT).show()
+                                            var successCount = 0
+                                            for ((idx, itm) in res.items.withIndex()) {
+                                                val ext = if (itm.isVideo) "mp4" else "jpg"
+                                                val fn = "QwikSave_${res.platform}_${res.id}_item_${idx + 1}_${System.currentTimeMillis()}.$ext"
+                                                val dRes = client.downloadMediaDirectly(context, itm.url, fn)
+                                                if (dRes.isSuccess) successCount++
+                                            }
+                                            Toast.makeText(context, "Saved $successCount/${res.items.size} items to Gallery! ✅", Toast.LENGTH_LONG).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Save All (${res.items.size}) 📦", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            // Horizontal list of individual carousel items with preview and download button
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(res.items.size) { idx ->
+                                    val itm = res.items[idx]
+                                    Card(
+                                        modifier = Modifier.width(140.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7F3D0))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(6.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            // Image / Video Thumbnail Preview
+                                            AsyncThumbnail(
+                                                url = itm.url,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(95.dp)
+                                                    .clip(RoundedCornerShape(6.dp)),
+                                                placeholderIcon = if (itm.isVideo) Icons.Default.PlayCircle else Icons.Default.Image
+                                            )
+
+                                            Text(
+                                                text = if (itm.isVideo) "Video ${idx + 1}" else "Photo ${idx + 1}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF065F46)
+                                            )
+
+                                            Button(
+                                                onClick = {
+                                                    val ext = if (itm.isVideo) "mp4" else "jpg"
+                                                    val fn = "QwikSave_${res.platform}_${res.id}_item_${idx + 1}_${System.currentTimeMillis()}.$ext"
+                                                    coroutineScope.launch {
+                                                        Toast.makeText(context, "Downloading item ${idx + 1}...", Toast.LENGTH_SHORT).show()
+                                                        val dl = client.downloadMediaDirectly(context, itm.url, fn)
+                                                        dl.onSuccess {
+                                                            val fld = if (itm.isVideo) "Movies/QwikSave" else "Pictures/QwikSave"
+                                                            Toast.makeText(context, "Saved to $fld! ✅", Toast.LENGTH_SHORT).show()
+                                                        }.onFailure { e ->
+                                                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(4.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                                contentPadding = PaddingValues(vertical = 4.dp, horizontal = 6.dp)
+                                            ) {
+                                                Text(if (itm.isVideo) "Save Video" else "Save Photo", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Single Item Result (Photo or Video)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column {
-                                Text(
-                                    "📸 Carousel (${res.items.size} Items)",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF065F46)
-                                )
-                                Text(
-                                    "Multi-image & video collection",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF047857)
-                                )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(res.quality, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
+                                Text(res.fileSizeMb ?: if (res.isVideo) "HD MP4 Video" else "High-Res Image", fontSize = 11.sp, color = Color(0xFF047857))
                             }
 
                             Button(
                                 onClick = {
+                                    val ext = if (res.isVideo) "mp4" else "jpg"
+                                    val filename = "QwikSave_${res.platform}_${res.id}_${System.currentTimeMillis()}.$ext"
                                     coroutineScope.launch {
-                                        Toast.makeText(context, "Saving all ${res.items.size} items to Gallery... 📦", Toast.LENGTH_SHORT).show()
-                                        var successCount = 0
-                                        for ((idx, itm) in res.items.withIndex()) {
-                                            val ext = if (itm.isVideo) "mp4" else "jpg"
-                                            val fn = "QwikSave_${res.platform}_${res.id}_item_${idx + 1}_${System.currentTimeMillis()}.$ext"
-                                            val dRes = client.downloadMediaDirectly(context, itm.url, fn)
-                                            if (dRes.isSuccess) successCount++
+                                        val msg = if (res.isVideo) "Downloading video to Gallery... 🎬" else "Downloading photo to Gallery... 🖼️"
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        val result = client.downloadMediaDirectly(context, res.streamUrl, filename)
+                                        result.onSuccess {
+                                            val dest = if (res.isVideo) "Gallery / Movies! ✅" else "Gallery / Pictures! ✅"
+                                            Toast.makeText(context, "Saved to $dest", Toast.LENGTH_LONG).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
                                         }
-                                        Toast.makeText(context, "Saved $successCount/${res.items.size} items to Gallery! ✅", Toast.LENGTH_LONG).show()
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
@@ -2041,125 +2518,28 @@ fun SocialMediaTabContent(
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Save All (${res.items.size}) 📦", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(if (res.isVideo) "Download Video 📥" else "Download Photo 🖼️", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
-                        }
-
-                        // Horizontal list of individual carousel items with preview and download button
-                        androidx.compose.foundation.lazy.LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(res.items.size) { idx ->
-                                val itm = res.items[idx]
-                                Card(
-                                    modifier = Modifier.width(130.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7F3D0))
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(6.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = if (itm.isVideo) "Item #${idx + 1} (Video)" else "Item #${idx + 1} (Photo)",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF065F46)
-                                        )
-
-                                        Button(
-                                            onClick = {
-                                                val ext = if (itm.isVideo) "mp4" else "jpg"
-                                                val fn = "QwikSave_${res.platform}_${res.id}_item_${idx + 1}_${System.currentTimeMillis()}.$ext"
-                                                coroutineScope.launch {
-                                                    Toast.makeText(context, "Downloading item #${idx + 1}...", Toast.LENGTH_SHORT).show()
-                                                    val dl = client.downloadMediaDirectly(context, itm.url, fn)
-                                                    dl.onSuccess {
-                                                        val fld = if (itm.isVideo) "Movies/QwikSave" else "Pictures/QwikSave"
-                                                        Toast.makeText(context, "Saved to $fld! ✅", Toast.LENGTH_SHORT).show()
-                                                    }.onFailure { e ->
-                                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(4.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp, horizontal = 6.dp)
-                                        ) {
-                                            Text(if (itm.isVideo) "Save Video" else "Save Photo", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Single Item Result (Photo or Video)
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(res.quality, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
-                            Text(res.fileSizeMb ?: if (res.isVideo) "HD MP4 Video" else "High-Res Image", fontSize = 11.sp, color = Color(0xFF047857))
-                        }
-
-                        Button(
-                            onClick = {
-                                val ext = if (res.isVideo) "mp4" else "jpg"
-                                val filename = "QwikSave_${res.platform}_${res.id}_${System.currentTimeMillis()}.$ext"
-                                coroutineScope.launch {
-                                    val msg = if (res.isVideo) "Downloading video to Gallery... 🎬" else "Downloading photo to Gallery... 🖼️"
-                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                    val result = client.downloadMediaDirectly(context, res.streamUrl, filename)
-                                    result.onSuccess {
-                                        val dest = if (res.isVideo) "Gallery / Movies! ✅" else "Gallery / Pictures! ✅"
-                                        Toast.makeText(context, "Saved to $dest", Toast.LENGTH_LONG).show()
-                                    }.onFailure { err ->
-                                        Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (res.isVideo) "Download Video 📥" else "Download Photo 🖼️", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
         }
 
-        // Platform Trust Features Cards - Exactly identical height and clean alignment
+        // Platform Trust Features Cards - Strictly Equal Height & Clean Alignment (Fixes Uneven Line Wraps)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                Pair("⚡ Ultra Fast", "Direct CDN pipe"),
-                Pair("✨ Zero Watermark", "Pure 1080p original"),
-                Pair("🔒 Private", "No login needed")
+                Pair("⚡ Ultra Fast", "Direct CDN\nHigh speed"),
+                Pair("✨ No Watermark", "Pure 1080p\nOriginal quality"),
+                Pair("🔒 100% Private", "No login\nSafe & secure")
             ).forEach { (title, sub) ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(72.dp)
+                        .height(80.dp)
                         .background(Color.White, RoundedCornerShape(10.dp))
                         .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
                         .padding(horizontal = 6.dp, vertical = 6.dp),
@@ -2174,18 +2554,18 @@ fun SocialMediaTabContent(
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0F172A),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            textAlign = TextAlign.Center,
                             maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             sub,
                             fontSize = 9.sp,
                             color = Color(0xFF64748B),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            textAlign = TextAlign.Center,
                             maxLines = 2,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            overflow = TextOverflow.Ellipsis,
                             lineHeight = 12.sp
                         )
                     }
@@ -2272,7 +2652,8 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -2298,7 +2679,7 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                             onClick = { selectedQrType = idx },
                             label = { Text(label, fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF7C3AED),
+                                selectedContainerColor = Color(0xFF059669),
                                 selectedLabelColor = Color.White
                             )
                         )
@@ -2460,7 +2841,7 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                                     Toast.makeText(context, "Saved to gallery!", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -2472,7 +2853,9 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                         OutlinedButton(
                             onClick = { client.shareQrBitmap(context, qrBitmap) },
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF059669)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF059669))
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
