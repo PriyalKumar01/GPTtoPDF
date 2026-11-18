@@ -607,7 +607,20 @@ class QwikSaveClient(
         onSuccess: (File?) -> Unit = {},
         onError: (String) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
-        val cleanMediaUrl = mediaUrl
+        val unescapedUrl = if (mediaUrl.contains("/api/proxy-download") && mediaUrl.contains("url=")) {
+            try {
+                val qIdx = mediaUrl.indexOf("url=")
+                val ampIdx = mediaUrl.indexOf("&", qIdx)
+                val rawEncoded = if (ampIdx != -1) mediaUrl.substring(qIdx + 4, ampIdx) else mediaUrl.substring(qIdx + 4)
+                java.net.URLDecoder.decode(rawEncoded, "UTF-8")
+            } catch (_: Exception) {
+                mediaUrl
+            }
+        } else {
+            mediaUrl
+        }
+
+        val cleanMediaUrl = unescapedUrl
             .replace(Regex("&?bytestart=\\d+"), "")
             .replace(Regex("&?byteend=\\d+"), "")
             .replace(Regex("\\?&"), "?")
