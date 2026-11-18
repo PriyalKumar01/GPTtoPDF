@@ -74,17 +74,16 @@ export async function extractWithYtDlp(url: string, timeoutMs = 45000): Promise<
       [
         '-m',
         'yt_dlp',
-        '--js-runtimes',
-        'node',
+        '--extractor-args',
+        'youtube:player_client=android,ios,web',
         '--dump-json',
         '--no-warnings',
         '--no-playlist',
-        '--quiet',
         url.trim(),
       ],
       {
         timeout: timeoutMs,
-        maxBuffer: 35 * 1024 * 1024,
+        maxBuffer: 60 * 1024 * 1024,
       }
     );
 

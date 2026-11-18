@@ -786,11 +786,9 @@ fun PdfToolsTabContent(
     var notesTitle by remember { mutableStateOf("Computer Science Exam Revision Notes") }
     var notesSubtitle by remember { mutableStateOf("Unit 1: Fundamentals & Theory") }
     var notesStudentName by remember { mutableStateOf("") }
-    var notesWatermarkChoice by remember { mutableStateOf(0) } // 0 = Zero Watermark, 1 = Custom Watermark
-    var customWatermarkText by remember { mutableStateOf("CONFIDENTIAL") }
     var borderStyleChoice by remember { mutableStateOf("shadow") } // "shadow", "clean", "none"
-    var includePartnerBadge by remember { mutableStateOf(true) }
-    var customFooterText by remember { mutableStateOf("Prepared with QwikSave Academic Suite • www.ai-chat2pdf.live") }
+    var partnerBadgeScope by remember { mutableStateOf("first-page") } // "first-page", "all-pages"
+    var currentQuestionIndex by remember { mutableStateOf(0) }
     val structuredQuestions = remember {
         mutableStateListOf(
             ExamQuestionItem("Explain Preemptive vs Non-Preemptive Scheduling with examples.", "In preemptive scheduling, CPU can be allocated to higher priority processes, while in non-preemptive scheduling, once a process gets CPU it keeps it until termination or I/O."),
@@ -972,41 +970,6 @@ fun PdfToolsTabContent(
                                 shape = RoundedCornerShape(8.dp)
                             )
 
-                            // Watermark Selector
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Page Watermark:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilterChip(
-                                        selected = notesWatermarkChoice == 0,
-                                        onClick = { notesWatermarkChoice = 0 },
-                                        label = { Text("Zero Watermark ✨", fontSize = 11.sp) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Color(0xFF10B981),
-                                            selectedLabelColor = Color.White
-                                        )
-                                    )
-                                    FilterChip(
-                                        selected = notesWatermarkChoice == 1,
-                                        onClick = { notesWatermarkChoice = 1 },
-                                        label = { Text("Custom Watermark 🏷️", fontSize = 11.sp) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Color(0xFF10B981),
-                                            selectedLabelColor = Color.White
-                                        )
-                                    )
-                                }
-                                if (notesWatermarkChoice == 1) {
-                                    OutlinedTextField(
-                                        value = customWatermarkText,
-                                        onValueChange = { customWatermarkText = it },
-                                        label = { Text("Watermark Text (45° Diagonal)", fontSize = 11.sp) },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                }
-                            }
-
                             // Border Selector
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text("Page Border Style:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
@@ -1029,111 +992,242 @@ fun PdfToolsTabContent(
                                 }
                             }
 
-                            // Partner Header Toggle
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFF1F5F9))
-                                    .clickable { includePartnerBadge = !includePartnerBadge }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("College Study Partner Header", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                    Text("Official university verification banner at page top", fontSize = 10.sp, color = Color(0xFF64748B))
-                                }
-                                Switch(
-                                    checked = includePartnerBadge,
-                                    onCheckedChange = { includePartnerBadge = it }
-                                )
-                            }
-
-                            // Custom Footer
-                            OutlinedTextField(
-                                value = customFooterText,
-                                onValueChange = { customFooterText = it },
-                                label = { Text("Page Footer Text", fontSize = 11.sp) },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-
-                            // Dynamic Structured Questions Section
-                            HorizontalDivider(color = Color(0xFFE2E8F0))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Exam Questions (${structuredQuestions.size})", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                TextButton(
-                                    onClick = {
-                                        structuredQuestions.add(ExamQuestionItem("New Question ${structuredQuestions.size + 1}", "Write the answer details here..."))
+                            // Partner Header Scope Selector (First Page vs All Pages)
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("College Study Partner Header:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    listOf(
+                                        Pair("first-page", "First Page Only 🎓"),
+                                        Pair("all-pages", "All Pages 🎓")
+                                    ).forEach { (key, lbl) ->
+                                        FilterChip(
+                                            selected = partnerBadgeScope == key,
+                                            onClick = { partnerBadgeScope = key },
+                                            label = { Text(lbl, fontSize = 11.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = Color(0xFF2563EB),
+                                                selectedLabelColor = Color.White
+                                            )
+                                        )
                                     }
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF10B981))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("+ Add Question", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
                                 }
                             }
 
-                            structuredQuestions.forEachIndexed { qIdx, item ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                            HorizontalDivider(color = Color(0xFFE2E8F0))
+
+                            // Horizontal Question Card Carousel / Pager
+                            val safeIdx = currentQuestionIndex.coerceIn(0, (structuredQuestions.size - 1).coerceAtLeast(0))
+                            val currentItem = structuredQuestions.getOrNull(safeIdx) ?: ExamQuestionItem("", "")
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Column(
-                                        modifier = Modifier.padding(10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    // Pager Header: Question Counter Badge + Add & Delete Buttons
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color(0xFF2563EB))
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             Text(
-                                                text = "Q${qIdx + 1}: Question & Answer",
+                                                text = "Question ${safeIdx + 1} of ${structuredQuestions.size}",
+                                                color = Color.White,
                                                 fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF1E293B)
+                                                fontWeight = FontWeight.Bold
                                             )
+                                        }
+
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    structuredQuestions.add(
+                                                        ExamQuestionItem(
+                                                            "Question ${structuredQuestions.size + 1}",
+                                                            "Write the answer details here..."
+                                                        )
+                                                    )
+                                                    currentQuestionIndex = structuredQuestions.size - 1
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF10B981))
+                                                Spacer(modifier = Modifier.width(3.dp))
+                                                Text("+ Add", fontSize = 11.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
+                                            }
+
                                             if (structuredQuestions.size > 1) {
                                                 IconButton(
-                                                    onClick = { structuredQuestions.removeAt(qIdx) },
-                                                    modifier = Modifier.size(24.dp)
+                                                    onClick = {
+                                                        structuredQuestions.removeAt(safeIdx)
+                                                        if (currentQuestionIndex >= structuredQuestions.size) {
+                                                            currentQuestionIndex = (structuredQuestions.size - 1).coerceAtLeast(0)
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
                                                 ) {
                                                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                                                 }
                                             }
                                         }
+                                    }
 
-                                        OutlinedTextField(
-                                            value = item.question,
-                                            onValueChange = { newQ ->
-                                                structuredQuestions[qIdx] = item.copy(question = newQ)
-                                            },
-                                            label = { Text("Question ${qIdx + 1}", fontSize = 10.sp) },
-                                            modifier = Modifier.fillMaxWidth(),
+                                    // Question / Topic Title Input
+                                    OutlinedTextField(
+                                        value = currentItem.question,
+                                        onValueChange = { newQ ->
+                                            structuredQuestions[safeIdx] = currentItem.copy(question = newQ)
+                                        },
+                                        label = { Text("Question / Topic Title", fontSize = 11.sp) },
+                                        placeholder = { Text("e.g. What is Round Robin Scheduling?", fontSize = 11.sp, color = Color.Gray) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(6.dp),
+                                        minLines = 2,
+                                        maxLines = 3
+                                    )
+
+                                    // Quick Markdown Formatting Toolbar for Answer
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFFE2E8F0), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Format:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
+
+                                        // Bold [B]
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color.White)
+                                                .clickable {
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + " **bold text**")
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("B", fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, color = Color(0xFF0F172A))
+                                        }
+
+                                        // Italic [I]
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color.White)
+                                                .clickable {
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + " *italic text*")
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("I", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 11.sp, color = Color(0xFF0F172A))
+                                        }
+
+                                        // Bullet Point [•]
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color.White)
+                                                .clickable {
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + "\n• Point: ")
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("• Bullet", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
+                                        }
+
+                                        // Numbered List [1.]
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color.White)
+                                                .clickable {
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + "\n1. Item: ")
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("1. List", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
+                                        }
+
+                                        // Heading [#]
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color.White)
+                                                .clickable {
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + "\n### Subsection\n")
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("### H3", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                        }
+                                    }
+
+                                    // Answer / Explanation Input
+                                    OutlinedTextField(
+                                        value = currentItem.answer,
+                                        onValueChange = { newA ->
+                                            structuredQuestions[safeIdx] = currentItem.copy(answer = newA)
+                                        },
+                                        label = { Text("Answer / Explanation (Paragraphs & Pointers)", fontSize = 11.sp) },
+                                        placeholder = { Text("Write your explanation, code or bullet points here...", fontSize = 11.sp, color = Color.Gray) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(6.dp),
+                                        minLines = 4,
+                                        maxLines = 7
+                                    )
+
+                                    // Carousel Navigation Controls (◀ Previous | Counter | Next ▶)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Button(
+                                            onClick = { if (currentQuestionIndex > 0) currentQuestionIndex-- },
+                                            enabled = currentQuestionIndex > 0,
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
                                             shape = RoundedCornerShape(6.dp),
-                                            minLines = 2,
-                                            maxLines = 4
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                            modifier = Modifier.height(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.ChevronLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text("Previous", fontSize = 11.sp)
+                                        }
+
+                                        Text(
+                                            text = "${safeIdx + 1} / ${structuredQuestions.size}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF64748B)
                                         )
 
-                                        OutlinedTextField(
-                                            value = item.answer,
-                                            onValueChange = { newA ->
-                                                structuredQuestions[qIdx] = item.copy(answer = newA)
-                                            },
-                                            label = { Text("Answer / Explanation ${qIdx + 1}", fontSize = 10.sp) },
-                                            modifier = Modifier.fillMaxWidth(),
+                                        Button(
+                                            onClick = { if (currentQuestionIndex < structuredQuestions.size - 1) currentQuestionIndex++ },
+                                            enabled = currentQuestionIndex < structuredQuestions.size - 1,
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
                                             shape = RoundedCornerShape(6.dp),
-                                            minLines = 3,
-                                            maxLines = 6
-                                        )
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                            modifier = Modifier.height(32.dp)
+                                        ) {
+                                            Text("Next", fontSize = 11.sp)
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        }
                                     }
                                 }
                             }
@@ -1159,10 +1253,10 @@ fun PdfToolsTabContent(
                                             content = "",
                                             subtitle = notesSubtitle.ifBlank { null },
                                             studentName = notesStudentName.ifBlank { null },
-                                            watermarkText = if (notesWatermarkChoice == 1 && customWatermarkText.isNotBlank()) customWatermarkText else null,
+                                            watermarkText = null,
                                             borderStyle = borderStyleChoice,
-                                            includePartnerBadge = includePartnerBadge,
-                                            footerText = customFooterText.ifBlank { null },
+                                            includePartnerBadge = true,
+                                            footerText = null,
                                             questions = structuredQuestions.toList(),
                                             outputFileName = cleanFileName
                                         )
@@ -1176,7 +1270,7 @@ fun PdfToolsTabContent(
                                             watermarkText = null,
                                             borderStyle = "shadow",
                                             includePartnerBadge = true,
-                                            footerText = customFooterText.ifBlank { null },
+                                            footerText = null,
                                             questions = emptyList(),
                                             outputFileName = cleanFileName
                                         )
@@ -1433,44 +1527,148 @@ fun PdfToolsTabContent(
                         }
 
                         if (selectedPdfUris.isNotEmpty()) {
-                            Text(
-                                text = "PDF Files to Merge (${selectedPdfUris.size}):",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0F172A)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "PDF Sequence (${selectedPdfUris.size}): Use ▲ / ▼ to reorder",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F172A)
+                                )
+                                TextButton(
+                                    onClick = { pdfPickerLauncher.launch("application/pdf") },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF2563EB))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("+ Add More", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2563EB))
+                                }
+                            }
 
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 selectedPdfUris.forEachIndexed { index, uri ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color(0xFFF1F5F9), RoundedCornerShape(6.dp))
-                                            .padding(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = uri.lastPathSegment ?: "Document_${index + 1}.pdf",
-                                                fontSize = 11.sp,
-                                                color = Color(0xFF334155),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-
-                                        IconButton(
-                                            onClick = {
-                                                val mutable = selectedPdfUris.toMutableList()
-                                                mutable.removeAt(index)
-                                                selectedPdfUris = mutable
-                                            },
-                                            modifier = Modifier.size(24.dp)
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                            // PDF First Page Visual Thumbnail
+                                            val thumbBitmap = remember(uri) {
+                                                client.renderPdfFirstPageThumbnail(context, uri, targetW = 90, targetH = 120)
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(width = 46.dp, height = 60.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(Color.White)
+                                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(4.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (thumbBitmap != null) {
+                                                    Image(
+                                                        bitmap = thumbBitmap.asImageBitmap(),
+                                                        contentDescription = "Page 1",
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(24.dp))
+                                                }
+                                            }
+
+                                            // PDF Name & Page Count
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = uri.lastPathSegment ?: "Document_${index + 1}.pdf",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF0F172A),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                val pageCount = remember(uri) { client.getPdfPageCount(context, uri) }
+                                                Text(
+                                                    text = if (pageCount > 0) "$pageCount pages • Position ${index + 1}" else "Position ${index + 1}",
+                                                    fontSize = 10.sp,
+                                                    color = Color(0xFF64748B)
+                                                )
+                                            }
+
+                                            // Reorder & Delete Action Buttons
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                // Move Up
+                                                IconButton(
+                                                    onClick = {
+                                                        if (index > 0) {
+                                                            val mutable = selectedPdfUris.toMutableList()
+                                                            val item = mutable.removeAt(index)
+                                                            mutable.add(index - 1, item)
+                                                            selectedPdfUris = mutable
+                                                        }
+                                                    },
+                                                    enabled = index > 0,
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.ArrowUpward,
+                                                        contentDescription = "Move Up",
+                                                        tint = if (index > 0) Color(0xFF2563EB) else Color.LightGray,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+
+                                                // Move Down
+                                                IconButton(
+                                                    onClick = {
+                                                        if (index < selectedPdfUris.size - 1) {
+                                                            val mutable = selectedPdfUris.toMutableList()
+                                                            val item = mutable.removeAt(index)
+                                                            mutable.add(index + 1, item)
+                                                            selectedPdfUris = mutable
+                                                        }
+                                                    },
+                                                    enabled = index < selectedPdfUris.size - 1,
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.ArrowDownward,
+                                                        contentDescription = "Move Down",
+                                                        tint = if (index < selectedPdfUris.size - 1) Color(0xFF2563EB) else Color.LightGray,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+
+                                                // Remove
+                                                IconButton(
+                                                    onClick = {
+                                                        val mutable = selectedPdfUris.toMutableList()
+                                                        mutable.removeAt(index)
+                                                        selectedPdfUris = mutable
+                                                    },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Delete,
+                                                        contentDescription = "Remove",
+                                                        tint = Color(0xFFEF4444),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2339,6 +2537,59 @@ fun SocialMediaTabContent(
                                     coroutineScope.launch {
                                         Toast.makeText(context, "Downloading Facebook video to Gallery... 🎬", Toast.LENGTH_SHORT).show()
                                         val result = client.downloadMediaDirectly(context, format.streamUrl, filename)
+                                        result.onSuccess {
+                                            Toast.makeText(context, "Saved to Gallery / Movies! ✅", Toast.LENGTH_LONG).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Download", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (selectedPlatform == 2 && ytResult != null && (ytResult?.items?.size ?: 0) > 1) {
+            val ytRes = ytResult!!
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Select Quality to Download:",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+
+                ytRes.items.forEachIndexed { idx, itm ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(itm.quality, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
+                                Text("High-Speed Direct MP4 Stream", fontSize = 11.sp, color = Color(0xFF047857))
+                            }
+
+                            Button(
+                                onClick = {
+                                    val filename = "QwikSave_YouTube_${ytRes.id}_${idx + 1}_${System.currentTimeMillis()}.mp4"
+                                    coroutineScope.launch {
+                                        Toast.makeText(context, "Downloading YouTube video to Gallery... 🎬", Toast.LENGTH_SHORT).show()
+                                        val result = client.downloadMediaDirectly(context, itm.url, filename)
                                         result.onSuccess {
                                             Toast.makeText(context, "Saved to Gallery / Movies! ✅", Toast.LENGTH_LONG).show()
                                         }.onFailure { err ->

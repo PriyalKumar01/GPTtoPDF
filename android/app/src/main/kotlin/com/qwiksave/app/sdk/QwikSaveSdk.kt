@@ -250,9 +250,10 @@ class QwikSaveClient(
             val conn = (endpoint.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
                 doOutput = true
-                connectTimeout = 15000
-                readTimeout = 15000
+                connectTimeout = 25000
+                readTimeout = 35000
             }
 
             val payload = JSONObject().apply { put("url", cleanUrl) }
@@ -273,7 +274,10 @@ class QwikSaveClient(
                     val durText = data.optString("duration", data.optString("durationText", "▶ Full Video"))
                     for (i in 0 until formats.length()) {
                         val f = formats.getJSONObject(i)
-                        val cdnUrl = f.getString("url")
+                        var cdnUrl = f.getString("url")
+                        if (cdnUrl.startsWith("/")) {
+                            cdnUrl = "$baseUrl$cdnUrl"
+                        }
                         val rawLabel = f.optString("label", f.optString("quality", ""))
                         val quality = when {
                             rawLabel.contains("1080") -> "1080p Full HD"
@@ -307,50 +311,22 @@ class QwikSaveClient(
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // Log and fall through to failure without showing fake dummy samples
+        }
 
-        // Fallback with verified direct video streams (zero 0-second file)
-        val fbStream1080 = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
-        val fbStream720 = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"
-        Result.success(
-            listOf(
-                ExtractedMedia(
-                    id = "fb_hd",
-                    title = "Facebook Video HD",
-                    thumbnailUrl = "https://images.unsplash.com/photo-1542744094-3a31f272c490?w=500&q=80",
-                    streamUrl = fbStream1080,
-                    quality = "1080p Full HD",
-                    fileSizeMb = "8.50 MB",
-                    platform = "facebook",
-                    isVideo = true,
-                    author = "Facebook Watch",
-                    durationText = "1:00"
-                ),
-                ExtractedMedia(
-                    id = "fb_sd",
-                    title = "Facebook Video SD",
-                    thumbnailUrl = "https://images.unsplash.com/photo-1542744094-3a31f272c490?w=500&q=80",
-                    streamUrl = fbStream720,
-                    quality = "720p HD",
-                    fileSizeMb = "4.20 MB",
-                    platform = "facebook",
-                    isVideo = true,
-                    author = "Facebook Watch",
-                    durationText = "1:00"
-                )
-            )
-        )
+        Result.failure(Exception("Unable to extract Facebook video. Please verify the link is public and try again."))
     }
 
     /**
-     * Extract YouTube Shorts or Universal video streams.
+     * Extract YouTube Shorts or Universal video streams (Supports long videos, movies, dramas, lectures).
      */
     suspend fun extractYouTube(ytUrl: String): Result<ExtractedMedia> = withContext(Dispatchers.IO) {
         val cleanUrl = ytUrl.trim()
         val videoId = extractYouTubeId(cleanUrl)
         val defaultThumb = if (videoId.length == 11) "https://i.ytimg.com/vi/$videoId/hqdefault.jpg" else "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=500&q=80"
 
-        // Tier 1: Call backend /api/universal-download (High-Speed Vidsnap & btch stream with accurate dynamic duration)
+        // Tier 1: Call backend /api/universal-download (High-Speed yt-dlp & Vidsnap stream with accurate dynamic duration & full length)
         try {
             val endpoint = URL("$baseUrl/api/universal-download")
             val conn = (endpoint.openConnection() as HttpURLConnection).apply {
@@ -358,8 +334,8 @@ class QwikSaveClient(
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
                 doOutput = true
-                connectTimeout = 12000
-                readTimeout = 15000
+                connectTimeout = 30000
+                readTimeout = 45000
             }
 
             val payload = JSONObject().apply { put("url", cleanUrl) }
@@ -374,6 +350,9 @@ class QwikSaveClient(
 
                 if (data != null) {
                     var streamUrl = data.optString("downloadUrl", "")
+                    if (streamUrl.startsWith("/")) {
+                        streamUrl = "$baseUrl$streamUrl"
+                    }
                     val thumb = data.optString("thumbnailUrl", defaultThumb)
                     val title = data.optString("title", "YouTube Video")
                     val author = data.optJSONObject("author")?.optString("name", "YouTube Channel") ?: "YouTube Channel"
@@ -388,10 +367,35 @@ class QwikSaveClient(
                     }
                     val sizeMb = data.optString("filesizeMb", "Full HD Stream")
 
+                    val formatsList = mutableListOf<MediaItem>()
+                    val rawFormats = data.optJSONArray("formats")
+                    if (rawFormats != null && rawFormats.length() > 0) {
+                        for (i in 0 until rawFormats.length()) {
+                            val f = rawFormats.getJSONObject(i)
+                            var fUrl = f.optString("url", "")
+                            if (fUrl.startsWith("/")) {
+                                fUrl = "$baseUrl$fUrl"
+                            }
+                            if (fUrl.contains("googlevideo.com") && !fUrl.contains("/api/proxy-download")) {
+                                fUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(fUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}_${i + 1}.mp4"
+                            }
+                            val qLabel = f.optString("qualityLabel", f.optString("resolution", "HD MP4"))
+                            val fSize = f.optString("filesizeMb", "")
+                            val displayQuality = if (fSize.isNotBlank()) "$qLabel ($fSize)" else qLabel
+                            if (fUrl.isNotBlank()) {
+                                formatsList.add(MediaItem(fUrl, true, thumb, displayQuality))
+                            }
+                        }
+                    }
+
                     if (streamUrl.isNotBlank() && streamUrl.startsWith("http") && !streamUrl.contains("youtube.com/watch")) {
                         // Prevent GoogleVideo client IP 403 by wrapping with server proxy if needed
                         if (streamUrl.contains("googlevideo.com") && !streamUrl.contains("/api/proxy-download") && !streamUrl.contains("api.vidsnap.app")) {
                             streamUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(streamUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}.mp4"
+                        }
+
+                        if (formatsList.isEmpty()) {
+                            formatsList.add(MediaItem(streamUrl, true, thumb, "1080p Full HD"))
                         }
 
                         return@withContext Result.success(
@@ -406,7 +410,7 @@ class QwikSaveClient(
                                 isVideo = true,
                                 author = author,
                                 durationText = durText,
-                                items = listOf(MediaItem(streamUrl, true, thumb, "1080p Full HD"))
+                                items = formatsList
                             )
                         )
                     }
@@ -414,7 +418,7 @@ class QwikSaveClient(
             }
         } catch (_: Exception) {}
 
-        // Engine 3: High-Speed Direct Stream Resolver via Piped Network
+        // Engine 2: High-Speed Direct Stream Resolver via Piped Network
         val pipedEndpoints = listOf(
             "https://api.piped.private.coffee/streams/$videoId",
             "https://pipedapi.kavin.rocks/streams/$videoId"
@@ -425,8 +429,8 @@ class QwikSaveClient(
                 val pConn = (pipedEndpoint.openConnection() as HttpURLConnection).apply {
                     setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
                     setRequestProperty("Accept", "application/json")
-                    connectTimeout = 7000
-                    readTimeout = 7000
+                    connectTimeout = 8000
+                    readTimeout = 8000
                 }
                 if (pConn.responseCode == 200) {
                     val resp = pConn.inputStream.bufferedReader().use { it.readText() }
@@ -459,11 +463,11 @@ class QwikSaveClient(
                                     thumbnailUrl = defaultThumb,
                                     streamUrl = finalStreamUrl,
                                     quality = "$pickedQuality Full HD",
-                                    fileSizeMb = "9.80 MB",
+                                    fileSizeMb = "HD Stream",
                                     platform = "youtube",
                                     isVideo = true,
                                     author = vAuthor,
-                                    durationText = "1:20",
+                                    durationText = "▶ Full Video",
                                     items = listOf(MediaItem(finalStreamUrl, true, defaultThumb, "$pickedQuality Full HD"))
                                 )
                             )
@@ -473,21 +477,7 @@ class QwikSaveClient(
             } catch (_: Exception) {}
         }
 
-        // Verified direct sample fallback (zero 0-second file)
-        Result.success(
-            ExtractedMedia(
-                id = videoId,
-                title = "YouTube Video ($videoId)",
-                thumbnailUrl = defaultThumb,
-                streamUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
-                quality = "720p HD MP4",
-                fileSizeMb = "8.20 MB",
-                platform = "youtube",
-                isVideo = true,
-                author = "YouTube Channel",
-                durationText = "1:00"
-            )
-        )
+        Result.failure(Exception("Unable to extract YouTube video. Please verify the video is public and accessible."))
     }
 
     private fun extractShortcode(url: String): String {
@@ -596,8 +586,8 @@ class QwikSaveClient(
                         setRequestProperty("Referer", "https://www.youtube.com/")
                     }
                     // For fbcdn.net, omitting Referer avoids Facebook hotlink 403
-                    connectTimeout = 15000
-                    readTimeout = 30000
+                    connectTimeout = 30000
+                    readTimeout = 180000
                     instanceFollowRedirects = false
                 }
 
@@ -621,8 +611,8 @@ class QwikSaveClient(
                     conn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
                         setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
                         setRequestProperty("Accept", "*/*")
-                        connectTimeout = 25000
-                        readTimeout = 60000
+                        connectTimeout = 30000
+                        readTimeout = 180000
                         instanceFollowRedirects = true
                     }
                 } catch (_: Exception) {}
@@ -706,9 +696,16 @@ class QwikSaveClient(
                         val buffer = ByteArray(64 * 1024)
                         var bytesRead: Int
                         var totalBytes = if (readHeader > 0) readHeader.toLong() else 0L
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalBytes += bytesRead
+                        try {
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                totalBytes += bytesRead
+                            }
+                        } catch (streamEx: java.io.IOException) {
+                            // If we already downloaded more than minBytes, preserve video rather than failing
+                            if (totalBytes < minBytes) {
+                                throw streamEx
+                            }
                         }
                         output.flush()
 
@@ -754,9 +751,15 @@ class QwikSaveClient(
                         val buffer = ByteArray(64 * 1024)
                         var bytesRead: Int
                         var totalBytes = if (readHeader > 0) readHeader.toLong() else 0L
-                        while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
-                            totalBytes += bytesRead
+                        try {
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                totalBytes += bytesRead
+                            }
+                        } catch (streamEx: java.io.IOException) {
+                            if (totalBytes < minBytes) {
+                                throw streamEx
+                            }
                         }
                         output.flush()
 
@@ -1047,6 +1050,47 @@ class QwikSaveClient(
     }
 
     /**
+     * Render first page of a PDF as a Bitmap thumbnail for visual display and reordering.
+     */
+    fun renderPdfFirstPageThumbnail(context: Context, pdfUri: Uri, targetW: Int = 120, targetH: Int = 160): Bitmap? {
+        return try {
+            val pfd = context.contentResolver.openFileDescriptor(pdfUri, "r") ?: return null
+            val renderer = PdfRenderer(pfd)
+            if (renderer.pageCount == 0) {
+                renderer.close()
+                pfd.close()
+                return null
+            }
+            val page = renderer.openPage(0)
+            val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            renderer.close()
+            pfd.close()
+            bitmap
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Get total page count of a PDF file.
+     */
+    fun getPdfPageCount(context: Context, pdfUri: Uri): Int {
+        return try {
+            val pfd = context.contentResolver.openFileDescriptor(pdfUri, "r") ?: return 0
+            val renderer = PdfRenderer(pfd)
+            val count = renderer.pageCount
+            renderer.close()
+            pfd.close()
+            count
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    /**
      * Share PDF / File via FileProvider to WhatsApp, Telegram, Gmail, etc.
      */
     fun shareFile(context: Context, file: File, mimeType: String = "application/pdf") {
@@ -1162,24 +1206,18 @@ class QwikSaveClient(
             } catch (_: Exception) { null }
 
             fun applyPageDecorations(c: Canvas) {
-                // 1. Watermark if enabled (non-blank & not "zero watermark")
-                if (!watermarkText.isNullOrBlank() &&
-                    !watermarkText.equals("zero", ignoreCase = true) &&
-                    !watermarkText.equals("zero watermark", ignoreCase = true) &&
-                    !watermarkText.equals("none", ignoreCase = true)
-                ) {
-                    val wmPaint = TextPaint().apply {
-                        color = Color.argb(28, 100, 116, 139)
-                        textSize = 38f
-                        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                        isAntiAlias = true
-                        textAlign = Paint.Align.CENTER
-                    }
-                    c.save()
-                    c.rotate(-45f, pageWidth / 2f, pageHeight / 2f)
-                    c.drawText(watermarkText.uppercase(), pageWidth / 2f, pageHeight / 2f, wmPaint)
-                    c.restore()
+                // 1. Mandatory Qwik Save watermark in center of page (matching website layout)
+                val wmPaint = TextPaint().apply {
+                    color = Color.argb(20, 100, 116, 139)
+                    textSize = 44f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    isAntiAlias = true
+                    textAlign = Paint.Align.CENTER
                 }
+                c.save()
+                c.rotate(-35f, pageWidth / 2f, pageHeight / 2f)
+                c.drawText("QWIK SAVE", pageWidth / 2f, pageHeight / 2f, wmPaint)
+                c.restore()
 
                 // 2. Page Border (MS Word Shadow Box or Clean Line)
                 if (borderStyle.equals("shadow", ignoreCase = true)) {
@@ -1452,8 +1490,8 @@ class QwikSaveClient(
         }
 
         val textStartX = margin + 34f
-        canvas.drawText("Qwik Save Academic", textStartX, y + 2f, brandPaint)
-        val devLine = if (!customFooter.isNullOrBlank()) customFooter.take(45) else "Developer: Priyal Kumar • ai-chat2pdf.live"
+        canvas.drawText("Qwik Save PDF", textStartX, y + 2f, brandPaint)
+        val devLine = "Developer: Priyal Kumar • www.ai-chat2pdf.live"
         canvas.drawText(devLine, textStartX, y + 12f, devPaint)
 
         val pageStr = "Page $pageNum"

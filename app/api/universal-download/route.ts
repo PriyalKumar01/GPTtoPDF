@@ -63,7 +63,62 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid YouTube video link format');
       }
 
-      // Engine 1: Fast Proxied YouTube Stream Resolver (via btch-downloader / vidsnap proxy)
+      // Engine 1: Primary High-Speed & Long Video Stream Resolver via yt-dlp (Supports Movies, Dramas, Lectures)
+      try {
+        const ytdlp = await extractWithYtDlp(trimmedUrl, 45000);
+        if (ytdlp && (ytdlp.videoUrl || (ytdlp.formats && ytdlp.formats.length > 0))) {
+          const durSec = ytdlp.duration || 0;
+          const h = Math.floor(durSec / 3600);
+          const m = Math.floor((durSec % 3600) / 60);
+          const s = Math.floor(durSec % 60);
+          const durStr = h > 0
+            ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+            : `${m}:${s.toString().padStart(2, '0')}`;
+
+          // Format stream URLs - wrap direct googlevideo URLs with proxy-download to avoid IP-binding 403
+          const safeFormats = (ytdlp.formats || []).map((f, idx) => {
+            const rawUrl = f.url;
+            const safeUrl = rawUrl.includes('googlevideo.com')
+              ? `/api/proxy-download?url=${encodeURIComponent(rawUrl)}&filename=QwikSave_YouTube_${videoId}_${idx + 1}.mp4`
+              : rawUrl;
+            return {
+              ...f,
+              url: safeUrl,
+            };
+          });
+
+          const primaryUrl = safeFormats.length > 0 ? safeFormats[0].url : ytdlp.videoUrl;
+          const safePrimaryUrl = primaryUrl.includes('googlevideo.com')
+            ? `/api/proxy-download?url=${encodeURIComponent(primaryUrl)}&filename=QwikSave_YouTube_${videoId}.mp4`
+            : primaryUrl;
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              id: videoId,
+              platform: 'youtube',
+              platformName: trimmedUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
+              title: ytdlp.title,
+              author: {
+                name: ytdlp.uploader || ytdlp.channel || 'YouTube Channel',
+                username: ytdlp.channel || '',
+              },
+              thumbnailUrl: ytdlp.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+              downloadUrl: safePrimaryUrl,
+              audioUrl: ytdlp.audioUrl ? (ytdlp.audioUrl.includes('googlevideo.com') ? `/api/proxy-download?url=${encodeURIComponent(ytdlp.audioUrl)}&filename=QwikSave_YouTube_${videoId}.mp3` : ytdlp.audioUrl) : undefined,
+              duration: durSec,
+              durationText: durStr,
+              youtubeId: videoId,
+              filesizeMb: ytdlp.filesizeMb,
+              formats: safeFormats,
+            },
+          });
+        }
+      } catch (ytdlpErr) {
+        console.warn('Primary yt-dlp resolver failed, trying fallbacks:', ytdlpErr);
+      }
+
+      // Engine 2: Fast Proxied YouTube Stream Resolver (via btch-downloader / vidsnap proxy)
       try {
         const btch = await import('btch-downloader');
         const ytFn = (btch as any).default?.youtube || (btch as any).youtube;

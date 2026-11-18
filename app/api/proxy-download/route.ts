@@ -51,6 +51,11 @@ export async function GET(request: NextRequest) {
     }
     // Note: for fbcdn.net, omitting Referer avoids Facebook CDN hotlink 403
 
+    const clientRange = request.headers.get('range');
+    if (clientRange) {
+      headers['Range'] = clientRange;
+    }
+
     let response = await fetch(mediaUrl, {
       headers,
       redirect: 'follow',
@@ -91,20 +96,25 @@ export async function GET(request: NextRequest) {
     }
 
     const contentLength = response.headers.get('content-length');
+    const contentRange = response.headers.get('content-range');
 
     const responseHeaders: Record<string, string> = {
       'Content-Type': contentType,
       'Content-Disposition': `attachment; filename="${filename}"`,
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'public, max-age=3600',
     };
 
     if (contentLength) {
       responseHeaders['Content-Length'] = contentLength;
     }
+    if (contentRange) {
+      responseHeaders['Content-Range'] = contentRange;
+    }
 
     // Return piped readable stream
     return new NextResponse(response.body as unknown as ReadableStream, {
-      status: 200,
+      status: response.status === 206 ? 206 : 200,
       headers: responseHeaders,
     });
   } catch (error: any) {

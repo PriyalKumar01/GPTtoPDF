@@ -86,56 +86,7 @@ async function fetchFileSizeMb(mediaUrl: string): Promise<string | undefined> {
 export async function extractFacebookMedia(inputUrl: string): Promise<FacebookResult> {
   let targetUrl = inputUrl.trim();
 
-  // Engine 1: btch.fbdown (High-speed rapidcdn tokenized streams)
-  try {
-    const btch = await import('btch-downloader');
-    const fbdown = (btch as any).default?.fbdown || (btch as any).fbdown;
-    if (typeof fbdown === 'function') {
-      const fbRes = await fbdown(targetUrl);
-      if (fbRes && fbRes.status && (fbRes.HD || fbRes.Normal_video)) {
-        const formats: FacebookVideoFormat[] = [];
-        if (fbRes.HD) {
-          const hdSize = await fetchFileSizeMb(fbRes.HD);
-          formats.push({
-            quality: 'HD',
-            label: '1080p Full HD',
-            url: fbRes.HD,
-            resolution: '1080p Full HD',
-            filesizeMb: hdSize || '18.40 MB',
-          });
-        }
-        if (fbRes.Normal_video && fbRes.Normal_video !== fbRes.HD) {
-          const sdSize = await fetchFileSizeMb(fbRes.Normal_video);
-          formats.push({
-            quality: 'SD',
-            label: '720p HD',
-            url: fbRes.Normal_video,
-            resolution: '720p HD',
-            filesizeMb: sdSize || '9.20 MB',
-          });
-        }
-        if (formats.length > 0) {
-          const idMatch =
-            targetUrl.match(/(?:videos|reel|v)\/([0-9]+)/) ||
-            targetUrl.match(/[?&]v=([0-9]+)/) ||
-            targetUrl.match(/share\/(?:v|r)\/([^/?]+)/);
-          const id = idMatch ? idMatch[1] : `fb_${Date.now()}`;
-          return {
-            id,
-            title: 'Facebook Video / Reel',
-            author: { name: 'Facebook Creator' },
-            thumbnailUrl: 'https://images.unsplash.com/photo-1542744094-3a31f272c490?w=500&q=80',
-            formats,
-            downloadUrl: formats[0].url,
-          };
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('btch.fbdown failed, falling back:', err);
-  }
-
-  // Primary Engine 2: SnapSave Media Downloader (High-speed & supports FB Share links, Reels & Watch)
+  // Primary Engine 1: SnapSave Media Downloader (Real Thumbnails, Full Streams, Reels & Watch)
   try {
     const { snapsave } = await import('snapsave-media-downloader');
     const snapData = await snapsave(targetUrl);
@@ -199,14 +150,68 @@ export async function extractFacebookMedia(inputUrl: string): Promise<FacebookRe
           author: {
             name: 'Facebook Creator',
           },
-          thumbnailUrl: snapData.data.preview || '',
+          thumbnailUrl:
+            (snapData.data as any).thumbnail ||
+            (snapData.data as any).thumb ||
+            (snapData.data as any).image ||
+            formats[0].url,
+          duration: (snapData.data as any).duration || undefined,
           formats,
           downloadUrl: bestFormat.url,
         };
       }
     }
-  } catch (snapErr) {
-    console.warn('SnapSave extraction failed, attempting yt-dlp fallback:', snapErr);
+  } catch (err) {
+    console.warn('snapsave facebook extraction failed, trying fallbacks:', err);
+  }
+
+  // Engine 2: btch.fbdown (High-speed rapidcdn tokenized streams)
+  try {
+    const btch = await import('btch-downloader');
+    const fbdown = (btch as any).default?.fbdown || (btch as any).fbdown;
+    if (typeof fbdown === 'function') {
+      const fbRes = await fbdown(targetUrl);
+      if (fbRes && fbRes.status && (fbRes.HD || fbRes.Normal_video)) {
+        const formats: FacebookVideoFormat[] = [];
+        if (fbRes.HD) {
+          const hdSize = await fetchFileSizeMb(fbRes.HD);
+          formats.push({
+            quality: 'HD',
+            label: '1080p Full HD',
+            url: fbRes.HD,
+            resolution: '1080p Full HD',
+            filesizeMb: hdSize || '18.40 MB',
+          });
+        }
+        if (fbRes.Normal_video && fbRes.Normal_video !== fbRes.HD) {
+          const sdSize = await fetchFileSizeMb(fbRes.Normal_video);
+          formats.push({
+            quality: 'SD',
+            label: '720p HD',
+            url: fbRes.Normal_video,
+            resolution: '720p HD',
+            filesizeMb: sdSize || '9.20 MB',
+          });
+        }
+        if (formats.length > 0) {
+          const idMatch =
+            targetUrl.match(/(?:videos|reel|v)\/([0-9]+)/) ||
+            targetUrl.match(/[?&]v=([0-9]+)/) ||
+            targetUrl.match(/share\/(?:v|r)\/([^/?]+)/);
+          const id = idMatch ? idMatch[1] : `fb_${Date.now()}`;
+          return {
+            id,
+            title: fbRes.title || 'Facebook Video / Reel',
+            author: { name: 'Facebook Creator' },
+            thumbnailUrl: fbRes.thumbnail || fbRes.thumb || formats[0].url,
+            formats,
+            downloadUrl: formats[0].url,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('btch.fbdown failed, falling back:', err);
   }
 
   // Primary Engine 2: yt-dlp
