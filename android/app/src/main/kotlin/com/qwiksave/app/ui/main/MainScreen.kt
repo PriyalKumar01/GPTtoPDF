@@ -87,30 +87,48 @@ fun MainScreen(
         onDispose {}
     }
 
+    // Dynamic Thematic Background Color based on Active Section / Tool
+    val dynamicThemeBackground = if (isMusicHubOpen) {
+        Color(0xFF121212) // Dark Greenish Spotify Hub Vibe
+    } else when (selectedBottomTab) {
+        1 -> when (selectedPdfSubTab) {
+            0 -> Color(0xFFF8FAFC) // AI Notes - Deep Slate tint
+            1 -> Color(0xFFF5F3FF) // Image to PDF - Soft Violet tint
+            2 -> Color(0xFFEEF2FF) // Merge PDF - Soft Indigo tint
+            3 -> Color(0xFFECFDF5) // Compress PDF - Soft Emerald tint
+            else -> Color(0xFFECFEFF) // PDF to Image - Soft Cyan tint
+        }
+        2 -> when (selectedSocialPlatform) {
+            0 -> Color(0xFFFFF1F2) // Instagram - Soft Rose/Pink tint
+            1 -> Color(0xFFF0F7FF) // Facebook - Soft Sky Blue tint
+            else -> Color(0xFFFEF2F2) // YouTube - Soft Red tint
+        }
+        else -> Color(0xFFF8FAFC)
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            if (!isMusicHubOpen) {
-                TopAppBarSection(
-                    userName = userName,
-                    activeDialog = activeDialog
-                )
-            }
+            TopAppBarSection(
+                userName = userName,
+                activeDialog = activeDialog
+            )
         },
         bottomBar = {
-            if (!isMusicHubOpen) {
-                BottomNavigationSection(
-                    selectedTab = selectedBottomTab,
-                    onTabSelected = { selectedBottomTab = it }
-                )
-            }
+            BottomNavigationSection(
+                selectedTab = if (isMusicHubOpen) -1 else selectedBottomTab,
+                onTabSelected = { tab ->
+                    isMusicHubOpen = false
+                    selectedBottomTab = tab
+                }
+            )
         }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(Color(0xFFF8FAFC))
+                .background(dynamicThemeBackground)
         ) {
             if (isMusicHubOpen) {
                 MusicHubScreen(
@@ -131,6 +149,9 @@ fun MainScreen(
                         },
                         onNavigateToUtilities = {
                             selectedBottomTab = 3
+                        },
+                        onNavigateToMusic = {
+                            isMusicHubOpen = true
                         }
                     )
                     1 -> PdfToolsTabContent(
@@ -275,7 +296,8 @@ fun ExploreTabContent(
     client: QwikSaveClient,
     onNavigateToSocial: (platform: Int) -> Unit,
     onNavigateToPdf: (subTab: Int) -> Unit,
-    onNavigateToUtilities: () -> Unit
+    onNavigateToUtilities: () -> Unit,
+    onNavigateToMusic: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -557,11 +579,36 @@ fun ExploreTabContent(
             // 3. YouTube
             FeatureCard(
                 title = "YouTube Shorts & Video Downloader",
-                description = "Download YouTube Shorts and universal clips with direct high-speed stream access.",
+                description = "Download YouTube Shorts, Dramas, and clips with direct stream access.",
                 badge = "Universal",
                 badgeColor = Color(0xFFEF4444),
                 logo = { YouTubeLogo(size = 36.dp) },
                 onClick = { onNavigateToSocial(2) }
+            )
+
+            // 4. Qwik Music Hub & Travel Beats
+            FeatureCard(
+                title = "Qwik Music & Travel Beats",
+                description = "Stream & download 1500+ 90s Bollywood Classics, Trending Hits & Punjabi Beats • 100% Ad-Free.",
+                badge = "Spotify Vibe 🎧",
+                badgeColor = Color(0xFF10B981),
+                logo = {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF0F172A), Color(0xFF064E3B)))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Headphones,
+                            contentDescription = null,
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                },
+                onClick = { onNavigateToMusic() }
             )
 
             // 4. AI Chat to PDF
@@ -638,15 +685,17 @@ fun ExploreTabContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
-                .padding(12.dp),
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFF1F5F9))
+                .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
+                .padding(vertical = 12.dp, horizontal = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "🔒 100% Client-Side Privacy • No Account Required • Save in 1 Click",
-                fontSize = 11.sp,
+                text = "🔒 100% Client-Side Privacy • Zero Tracking • Direct High-Speed Downloads",
+                fontSize = 11.5.sp,
                 color = Color(0xFF475569),
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
             )
         }
@@ -900,7 +949,7 @@ fun PdfToolsTabContent(
                                     onClick = { aiNotesMode = idx },
                                     label = { Text(mLabel, fontSize = 11.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFF10B981),
+                                        selectedContainerColor = Color(0xFF0F172A),
                                         selectedLabelColor = Color.White
                                     )
                                 )
@@ -984,7 +1033,7 @@ fun PdfToolsTabContent(
                                             onClick = { borderStyleChoice = key },
                                             label = { Text(lbl, fontSize = 11.sp) },
                                             colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = Color(0xFF10B981),
+                                                selectedContainerColor = Color(0xFF0F172A),
                                                 selectedLabelColor = Color.White
                                             )
                                         )
@@ -1064,9 +1113,9 @@ fun PdfToolsTabContent(
                                                 shape = RoundedCornerShape(6.dp),
                                                 modifier = Modifier.height(28.dp)
                                             ) {
-                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF10B981))
+                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF0F172A))
                                                 Spacer(modifier = Modifier.width(3.dp))
-                                                Text("+ Add", fontSize = 11.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
+                                                Text("+ Add", fontSize = 11.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
                                             }
 
                                             if (structuredQuestions.size > 1) {
@@ -1284,7 +1333,7 @@ fun PdfToolsTabContent(
                                     }
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isNotesGenerating
@@ -1497,6 +1546,7 @@ fun PdfToolsTabContent(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFC7D2FE)),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
@@ -1738,6 +1788,7 @@ fun PdfToolsTabContent(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7F3D0)),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
@@ -1839,6 +1890,7 @@ fun PdfToolsTabContent(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA5F3FC)),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
@@ -2887,7 +2939,7 @@ fun SocialMediaTabContent(
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "Qwik Music Hub",
+                                    text = "Qwik Music & Travel Beats",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -2896,29 +2948,41 @@ fun SocialMediaTabContent(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
-                                        .background(Color(0xFF1DB954))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(Color(0xFFF59E0B), Color(0xFFD97706))
+                                            )
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        "90s & TRENDING",
-                                        fontSize = 8.sp,
+                                        "✨ 90s & TRENDING",
+                                        fontSize = 8.5.sp,
                                         fontWeight = FontWeight.Black,
-                                        color = Color.Black
+                                        color = Color.White
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = "Spotify vibe • Travel songs, Liked playlist & Offline download 🚗",
+                                text = "100% Ad-Free • 1500+ Songs • Offline Road Trip Playback 🚗",
                                 fontSize = 10.5.sp,
-                                color = Color(0xFFE2E8F0),
+                                color = Color(0xFFCBD5E1),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "★ Unlimited Offline MP3 Downloads for Travel & Commute",
+                                fontSize = 9.5.sp,
+                                color = Color(0xFFFCD34D),
+                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
-                    // Green Pill Button
+                    // Open Button
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
@@ -2927,7 +2991,7 @@ fun SocialMediaTabContent(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Open",
+                                text = "Play Now",
                                 color = Color.Black,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
@@ -3019,12 +3083,12 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // QR Code Studio Card
+        // QR Code Studio Card - SOLID EXECUTIVE DARK THEME
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1)),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(
@@ -3032,7 +3096,20 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    QrCodeLogo(size = 32.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0F172A)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.QrCode,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         Text("QR Code Generator & Downloader", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
@@ -3040,21 +3117,57 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                     }
                 }
 
-                // Type Switcher Chips
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    itemsIndexed(qrTypes) { idx, label ->
-                        FilterChip(
-                            selected = selectedQrType == idx,
-                            onClick = { selectedQrType = idx },
-                            label = { Text(label, fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF059669),
-                                selectedLabelColor = Color.White
+                // Type Switcher: Balanced 2-Row Format (Row 1: 3 items, Row 2: 2 items)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Row 1: Website/URL, WiFi, UPI Pay
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Pair(0, "Website / URL"),
+                            Pair(2, "WiFi Network"),
+                            Pair(3, "UPI Payment")
+                        ).forEach { (idx, label) ->
+                            FilterChip(
+                                selected = selectedQrType == idx,
+                                onClick = { selectedQrType = idx },
+                                label = { Text(label, fontSize = 10.5.sp, maxLines = 1) },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF0F172A),
+                                    selectedLabelColor = Color.White,
+                                    containerColor = Color(0xFFF1F5F9),
+                                    labelColor = Color(0xFF334155)
+                                )
                             )
-                        )
+                        }
+                    }
+
+                    // Row 2: Phone / Contact, Plain Text
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Pair(4, "Phone / Contact"),
+                            Pair(1, "Plain Text Note")
+                        ).forEach { (idx, label) ->
+                            FilterChip(
+                                selected = selectedQrType == idx,
+                                onClick = { selectedQrType = idx },
+                                label = { Text(label, fontSize = 10.5.sp, maxLines = 1) },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF0F172A),
+                                    selectedLabelColor = Color.White,
+                                    containerColor = Color(0xFFF1F5F9),
+                                    labelColor = Color(0xFF334155)
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -3213,7 +3326,7 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                                     Toast.makeText(context, "Saved to gallery!", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -3226,8 +3339,8 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                             onClick = { client.shareQrBitmap(context, qrBitmap) },
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF059669)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF059669))
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0F172A)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0F172A))
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
