@@ -9,6 +9,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
 import com.qwiksave.app.MainActivity
 import com.qwiksave.app.R
@@ -27,6 +30,7 @@ class MusicPlaybackService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var mediaSession: MediaSessionCompat? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var progressJob: Job? = null
 
@@ -37,6 +41,22 @@ class MusicPlaybackService : Service() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
         wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "QwikSave:MusicWakeLock")
         wakeLock?.setReferenceCounted(false)
+
+        mediaSession = MediaSessionCompat(this, "QwikMusicSession").apply {
+            setCallback(object : MediaSessionCompat.Callback() {
+                override fun onPlay() { resumeMedia() }
+                override fun onPause() { pauseMedia() }
+                override fun onSkipToNext() { MusicController.nextTrack(this@MusicPlaybackService) }
+                override fun onSkipToPrevious() { MusicController.prevTrack(this@MusicPlaybackService) }
+                override fun onSeekTo(pos: Long) {
+                    val sec = (pos / 1000).toInt()
+                    mediaPlayer?.seekTo(pos.toInt())
+                    MusicController._progressSec.value = sec
+                }
+                override fun onStop() { stopPlayback() }
+            })
+            isActive = true
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -173,13 +193,42 @@ class MusicPlaybackService : Service() {
             ).apply {
                 description = "Shows now playing controls and notifications for QwikSave Music Hub"
                 setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(channel)
         }
     }
 
+    private fun updateMediaSession(track: SongTrack, isPlaying: Boolean) {
+        val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+        val pos = (mediaPlayer?.currentPosition ?: 0).toLong()
+        val playbackState = PlaybackStateCompat.Builder()
+            .setActions(
+                PlaybackStateCompat.ACTION_PLAY or
+                PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                PlaybackStateCompat.ACTION_SEEK_TO or
+                PlaybackStateCompat.ACTION_STOP
+            )
+            .setState(state, pos, 1.0f)
+            .build()
+        mediaSession?.setPlaybackState(playbackState)
+
+        val metadata = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.albumOrMovie)
+            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, (track.durationSec * 1000).toLong())
+            .build()
+        mediaSession?.setMetadata(metadata)
+    }
+
     private fun buildNotification(track: SongTrack, isPlaying: Boolean): Notification {
+        updateMediaSession(track, isPlaying)
+
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("OPEN_PAGE", "music_hub")
@@ -224,13 +273,19 @@ class MusicPlaybackService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
+            .setShowActionsInCompactView(0, 1, 2)
+        mediaSession?.sessionToken?.let { mediaStyle.setMediaSession(it) }
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(track.title)
             .setContentText("${track.artist} • ${track.albumOrMovie}")
             .setContentIntent(openAppPendingIntent)
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
@@ -238,10 +293,7 @@ class MusicPlaybackService : Service() {
                 togglePendingIntent
             )
             .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
+            .setStyle(mediaStyle)
 
         return builder.build()
     }
@@ -259,6 +311,9 @@ class MusicPlaybackService : Service() {
 
     override fun onDestroy() {
         stopPlayback()
+        mediaSession?.isActive = false
+        mediaSession?.release()
+        mediaSession = null
         serviceScope.cancel()
         super.onDestroy()
     }
