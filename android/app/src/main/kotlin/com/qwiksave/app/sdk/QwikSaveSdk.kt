@@ -181,11 +181,11 @@ class QwikSaveClient(
                                 thumbnailUrl = thumb ?: (if (parsedItems.isNotEmpty()) parsedItems[0].previewUrl else null),
                                 streamUrl = firstUrl,
                                 quality = if (isVideoItem) "1080p Full HD" else "Original HD Photo",
-                                fileSizeMb = if (isVideoItem) "4.20 MB" else "High-Res Image",
+                                fileSizeMb = if (isVideoItem) "1080p Full HD" else "High-Res Image",
                                 platform = "instagram",
                                 isVideo = isVideoItem,
                                 author = "@$authorName",
-                                durationText = if (isVideoItem) "0:30" else null,
+                                durationText = null,
                                 items = parsedItems
                             )
                         )
@@ -225,11 +225,11 @@ class QwikSaveClient(
                                 thumbnailUrl = uData.optString("thumbnailUrl", "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=500&q=80"),
                                 streamUrl = dUrl,
                                 quality = "1080p Full HD",
-                                fileSizeMb = uData.optString("filesizeMb", "4.20 MB"),
+                                fileSizeMb = uData.optString("filesizeMb", "1080p Full HD"),
                                 platform = "instagram",
                                 isVideo = true,
                                 author = uData.optJSONObject("author")?.optString("name", "@instagram_creator") ?: "@instagram_creator",
-                                durationText = "0:30"
+                                durationText = null
                             )
                         )
                     }
