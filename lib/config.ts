@@ -48,7 +48,7 @@ export const APP_CONFIG = {
       id: 'ai-to-pdf',
       name: 'AI Chat to PDF Converter',
       shortName: 'AI to PDF',
-      href: '/',
+      href: '/ai-to-pdf',
       badge: 'Core',
       badgeColor: 'bg-red-500/10 text-red-500 border-red-500/20',
       description: 'Convert ChatGPT, Claude, Gemini, and Perplexity share links to formatted academic PDFs.',

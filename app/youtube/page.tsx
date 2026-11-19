@@ -19,10 +19,12 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { YouTubeIcon } from '@/components/BrandIcons';
+import { DownloaderProgressLoader } from '@/components/DownloaderProgressLoader';
 
 export default function UniversalDownloaderPage() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any | null>(null);
   const [activePlatform, setActivePlatform] = useState<string>('all');
@@ -53,6 +55,7 @@ export default function UniversalDownloaderPage() {
     }
 
     setLoading(true);
+    setIsComplete(false);
     setError(null);
     setResult(null);
 
@@ -68,14 +71,18 @@ export default function UniversalDownloaderPage() {
         throw new Error(data.error || 'Failed to fetch video. Please verify link is public.');
       }
 
-      setResult(data.data);
+      setIsComplete(true);
       setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 150);
+        setResult(data.data);
+        setLoading(false);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      }, 400);
     } catch (err: any) {
-      setError(err?.message || 'Unable to download this video.');
-    } finally {
       setLoading(false);
+      setIsComplete(false);
+      setError(err?.message || 'Unable to download this video.');
     }
   };
 
@@ -203,6 +210,14 @@ export default function UniversalDownloaderPage() {
                 )}
               </button>
             </form>
+
+            {/* Professional Progress Loader with Realistic Percentage */}
+            {loading && (
+              <DownloaderProgressLoader
+                platform="youtube"
+                isComplete={isComplete}
+              />
+            )}
 
             {error && (
               <div className="mt-4 p-3 bg-red-50 dark:bg-[#EF4444]/10 border border-red-200 dark:border-[#EF4444]/30 rounded-[2px] flex items-start gap-2.5 text-xs text-red-600 dark:text-[#EF4444]">

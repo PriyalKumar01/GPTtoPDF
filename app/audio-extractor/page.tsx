@@ -15,6 +15,7 @@ import {
   X,
   FileCheck,
 } from 'lucide-react';
+import { DownloaderProgressLoader } from '@/components/DownloaderProgressLoader';
 
 export default function AudioExtractorPage() {
   const [activeTab, setActiveTab] = useState<'local' | 'url'>('local');
@@ -315,6 +316,14 @@ export default function AudioExtractorPage() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* Professional Progress Loader with Realistic Percentage */}
+            {isProcessing && (
+              <DownloaderProgressLoader
+                platform="audio"
+                isComplete={!isProcessing && audioUrl !== null}
+              />
             )}
 
             {/* Error */}

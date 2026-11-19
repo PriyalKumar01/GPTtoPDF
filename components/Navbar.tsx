@@ -147,7 +147,7 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-[#263448] bg-white/95 dark:bg-[#090D14]/95 backdrop-blur-md transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         {/* Brand Logo - Wide Horizontal Brand Logo (Matching Footer, Save in One Click) */}
-        <Link href="/tools" className="flex items-center group shrink-0">
+        <Link href="/" className="flex items-center group shrink-0">
           <img
             src="/images/qwik-save-banner.png"
             alt="Qwik Save - Save in One Click"
@@ -159,9 +159,9 @@ export function Navbar() {
         <nav className="hidden lg:flex items-center gap-7 text-xs ml-8 flex-1">
           {/* Item 1: Explore All Features (Dashboard) - First in Navbar */}
           <Link
-            href="/tools"
+            href="/"
             className={`relative py-1 font-medium transition-colors after:content-[''] after:absolute after:bottom-[-2px] after:left-0 after:h-[2px] after:bg-[#1877F2] after:transition-all after:duration-200 ${
-              pathname === '/tools'
+              pathname === '/' || pathname === '/tools'
                 ? 'text-blue-600 dark:text-[#3B82F6] font-semibold after:w-full'
                 : 'text-slate-600 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-[#E8EDF5] after:w-0 hover:after:w-full'
             }`}
@@ -300,9 +300,9 @@ export function Navbar() {
 
           {/* Item 4: AI to PDF */}
           <Link
-            href="/"
+            href="/ai-to-pdf"
             className={`relative py-1 font-medium transition-colors after:content-[''] after:absolute after:bottom-[-2px] after:left-0 after:h-[2px] after:bg-[#1877F2] after:transition-all after:duration-200 ${
-              pathname === '/'
+              pathname === '/ai-to-pdf'
                 ? 'text-blue-600 dark:text-[#3B82F6] font-semibold after:w-full'
                 : 'text-slate-600 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-[#E8EDF5] after:w-0 hover:after:w-full'
             }`}
@@ -364,13 +364,13 @@ export function Navbar() {
               Overview
             </p>
             <Link
-              href="/tools"
+              href="/"
               className="block px-2.5 py-1.5 rounded-[2px] font-semibold text-blue-600 dark:text-[#3B82F6] hover:bg-slate-100 dark:hover:bg-[#141D2B]"
             >
               Explore All Features
             </Link>
             <Link
-              href="/"
+              href="/ai-to-pdf"
               className="block px-2.5 py-1.5 rounded-[2px] text-slate-800 dark:text-[#E8EDF5] hover:bg-slate-100 dark:hover:bg-[#141D2B]"
             >
               AI Chat to PDF Converter

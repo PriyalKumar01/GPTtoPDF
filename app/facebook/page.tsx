@@ -22,10 +22,12 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { FacebookResult } from '@/lib/extract-facebook';
+import { DownloaderProgressLoader } from '@/components/DownloaderProgressLoader';
 
 export default function FacebookDownloaderPage() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FacebookResult | null>(null);
   const [faqOpen, setFaqOpen] = useState<number | null>(null);
@@ -57,6 +59,7 @@ export default function FacebookDownloaderPage() {
     }
 
     setLoading(true);
+    setIsComplete(false);
     setError(null);
     setResult(null);
 
@@ -75,17 +78,21 @@ export default function FacebookDownloaderPage() {
         );
       }
 
-      setResult(data.data);
+      setIsComplete(true);
       setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 150);
+        setResult(data.data);
+        setLoading(false);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      }, 400);
     } catch (err: any) {
+      setLoading(false);
+      setIsComplete(false);
       setError(
         err?.message ||
           'Unable to download this video. Please ensure the video is public and try again.'
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -199,6 +206,14 @@ export default function FacebookDownloaderPage() {
                 )}
               </button>
             </form>
+
+            {/* Professional Progress Loader with Realistic Percentage */}
+            {loading && (
+              <DownloaderProgressLoader
+                platform="facebook"
+                isComplete={isComplete}
+              />
+            )}
 
             {error && (
               <div className="mt-4 p-3 bg-red-50 dark:bg-[#EF4444]/10 border border-red-200 dark:border-[#EF4444]/30 rounded-[2px] flex items-start gap-2.5 text-xs text-red-600 dark:text-[#EF4444]">

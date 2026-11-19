@@ -6,6 +6,7 @@ import { Footer } from '@/components/Footer';
 import { CollegeStudyPromo } from '@/components/CollegeStudyPromo';
 import { InstagramIcon } from '@/components/BrandIcons';
 import { PlatformShowcase } from '@/components/PlatformShowcase';
+import { DownloaderProgressLoader } from '@/components/DownloaderProgressLoader';
 import {
   Download,
   Clipboard,
@@ -31,6 +32,7 @@ import { InstagramResult } from '@/lib/extract-instagram';
 export default function InstagramDownloaderPage() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<InstagramResult | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'reels' | 'posts' | 'stories'>('all');
@@ -64,6 +66,7 @@ export default function InstagramDownloaderPage() {
     }
 
     setLoading(true);
+    setIsComplete(false);
     setError(null);
     setResult(null);
 
@@ -80,17 +83,21 @@ export default function InstagramDownloaderPage() {
         throw new Error(data.error || 'Failed to fetch Instagram media. Please try again.');
       }
 
-      setResult(data.data);
+      setIsComplete(true);
       setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 150);
+        setResult(data.data);
+        setLoading(false);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      }, 400);
     } catch (err: any) {
+      setLoading(false);
+      setIsComplete(false);
       setError(
         err?.message ||
           'Unable to download this media. Please verify that the post is public and try again.'
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -233,6 +240,14 @@ export default function InstagramDownloaderPage() {
                 )}
               </button>
             </form>
+
+            {/* Professional Progress Loader with Percentage & Retaining Feedback */}
+            {loading && (
+              <DownloaderProgressLoader
+                platform="instagram"
+                isComplete={isComplete}
+              />
+            )}
 
             {/* Error Message */}
             {error && (

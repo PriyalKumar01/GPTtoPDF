@@ -28,7 +28,7 @@ export function Footer() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           {/* Brand & Attribution - Featuring Wide Rectangular Logo */}
           <div className="space-y-4 lg:col-span-4">
-            <Link href="/tools" className="inline-block">
+            <Link href="/" className="inline-block">
               <img
                 src="/images/qwik-save-banner.png"
                 alt="Qwik Save - Save in One Click"
@@ -121,7 +121,7 @@ export function Footer() {
               <ul className="space-y-2.5 text-xs">
                 <li>
                   <Link
-                    href="/"
+                    href="/ai-to-pdf"
                     className="text-slate-700 dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#3B82F6] hover:underline transition-colors flex items-center gap-2"
                   >
                     <FileText className="w-3.5 h-3.5 text-red-500 shrink-0" />
