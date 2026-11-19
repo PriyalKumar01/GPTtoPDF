@@ -1,6 +1,9 @@
 package com.qwiksave.app
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -16,6 +19,14 @@ import com.qwiksave.app.ui.theme.QwikSaveTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Runtime Notification Permission for Android 13+ (Tiramisu, API 33+)
+        // Ensures Music Hub notification & background playback controls are always visible in status bar
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+            }
+        }
 
         // Force bright white status bar text/icons (Time, Battery, Wifi shine white like WhatsApp!)
         enableEdgeToEdge(
