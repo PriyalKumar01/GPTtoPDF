@@ -63,6 +63,103 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid YouTube video link format');
       }
 
+      // Engine 0: High-Fidelity Invidious Direct Video Engine (Supports Long Movies, Dramas, Lectures & Shorts)
+      try {
+        const invRes = await fetch(
+          `https://yt.chocolatemoo53.com/api/v1/videos/${videoId}`,
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              Accept: 'application/json',
+            },
+            signal: AbortSignal.timeout(12000),
+          }
+        );
+
+        if (invRes.ok) {
+          const invData = await invRes.json();
+          const title = invData.title || 'YouTube Video';
+          const author = invData.author || 'YouTube Channel';
+          const durSec = invData.lengthSeconds || 180;
+          const h = Math.floor(durSec / 3600);
+          const m = Math.floor((durSec % 3600) / 60);
+          const s = Math.floor(durSec % 60);
+          const durStr = h > 0
+            ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+            : `${m}:${s.toString().padStart(2, '0')}`;
+
+          const thumb = invData.videoThumbnails?.slice(-1)[0]?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+          const adaptive = invData.adaptiveFormats || [];
+          const formats: any[] = [];
+          const seenLabels = new Set<string>();
+
+          // Priority resolutions: 1080p, 720p, 480p, 360p
+          const resTiers = [
+            { match: ['1080', '1920'], label: '1080p Full HD MP4', res: '1080p Full HD' },
+            { match: ['720', '1280'], label: '720p HD MP4', res: '720p HD' },
+            { match: ['480', '854'], label: '480p SD MP4', res: '480p SD' },
+            { match: ['360', '640'], label: '360p SD MP4', res: '360p SD' },
+          ];
+
+          for (const tier of resTiers) {
+            const found = adaptive.find((a: any) =>
+              a.container === 'mp4' &&
+              tier.match.some((m) => (a.resolution || '').includes(m)) &&
+              a.url
+            ) || adaptive.find((a: any) =>
+              tier.match.some((m) => (a.resolution || '').includes(m)) &&
+              a.url
+            );
+
+            if (found && !seenLabels.has(tier.label)) {
+              seenLabels.add(tier.label);
+              const clen = found.clen ? parseInt(found.clen, 10) : 0;
+              const sizeMb = clen > 0
+                ? (clen / (1024 * 1024)).toFixed(1) + ' MB'
+                : durSec > 0
+                ? (durSec * 0.18).toFixed(1) + ' MB'
+                : 'HD Stream';
+
+              const safeUrl = `/api/proxy-download?url=${encodeURIComponent(found.url)}&filename=QwikSave_YouTube_${videoId}_${tier.res.replace(/\s+/g, '_')}.mp4`;
+
+              formats.push({
+                formatId: `yt_${tier.res.toLowerCase().replace(/\s+/g, '_')}`,
+                qualityLabel: `${tier.label} (${sizeMb})`,
+                resolution: tier.res,
+                filesizeMb: sizeMb,
+                url: safeUrl,
+                directUrl: found.url,
+                hasVideo: true,
+                hasAudio: true,
+              });
+            }
+          }
+
+          if (formats.length > 0) {
+            return NextResponse.json({
+              success: true,
+              data: {
+                id: videoId,
+                platform: 'youtube',
+                platformName: trimmedUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
+                title,
+                author: { name: author, username: '' },
+                thumbnailUrl: thumb,
+                downloadUrl: formats[0].url,
+                directDownloadUrl: formats[0].directUrl,
+                duration: durSec,
+                durationText: durStr,
+                youtubeId: videoId,
+                filesizeMb: formats[0].filesizeMb,
+                formats,
+              },
+            });
+          }
+        }
+      } catch (invErr) {
+        console.warn('Invidious engine failed, trying fallbacks:', invErr);
+      }
+
       // Engine 1: Direct High-Speed YouTube Stream Resolver (via backend1 / vidsnap proxy - Supports Long Dramas, Movies & Shorts)
       try {
         const directRes = await fetch(

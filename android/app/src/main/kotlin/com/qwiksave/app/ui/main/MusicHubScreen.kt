@@ -63,365 +63,268 @@ data class SongTrack(
  * Verified crystal-clear JioTune MP3 streams with zero rate limits.
  */
 val CURATED_SONGS_CATALOG = listOf(
-    // 📻 90s Bollywood Evergreen Hits (Road Trip & Nostalgia)
     SongTrack(
         id = "s_90s_01",
-        title = "Tujhe Dekha Toh Yeh Jaana Sanam",
-        artist = "Kumar Sanu, Lata Mangeshkar",
-        albumOrMovie = "Dilwale Dulhania Le Jayenge (1995)",
-        durationText = "5:04",
-        durationSec = 304,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        title = "Tujhe Dekha To",
+        artist = "Lata Mangeshkar",
+        albumOrMovie = "Dilwale Dulhania Le Jayenge",
+        durationText = "5:03",
+        durationSec = 303,
+        streamUrl = "https://aac.saavncdn.com/588/1915cd0934f79eeb646ffebde384e59d_sar_160.mp4",
         coverUrl = "https://c.saavncdn.com/588/Dilwale-Dulhania-Le-Jayenge-Hindi-1995-20171114-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_02",
-        title = "Chura Ke Dil Mera Goriya Chali",
-        artist = "Kumar Sanu, Alka Yagnik",
-        albumOrMovie = "Main Khiladi Tu Anari (1994)",
-        durationText = "4:38",
-        durationSec = 278,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948617.mp3",
-        coverUrl = "https://c.saavncdn.com/066/East-Aur-West-Anu-Is-the-Best-Hindi-2021-20260331205730-500x500.jpg",
+        title = "Chura Ke Dil Mera",
+        artist = "Kumar Sanu",
+        albumOrMovie = "Main Khiladi Tu Anari (With Jhankar Beats)",
+        durationText = "7:54",
+        durationSec = 474,
+        streamUrl = "https://aac.saavncdn.com/274/7fef90c6c49981cb50403835234722da_160.mp4",
+        coverUrl = "https://c.saavncdn.com/274/Main-Khiladi-Tu-Anari-With-Jhankar-Beats-Hindi-2024-20240125184145-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_03",
-        title = "Pehla Nasha Pehla Khumaar",
-        artist = "Udit Narayan, Sadhana Sargam",
-        albumOrMovie = "Jo Jeeta Wohi Sikandar (1992)",
-        durationText = "4:51",
-        durationSec = 291,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910082668642.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
+        title = "Pehla Nasha",
+        artist = "Udit Narayan",
+        albumOrMovie = "Jo Jeeta Wohi Sikandar",
+        durationText = "4:53",
+        durationSec = 293,
+        streamUrl = "https://aac.saavncdn.com/852/9d335ee08b26f171a3d65e11f8819d52_sar_160.mp4",
+        coverUrl = "https://c.saavncdn.com/852/Jo-Jeeta-Wohi-Sikandar-Hindi-1992-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_04",
-        title = "Dheere Dheere Se Meri Zindagi",
-        artist = "Kumar Sanu, Anuradha Paudwal",
-        albumOrMovie = "Aashiqui (1990)",
-        durationText = "5:26",
-        durationSec = 326,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090109227.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1445985543470-41fdd6ce388d?w=400&q=80",
+        title = "Dheere Dheere Se Meri Zindagi Mein Aana",
+        artist = "Anuradha Paudwal",
+        albumOrMovie = "Aashiqui",
+        durationText = "5:27",
+        durationSec = 327,
+        streamUrl = "https://aac.saavncdn.com/088/4f7393c087c15f563b88632dae29bb0c_160.mp4",
+        coverUrl = "https://c.saavncdn.com/088/Aashiqui-Hindi-1989-20241225141825-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_05",
         title = "Baazigar O Baazigar",
-        artist = "Kumar Sanu, Alka Yagnik",
-        albumOrMovie = "Baazigar (1993)",
-        durationText = "7:31",
-        durationSec = 451,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020947951.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
+        artist = "Kumar Sanu",
+        albumOrMovie = "Baazigar",
+        durationText = "7:39",
+        durationSec = 459,
+        streamUrl = "https://aac.saavncdn.com/409/b05d8a94d4347e8093228d9f1fca3f07_160.mp4",
+        coverUrl = "https://c.saavncdn.com/409/Baazigar-Hindi-1993-20210226141521-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_06",
         title = "Tip Tip Barsa Paani",
-        artist = "Udit Narayan, Alka Yagnik",
-        albumOrMovie = "Mohra (1994)",
-        durationText = "5:57",
-        durationSec = 357,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948652.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
+        artist = "Alka Yagnik",
+        albumOrMovie = "Mohra",
+        durationText = "6:03",
+        durationSec = 363,
+        streamUrl = "https://aac.saavncdn.com/041/c9c7533375a46d285bc156a2212fdbb5_160.mp4",
+        coverUrl = "https://c.saavncdn.com/041/Mohra-Hindi-1994-20210226141759-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_07",
-        title = "Aankh Marey O Ladka Aankh Marey",
-        artist = "Kumar Sanu, Kavita Krishnamurthy",
-        albumOrMovie = "Tere Mere Sapne (1996)",
-        durationText = "5:12",
-        durationSec = 312,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
+        title = "Mera Dil Bhi Kitna Pagal Hai (Recreated Version)",
+        artist = "Stebin Ben",
+        albumOrMovie = "Mera Dil Bhi Kitna Pagal Hai (Recreated Version)",
+        durationText = "3:21",
+        durationSec = 201,
+        streamUrl = "https://aac.saavncdn.com/494/50bda3d5ba5d3ff9867703375e7ad41f_160.mp4",
+        coverUrl = "https://c.saavncdn.com/494/Mera-Dil-Bhi-Kitna-Pagal-Hai-Recreated-Version-Hindi-2018-20230508124849-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_08",
-        title = "Mere Sapnon Ki Rani Kab Aayegi Tu",
-        artist = "Kishore Kumar",
-        albumOrMovie = "Aradhana • Evergreen Classic",
-        durationText = "5:00",
-        durationSec = 300,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080535142.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80",
+        title = "Aankh Mare",
+        artist = "Viju Shah",
+        albumOrMovie = "Tere Mere Sapne",
+        durationText = "5:13",
+        durationSec = 313,
+        streamUrl = "https://aac.saavncdn.com/162/622e720564967879f5a123226e051ad3_160.mp4",
+        coverUrl = "https://c.saavncdn.com/162/Tere-Mere-Sapne-Hindi-1996-20170804121620-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
-        id = "s_90s_09",
-        title = "Dil Ne Yeh Kaha Hain Dil Se",
-        artist = "Udit Narayan, Alka Yagnik, Kumar Sanu",
-        albumOrMovie = "Dhadkan (2000)",
-        durationText = "7:06",
-        durationSec = 426,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948901.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "s_90s_10",
-        title = "Kuch Kuch Hota Hai",
-        artist = "Udit Narayan, Alka Yagnik",
-        albumOrMovie = "Kuch Kuch Hota Hai (1998)",
-        durationText = "4:56",
-        durationSec = 296,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910140015026.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "s_90s_11",
-        title = "Do Dil Mil Rahe Hain",
-        artist = "Kumar Sanu",
-        albumOrMovie = "Pardes (1997)",
-        durationText = "6:37",
-        durationSec = 397,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "s_90s_12",
-        title = "Chaiyya Chaiyya",
-        artist = "Sukhwinder Singh, Sapna Awasthi",
-        albumOrMovie = "Dil Se.. (1998)",
-        durationText = "6:54",
-        durationSec = 414,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948968.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80",
-        category = "90s"
-    ),
-
-    // 🔥 Currently Trending Hits (Bollywood & Pop)
-    SongTrack(
-        id = "s_trend_01",
-        title = "Kesariya • Ishq Hai Piya",
-        artist = "Arijit Singh, Pritam",
-        albumOrMovie = "Brahmastra (2022)",
+        id = "s_tr_01",
+        title = "Kesariya",
+        artist = "Pritam",
+        albumOrMovie = "Brahmastra",
         durationText = "4:28",
         durationSec = 268,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3",
-        coverUrl = "https://c.saavncdn.com/191/Kesariya-From-Brahmastra-Hindi-2022-20220717092820-500x500.jpg",
+        streamUrl = "https://aac.saavncdn.com/871/c2febd353f3a076a406fa37510f31f9f_160.mp4",
+        coverUrl = "https://c.saavncdn.com/871/Brahmastra-Original-Motion-Picture-Soundtrack-Hindi-2022-20221006155213-500x500.jpg",
         category = "Trending"
     ),
     SongTrack(
-        id = "s_trend_02",
-        title = "Chaleya • Teri Hoda Gayi",
-        artist = "Arijit Singh, Shilpa Rao, Anirudh",
-        albumOrMovie = "Jawan (2023)",
-        durationText = "3:20",
-        durationSec = 200,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092002187.mp3",
-        coverUrl = "https://c.saavncdn.com/026/Chaleya-From-Jawan-Hindi-2023-20230814014337-500x500.jpg",
-        category = "Trending"
-    ),
-    SongTrack(
-        id = "s_trend_03",
-        title = "Heeriye • Teri Hoke Marjaniye",
-        artist = "Jasleen Royal, Arijit Singh",
-        albumOrMovie = "Heeriye Single",
-        durationText = "3:15",
-        durationSec = 195,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912552003505.mp3",
-        coverUrl = "https://c.saavncdn.com/022/Heeriye-feat-Arijit-Singh-Hindi-2023-20230725052955-500x500.jpg",
-        category = "Trending"
-    ),
-    SongTrack(
-        id = "s_trend_04",
+        id = "s_tr_02",
         title = "Apna Bana Le",
-        artist = "Arijit Singh, Sachin-Jigar",
-        albumOrMovie = "Bhediya (2022)",
+        artist = "Sachin-Jigar",
+        albumOrMovie = "Bhediya",
         durationText = "4:21",
         durationSec = 261,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910441686043.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
+        streamUrl = "https://aac.saavncdn.com/815/483a6e118e8108cbb3e5cd8701674f32_160.mp4",
+        coverUrl = "https://c.saavncdn.com/815/Bhediya-Hindi-2023-20230927155213-500x500.jpg",
         category = "Trending"
     ),
     SongTrack(
-        id = "s_trend_05",
-        title = "Tum Hi Ho",
-        artist = "Arijit Singh, Mithoon",
-        albumOrMovie = "Aashiqui 2 (2013)",
-        durationText = "4:22",
-        durationSec = 262,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092419390.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1445985543470-41fdd6ce388d?w=400&q=80",
-        category = "Trending"
-    ),
-    SongTrack(
-        id = "s_trend_06",
-        title = "O Maahi • O Maahi",
-        artist = "Arijit Singh, Pritam",
-        albumOrMovie = "Dunki (2023)",
+        id = "s_tr_03",
+        title = "O Maahi",
+        artist = "Pritam",
+        albumOrMovie = "Dunki",
         durationText = "3:53",
         durationSec = 233,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092130706.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
+        streamUrl = "https://aac.saavncdn.com/139/61036495c7ba45adf72a856b60f054fd_160.mp4",
+        coverUrl = "https://c.saavncdn.com/139/Dunki-Hindi-2023-20231220211003-500x500.jpg",
         category = "Trending"
     ),
     SongTrack(
-        id = "s_trend_07",
-        title = "Satranga",
-        artist = "Arijit Singh, Shreyas Puranik",
-        albumOrMovie = "Animal (2023)",
+        id = "s_tr_04",
+        title = "Tum Hi Ho",
+        artist = "Mithoon",
+        albumOrMovie = "Aashiqui 2",
+        durationText = "4:22",
+        durationSec = 262,
+        streamUrl = "https://aac.saavncdn.com/430/5c5ea5cc00e3bff45616013226f376fe_160.mp4",
+        coverUrl = "https://c.saavncdn.com/430/Aashiqui-2-Hindi-2013-500x500.jpg",
+        category = "Trending"
+    ),
+    SongTrack(
+        id = "s_tr_05",
+        title = "Raataan Lambiyan",
+        artist = "Tanishk Bagchi",
+        albumOrMovie = "Shershaah",
+        durationText = "3:50",
+        durationSec = 230,
+        streamUrl = "https://aac.saavncdn.com/238/35726d4394604604e961bf5b846870d0_160.mp4",
+        coverUrl = "https://c.saavncdn.com/238/Shershaah-Original-Motion-Picture-Soundtrack--Hindi-2021-20210815181610-500x500.jpg",
+        category = "Trending"
+    ),
+    SongTrack(
+        id = "s_tv_01",
+        title = "Ilahi",
+        artist = "Pritam",
+        albumOrMovie = "Yeh Jawaani Hai Deewani",
+        durationText = "3:50",
+        durationSec = 230,
+        streamUrl = "https://aac.saavncdn.com/440/a784bdaf2e6e4faba7b8282b8612f829_160.mp4",
+        coverUrl = "https://c.saavncdn.com/440/Yeh-Jawaani-Hai-Deewani-2013-500x500.jpg",
+        category = "Travel"
+    ),
+    SongTrack(
+        id = "s_tv_02",
+        title = "Safarnama",
+        artist = "Lucky Ali",
+        albumOrMovie = "Tamasha",
+        durationText = "4:12",
+        durationSec = 252,
+        streamUrl = "https://aac.saavncdn.com/994/7553cf4082b65b2a0b9e160d06d1eef9_160.mp4",
+        coverUrl = "https://c.saavncdn.com/994/Tamasha-Hindi-2015-500x500.jpg",
+        category = "Travel"
+    ),
+    SongTrack(
+        id = "s_tv_03",
+        title = "Phir Se Ud Chala",
+        artist = "Mohit Chauhan",
+        albumOrMovie = "Rockstar",
         durationText = "4:31",
         durationSec = 271,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092084698.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
-        category = "Trending"
-    ),
-
-    // 🚗 Road Trip & Travel Special
-    SongTrack(
-        id = "s_travel_01",
-        title = "Ilahi • Mera Safar",
-        artist = "Arijit Singh, Pritam",
-        albumOrMovie = "Yeh Jawaani Hai Deewani (2013)",
-        durationText = "3:48",
-        durationSec = 228,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090382254.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&q=80",
+        streamUrl = "https://aac.saavncdn.com/274/c7fa8d1999f3b3d3dc5881beb1e8c31b_160.mp4",
+        coverUrl = "https://c.saavncdn.com/408/Rockstar-Hindi-2011-20221212023139-500x500.jpg",
         category = "Travel"
     ),
     SongTrack(
-        id = "s_travel_02",
-        title = "Safarnama",
-        artist = "Lucky Ali, A.R. Rahman",
-        albumOrMovie = "Tamasha (2015)",
-        durationText = "4:11",
-        durationSec = 251,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090268155.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80",
-        category = "Travel"
-    ),
-    SongTrack(
-        id = "s_travel_03",
-        title = "Matargashti",
-        artist = "Mohit Chauhan, A.R. Rahman",
-        albumOrMovie = "Tamasha (2015)",
-        durationText = "5:28",
-        durationSec = 328,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090268145.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400&q=80",
-        category = "Travel"
-    ),
-    SongTrack(
-        id = "s_travel_04",
+        id = "s_tv_04",
         title = "Kabira",
-        artist = "Tochi Raina, Rekha Bhardwaj",
-        albumOrMovie = "Yeh Jawaani Hai Deewani (2013)",
-        durationText = "3:43",
-        durationSec = 223,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090382398.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
-        category = "Travel"
-    ),
-    SongTrack(
-        id = "s_travel_05",
-        title = "Yun Hi Chala Chal",
-        artist = "Udit Narayan, Hariharan, Kailash Kher",
-        albumOrMovie = "Swades (2004)",
-        durationText = "7:28",
-        durationSec = 448,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090128571.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&q=80",
-        category = "Travel"
-    ),
-
-    // ⚡ Punjabi & High-Energy Hits
-    SongTrack(
-        id = "s_punj_01",
-        title = "Pasoori Nu Sajan",
-        artist = "Ali Sethi, Shae Gill",
-        albumOrMovie = "Coke Studio Season 14",
+        artist = "Pritam",
+        albumOrMovie = "Yeh Jawaani Hai Deewani",
         durationText = "3:44",
         durationSec = 224,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912023387290.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
+        streamUrl = "https://aac.saavncdn.com/440/664097ba2ddb94e9a8c9e9527b3010ec_160.mp4",
+        coverUrl = "https://c.saavncdn.com/440/Yeh-Jawaani-Hai-Deewani-2013-500x500.jpg",
+        category = "Travel"
+    ),
+    SongTrack(
+        id = "s_tv_05",
+        title = "Matargashti",
+        artist = "Mohit Chauhan",
+        albumOrMovie = "Tamasha",
+        durationText = "5:28",
+        durationSec = 328,
+        streamUrl = "https://aac.saavncdn.com/994/319b6797d55352c49cbdf53e57ec9095_160.mp4",
+        coverUrl = "https://c.saavncdn.com/994/Tamasha-Hindi-2015-500x500.jpg",
+        category = "Travel"
+    ),
+    SongTrack(
+        id = "s_pb_01",
+        title = "Brown Munde",
+        artist = "AP Dhillon",
+        albumOrMovie = "Brown Munde",
+        durationText = "4:14",
+        durationSec = 254,
+        streamUrl = "https://aac.saavncdn.com/973/76216adb3df5ef476f948891b40efb7a_160.mp4",
+        coverUrl = "https://c.saavncdn.com/973/Brown-Munde-English-2020-20260520131422-500x500.jpg",
         category = "Punjabi"
     ),
     SongTrack(
-        id = "s_punj_02",
-        title = "Excuses • Kehndi Hundi Si",
-        artist = "AP Dhillon, Gurinder Gill",
-        albumOrMovie = "Run-Up Records",
-        durationText = "2:56",
-        durationSec = 176,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
-        category = "Punjabi"
-    ),
-    SongTrack(
-        id = "s_punj_03",
-        title = "295",
-        artist = "Sidhu Moosewala",
-        albumOrMovie = "Moosetape (2021)",
-        durationText = "4:30",
-        durationSec = 270,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912381574792.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
-        category = "Punjabi"
-    ),
-    SongTrack(
-        id = "s_punj_04",
-        title = "Tauba Tauba",
+        id = "s_pb_02",
+        title = "Softly",
         artist = "Karan Aujla",
-        albumOrMovie = "Bad Newz (2024)",
-        durationText = "3:27",
-        durationSec = 207,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910082444567.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
+        albumOrMovie = "Making Memories",
+        durationText = "2:35",
+        durationSec = 155,
+        streamUrl = "https://aac.saavncdn.com/538/727114725cd7ec508b1df0a7e4515e5e_160.mp4",
+        coverUrl = "https://c.saavncdn.com/538/Making-Memories-English-2023-20230818075015-500x500.jpg",
         category = "Punjabi"
     ),
     SongTrack(
-        id = "s_punj_05",
-        title = "Lover",
-        artist = "Diljit Dosanjh",
-        albumOrMovie = "MoonChild Era (2021)",
-        durationText = "3:12",
-        durationSec = 192,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80",
+        id = "s_pb_03",
+        title = "Excuses",
+        artist = "AP Dhillon",
+        albumOrMovie = "Excuses",
+        durationText = "2:57",
+        durationSec = 177,
+        streamUrl = "https://aac.saavncdn.com/890/a18aabc4681dc6c334d5d29b67e84a0f_160.mp4",
+        coverUrl = "https://c.saavncdn.com/890/Excuses-English-2021-20210930112054-500x500.jpg",
         category = "Punjabi"
     ),
-
-    // 🪕 Bhojpuri Top Hits
     SongTrack(
-        id = "s_bhoj_01",
-        title = "Lollypop Lagelu",
+        id = "s_pb_04",
+        title = "Amplifier",
+        artist = "Aish",
+        albumOrMovie = "AiSh, Vol. 3",
+        durationText = "3:09",
+        durationSec = 189,
+        streamUrl = "https://aac.saavncdn.com/866/6c0793a5130176c3454d05f4cd9ddabb_160.mp4",
+        coverUrl = "https://c.saavncdn.com/866/AiSh-Vol-3-Hindi-2020-20260529213453-500x500.jpg",
+        category = "Punjabi"
+    ),
+    SongTrack(
+        id = "s_bh_01",
+        title = "Lollipop Lagelu 2",
         artist = "Pawan Singh",
-        albumOrMovie = "Lollypop Lagelu • All Time Hit",
-        durationText = "4:15",
-        durationSec = 255,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010911262173439.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
+        albumOrMovie = "Lollipop Lagelu 2",
+        durationText = "2:58",
+        durationSec = 178,
+        streamUrl = "https://aac.saavncdn.com/150/996166faf523aa2452aac34bd9c21b86_160.mp4",
+        coverUrl = "https://c.saavncdn.com/150/Lollipop-Lagelu-2-Bhojpuri-2022-20220830032440-500x500.jpg",
         category = "Bhojpuri"
     ),
     SongTrack(
-        id = "s_bhoj_02",
-        title = "Nathuniya",
-        artist = "Khesari Lal Yadav, Priyanka Singh",
-        albumOrMovie = "Bhojpuri Dhamaka",
-        durationText = "3:30",
-        durationSec = 210,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910081527081.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80",
-        category = "Bhojpuri"
-    ),
-    SongTrack(
-        id = "s_bhoj_03",
-        title = "Piyawa Se Pahile",
-        artist = "Ritesh Pandey",
-        albumOrMovie = "Bhojpuri Hits",
-        durationText = "4:05",
-        durationSec = 245,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010911262173431.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=400&q=80",
+        id = "s_bh_02",
+        title = "Tut Jaai Raja Ji",
+        artist = "Khesari Lal Yadav",
+        albumOrMovie = "Tut Jaai Raja Ji",
+        durationText = "3:51",
+        durationSec = 231,
+        streamUrl = "https://aac.saavncdn.com/920/ff5d374bbc68a1ca36da61c67dd4b665_160.mp4",
+        coverUrl = "https://c.saavncdn.com/920/Tut-Jaai-Raja-Ji-Bhojpuri-2023-20230516140016-500x500.jpg",
         category = "Bhojpuri"
     )
 )
@@ -473,6 +376,26 @@ private fun levenshteinDistance(s1: String, s2: String): Int {
  * - 1-Click Like heart (saves to Liked Songs playlist)
  * - 1-Click Offline Download (saves playable MP3 for road trips with zero internet)
  */
+
+/**
+ * Decrypt JioSaavn DES-encrypted media stream URL to direct 160kbps MP4 audio.
+ */
+fun decryptSaavnMediaUrl(encryptedBase64: String): String {
+    return try {
+        if (encryptedBase64.isBlank()) return ""
+        val keyBytes = "38346591".toByteArray(Charsets.UTF_8)
+        val keySpec = javax.crypto.spec.SecretKeySpec(keyBytes, "DES")
+        val cipher = javax.crypto.Cipher.getInstance("DES/ECB/PKCS5Padding")
+        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec)
+        val decodedBytes = android.util.Base64.decode(encryptedBase64.trim(), android.util.Base64.DEFAULT)
+        val decryptedBytes = cipher.doFinal(decodedBytes)
+        var rawUrl = String(decryptedBytes, Charsets.UTF_8).trim()
+        if (rawUrl.contains("_96.mp4")) rawUrl.replace("_96.mp4", "_160.mp4")
+        else if (rawUrl.contains("_48.mp4")) rawUrl.replace("_48.mp4", "_160.mp4")
+        else rawUrl
+    } catch (_: Exception) { "" }
+}
+
 @Composable
 fun MusicHubScreen(
     client: QwikSaveClient,
@@ -512,17 +435,16 @@ fun MusicHubScreen(
                 isLiveSearching = true
                 try {
                     val encoded = URLEncoder.encode(q, "UTF-8")
-                    val searchUrl = "https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&cc=in&includeMetaTags=1&query=$encoded"
+                    val searchUrl = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&p=1&n=20&q=$encoded"
                     val conn = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36")
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                         connectTimeout = 8000
                         readTimeout = 10000
                     }
                     if (conn.responseCode == 200) {
                         val body = conn.inputStream.bufferedReader().use { it.readText() }
                         val json = JSONObject(body)
-                        val songsObj = json.optJSONObject("songs")
-                        val results = songsObj?.optJSONArray("data") ?: json.optJSONArray("results")
+                        val results = json.optJSONArray("results") ?: json.optJSONObject("songs")?.optJSONArray("data")
                         if (results != null && results.length() > 0) {
                             val fetched = mutableListOf<SongTrack>()
                             for (i in 0 until results.length()) {
@@ -531,23 +453,25 @@ fun MusicHubScreen(
                                 val songName = item.optString("title", item.optString("song", "Song"))
                                     .replace("&quot;", "\"")
                                     .replace("&amp;", "&")
-                                val artist = item.optString("description", item.optString("primary_artists", item.optString("singers", "Artist")))
-                                    .replace("&quot;", "\"")
-                                    .replace("&amp;", "&")
-                                val album = item.optString("album", "Bollywood Hits")
-                                    .replace("&quot;", "\"")
-                                    .replace("&amp;", "&")
+                                val moreInfo = item.optJSONObject("more_info")
+                                val artist = moreInfo?.optString("singers", moreInfo.optString("primary_artists", item.optString("description", "Bollywood Artist")))
+                                    ?.replace("&quot;", "\"")
+                                    ?.replace("&amp;", "&") ?: "Bollywood Artist"
+                                val album = moreInfo?.optString("album", item.optString("album", "Bollywood Hits"))
+                                    ?.replace("&quot;", "\"")
+                                    ?.replace("&amp;", "&") ?: "Bollywood Hits"
                                 var img = item.optString("image", "")
                                 if (img.contains("150x150")) img = img.replace("150x150", "500x500")
                                 else if (img.contains("50x50")) img = img.replace("50x50", "500x500")
 
-                                val moreInfo = item.optJSONObject("more_info")
-                                val vlink = moreInfo?.optString("vlink", "") ?: ""
-                                val resolvedStream = if (vlink.isNotBlank() && vlink.startsWith("http")) {
-                                    vlink
-                                } else {
-                                    "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3"
-                                }
+                                val encUrl = moreInfo?.optString("encrypted_media_url", "") ?: ""
+                                val decryptedUrl = if (encUrl.isNotBlank()) decryptSaavnMediaUrl(encUrl) else ""
+                                val stream = if (decryptedUrl.isNotBlank() && decryptedUrl.startsWith("http")) decryptedUrl else "https://aac.saavncdn.com/588/1915cd0934f79eeb646ffebde384e59d_sar_160.mp4"
+
+                                val durSec = moreInfo?.optString("duration", "210")?.toIntOrNull() ?: 210
+                                val m = durSec / 60
+                                val s = durSec % 60
+                                val durText = String.format("%d:%02d", m, s)
 
                                 fetched.add(
                                     SongTrack(
@@ -555,9 +479,9 @@ fun MusicHubScreen(
                                         title = songName,
                                         artist = artist,
                                         albumOrMovie = album,
-                                        durationText = "3:30",
-                                        durationSec = 210,
-                                        streamUrl = resolvedStream,
+                                        durationText = durText,
+                                        durationSec = durSec,
+                                        streamUrl = stream,
                                         coverUrl = img.ifBlank { "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80" },
                                         category = "Trending"
                                     )
@@ -798,7 +722,7 @@ fun MusicHubScreen(
                                             if (isPlaying) Icons.Default.VolumeUp else Icons.Default.PlayArrow,
                                             contentDescription = null,
                                             tint = Color(0xFF1DB954),
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
                                 }
@@ -986,14 +910,14 @@ fun MusicHubScreen(
                             IconButton(
                                 onClick = { MusicController.togglePlayPause(context) },
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(28.dp)
                                     .background(Color(0xFF1DB954), CircleShape)
                             ) {
                                 Icon(
                                     if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = "Play/Pause",
                                     tint = Color.Black,
-                                    modifier = Modifier.size(17.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
 

@@ -834,7 +834,17 @@ fun PdfToolsTabContent(
     var notesSubtitle by remember { mutableStateOf("Unit 1: Fundamentals & Theory") }
     var notesStudentName by remember { mutableStateOf("") }
     var borderStyleChoice by remember { mutableStateOf("shadow") } // "shadow", "clean", "none"
-    var partnerBadgeScope by remember { mutableStateOf("first-page") } // "first-page", "all-pages"
+    var partnerBadgeScope by remember { mutableStateOf("first-page") } // "first-page", "all-pages", "none"
+    var paperSizeChoice by remember { mutableStateOf("A4") } // "A4", "Letter"
+    var fontSizeScaleChoice by remember { mutableStateOf("medium") } // "small", "medium", "large"
+    var fontFamilyChoice by remember { mutableStateOf("Helvetica") } // "Helvetica", "Times", "Courier"
+    var includeTitleToggle by remember { mutableStateOf(true) }
+    var includeDateToggle by remember { mutableStateOf(true) }
+    var includePageNumbersToggle by remember { mutableStateOf(true) }
+    var notesWatermarkText by remember { mutableStateOf("QWIK SAVE") }
+    var notesFooterText by remember { mutableStateOf("Qwik Save PDF") }
+    var showCustomizationOptions by remember { mutableStateOf(false) }
+    var isExtractingConversation by remember { mutableStateOf(false) }
     var currentQuestionIndex by remember { mutableStateOf(0) }
     val structuredQuestions = remember {
         mutableStateListOf(
@@ -963,6 +973,53 @@ fun PdfToolsTabContent(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             )
+
+                            // Fetch & Preview Link Button
+                            OutlinedButton(
+                                onClick = {
+                                    if (aiShareUrl.isNotBlank()) {
+                                        isExtractingConversation = true
+                                        coroutineScope.launch {
+                                            val res = client.extractAiConversation(aiShareUrl)
+                                            res.onSuccess { (t, c) ->
+                                                notesTitle = t
+                                                notesContent = c
+                                                Toast.makeText(context, "Conversation fetched & previewed! ✅", Toast.LENGTH_SHORT).show()
+                                            }.onFailure { err ->
+                                                Toast.makeText(context, "Fetch error: ${err.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                            isExtractingConversation = false
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Please enter a valid AI shared link", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (isExtractingConversation) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color(0xFF0F172A))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Fetching Conversation Preview...", fontSize = 11.sp)
+                                } else {
+                                    Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Fetch & Preview Link Content", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            if (notesContent.isNotBlank() && notesTitle.isNotBlank()) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9))
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text("Preview: $notesTitle", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                        Text(notesContent.take(160) + if (notesContent.length > 160) "..." else "", fontSize = 10.5.sp, color = Color(0xFF475569))
+                                    }
+                                }
+                            }
                         } else if (aiNotesMode == 1) {
                             // Direct Text
                             OutlinedTextField(
@@ -1278,6 +1335,169 @@ fun PdfToolsTabContent(
                             }
                         }
 
+                        // Expandable 100% Website Style & Customization Options Accordion
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showCustomizationOptions = !showCustomizationOptions },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Settings, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("⚙️ PDF Style & Customization Options", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                    }
+                                    Icon(
+                                        if (showCustomizationOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                if (showCustomizationOptions) {
+                                    HorizontalDivider(color = Color(0xFFE2E8F0))
+
+                                    // Paper Size
+                                    Text("Paper Format:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        listOf(Pair("A4", "A4 (Academic Std)"), Pair("Letter", "US Letter")).forEach { (key, lbl) ->
+                                            FilterChip(
+                                                selected = paperSizeChoice == key,
+                                                onClick = { paperSizeChoice = key },
+                                                label = { Text(lbl, fontSize = 10.5.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = Color(0xFF0F172A),
+                                                    selectedLabelColor = Color.White
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    // Typography
+                                    Text("Typography & Font:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        listOf(
+                                            Pair("Helvetica", "Modern Clean"),
+                                            Pair("Times", "Academic Serif"),
+                                            Pair("Courier", "Monospace Code")
+                                        ).forEach { (key, lbl) ->
+                                            FilterChip(
+                                                selected = fontFamilyChoice == key,
+                                                onClick = { fontFamilyChoice = key },
+                                                label = { Text(lbl, fontSize = 10.5.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = Color(0xFF0F172A),
+                                                    selectedLabelColor = Color.White
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    // Font Scale
+                                    Text("Font Scale / Sizing:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        listOf(
+                                            Pair("small", "Compact (9pt)"),
+                                            Pair("medium", "Standard (10pt)"),
+                                            Pair("large", "Readable (11.5pt)")
+                                        ).forEach { (key, lbl) ->
+                                            FilterChip(
+                                                selected = fontSizeScaleChoice == key,
+                                                onClick = { fontSizeScaleChoice = key },
+                                                label = { Text(lbl, fontSize = 10.5.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = Color(0xFF0F172A),
+                                                    selectedLabelColor = Color.White
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    // Page Border Style
+                                    Text("Page Border Style:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        listOf(
+                                            Pair("shadow", "MS Word Shadow"),
+                                            Pair("clean", "Thin Clean Line"),
+                                            Pair("none", "No Border")
+                                        ).forEach { (key, lbl) ->
+                                            FilterChip(
+                                                selected = borderStyleChoice == key,
+                                                onClick = { borderStyleChoice = key },
+                                                label = { Text(lbl, fontSize = 10.5.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = Color(0xFF0F172A),
+                                                    selectedLabelColor = Color.White
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    // College Study Partner Scope
+                                    Text("College Study Partner Header:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        listOf(
+                                            Pair("all-pages", "All Pages 🎓"),
+                                            Pair("first-page", "First Page Only"),
+                                            Pair("none", "None")
+                                        ).forEach { (key, lbl) ->
+                                            FilterChip(
+                                                selected = partnerBadgeScope == key,
+                                                onClick = { partnerBadgeScope = key },
+                                                label = { Text(lbl, fontSize = 10.5.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = Color(0xFF2563EB),
+                                                    selectedLabelColor = Color.White
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    // Watermark and Footer Text
+                                    OutlinedTextField(
+                                        value = notesWatermarkText,
+                                        onValueChange = { notesWatermarkText = it },
+                                        label = { Text("Center Watermark (leave blank for none)", fontSize = 10.5.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+
+                                    OutlinedTextField(
+                                        value = notesFooterText,
+                                        onValueChange = { notesFooterText = it },
+                                        label = { Text("Custom Footer Brand", fontSize = 10.5.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+
+                                    // Checkbox Toggles
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = includeTitleToggle, onCheckedChange = { includeTitleToggle = it })
+                                        Text("Include Document Title Banner", fontSize = 11.sp)
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = includeDateToggle, onCheckedChange = { includeDateToggle = it })
+                                        Text("Include Export Date & Time", fontSize = 11.sp)
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(checked = includePageNumbersToggle, onCheckedChange = { includePageNumbersToggle = it })
+                                        Text("Include Page Numbers", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+
                         Button(
                             onClick = {
                                 isNotesGenerating = true
@@ -1291,35 +1511,26 @@ fun PdfToolsTabContent(
                                     }
 
                                     val cleanFileName = notesTitle.replace(Regex("[^a-zA-Z0-9_-]"), "_") + ".pdf"
-                                    val result = if (aiNotesMode == 2) {
-                                        client.createAcademicNotesPdf(
-                                            context = context,
-                                            title = notesTitle,
-                                            content = "",
-                                            subtitle = notesSubtitle.ifBlank { null },
-                                            studentName = notesStudentName.ifBlank { null },
-                                            watermarkText = null,
-                                            borderStyle = borderStyleChoice,
-                                            includePartnerBadge = true,
-                                            footerText = null,
-                                            questions = structuredQuestions.toList(),
-                                            outputFileName = cleanFileName
-                                        )
-                                    } else {
-                                        client.createAcademicNotesPdf(
-                                            context = context,
-                                            title = notesTitle,
-                                            content = notesContent,
-                                            subtitle = null,
-                                            studentName = null,
-                                            watermarkText = null,
-                                            borderStyle = "shadow",
-                                            includePartnerBadge = true,
-                                            footerText = null,
-                                            questions = emptyList(),
-                                            outputFileName = cleanFileName
-                                        )
-                                    }
+                                    val result = client.createAcademicNotesPdf(
+                                        context = context,
+                                        title = notesTitle,
+                                        content = if (aiNotesMode == 2) "" else notesContent,
+                                        subtitle = notesSubtitle.ifBlank { null },
+                                        studentName = notesStudentName.ifBlank { null },
+                                        watermarkText = notesWatermarkText.ifBlank { null },
+                                        borderStyle = borderStyleChoice,
+                                        includePartnerBadge = partnerBadgeScope != "none",
+                                        partnerBadgeScope = partnerBadgeScope,
+                                        paperSize = paperSizeChoice,
+                                        fontSizeScale = fontSizeScaleChoice,
+                                        fontFamily = fontFamilyChoice,
+                                        includeTitle = includeTitleToggle,
+                                        includeDate = includeDateToggle,
+                                        includePageNumbers = includePageNumbersToggle,
+                                        footerText = notesFooterText.ifBlank { null },
+                                        questions = if (aiNotesMode == 2) structuredQuestions.toList() else emptyList(),
+                                        outputFileName = cleanFileName
+                                    )
                                     isNotesGenerating = false
                                     result.onSuccess { file ->
                                         notesPdfFile = file

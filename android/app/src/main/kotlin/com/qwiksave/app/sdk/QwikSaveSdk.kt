@@ -410,6 +410,75 @@ class QwikSaveClient(
             }
         } catch (_: Exception) {}
 
+        // Tier 1.5: Direct Invidious High-Speed Video Stream Resolver (Supports Long Movies, Dramas, Lectures)
+        try {
+            val invUrl = URL("https://yt.chocolatemoo53.com/api/v1/videos/$videoId")
+            val invConn = (invUrl.openConnection() as HttpURLConnection).apply {
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                setRequestProperty("Accept", "application/json")
+                connectTimeout = 12000
+                readTimeout = 15000
+            }
+            if (invConn.responseCode == 200) {
+                val invResp = invConn.inputStream.bufferedReader().use { it.readText() }
+                val invJson = JSONObject(invResp)
+                val vTitle = invJson.optString("title", "YouTube Video")
+                val vAuthor = invJson.optString("author", "YouTube Channel")
+                val sec = invJson.optInt("lengthSeconds", 0)
+                val durText = if (sec > 0) {
+                    val h = sec / 3600
+                    val m = (sec % 3600) / 60
+                    val s = sec % 60
+                    if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
+                } else "▶ Full Video"
+
+                val adaptive = invJson.optJSONArray("adaptiveFormats")
+                if (adaptive != null && adaptive.length() > 0) {
+                    val formatsList = mutableListOf<MediaItem>()
+                    val tiers = listOf(
+                        Pair(listOf("1080", "1920"), "1080p Full HD MP4"),
+                        Pair(listOf("720", "1280"), "720p HD MP4"),
+                        Pair(listOf("480", "854"), "480p SD MP4"),
+                        Pair(listOf("360", "640"), "360p SD MP4")
+                    )
+
+                    for (tier in tiers) {
+                        for (i in 0 until adaptive.length()) {
+                            val a = adaptive.getJSONObject(i)
+                            val res = a.optString("resolution", "")
+                            val container = a.optString("container", "")
+                            val aUrl = a.optString("url", "")
+                            if (aUrl.isNotBlank() && container == "mp4" && tier.first.any { res.contains(it) }) {
+                                val clen = a.optLong("clen", 0L)
+                                val sizeText = if (clen > 0) String.format("%.1f MB", clen / (1024.0 * 1024.0)) else if (sec > 0) String.format("%.1f MB", sec * 0.18) else "HD Stream"
+                                val safeUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(aUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}_${tier.second.replace(" ", "_")}.mp4"
+                                formatsList.add(MediaItem(safeUrl, true, defaultThumb, "${tier.second} ($sizeText)"))
+                                break
+                            }
+                        }
+                    }
+
+                    if (formatsList.isNotEmpty()) {
+                        return@withContext Result.success(
+                            ExtractedMedia(
+                                id = videoId,
+                                title = vTitle,
+                                thumbnailUrl = defaultThumb,
+                                streamUrl = formatsList[0].url,
+                                quality = formatsList[0].quality,
+                                fileSizeMb = formatsList[0].quality,
+                                platform = "youtube",
+                                isVideo = true,
+                                author = vAuthor,
+                                durationText = durText,
+                                items = formatsList
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
         // Tier 2: Direct High-Speed Video Stream Resolver (Supports Movies, Dramas, Lectures)
         try {
             val bUrl = URL("https://backend1.tioo.eu.org/youtube?url=https://www.youtube.com/watch?v=$videoId")
@@ -659,29 +728,19 @@ class QwikSaveClient(
         onSuccess: (File?) -> Unit = {},
         onError: (String) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
-        val unescapedUrl = if (mediaUrl.contains("/api/proxy-download") && mediaUrl.contains("url=")) {
-            try {
-                val qIdx = mediaUrl.indexOf("url=")
-                val ampIdx = mediaUrl.indexOf("&", qIdx)
-                val rawEncoded = if (ampIdx != -1) mediaUrl.substring(qIdx + 4, ampIdx) else mediaUrl.substring(qIdx + 4)
-                java.net.URLDecoder.decode(rawEncoded, "UTF-8")
-            } catch (_: Exception) {
-                mediaUrl
+        val resolvedUrl = if (mediaUrl.contains("/api/proxy-download")) {
+            if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) mediaUrl else "$baseUrl${if (mediaUrl.startsWith("/")) "" else "/"}$mediaUrl"
+        } else {
+            val cleanMediaUrl = mediaUrl
+                .replace(Regex("&?bytestart=\\d+"), "")
+                .replace(Regex("&?byteend=\\d+"), "")
+                .replace(Regex("\\?&"), "?")
+                .trimEnd('?', '&')
+            if (cleanMediaUrl.startsWith("http://") || cleanMediaUrl.startsWith("https://")) {
+                cleanMediaUrl
+            } else {
+                "$baseUrl${if (cleanMediaUrl.startsWith("/")) "" else "/"}$cleanMediaUrl"
             }
-        } else {
-            mediaUrl
-        }
-
-        val cleanMediaUrl = unescapedUrl
-            .replace(Regex("&?bytestart=\\d+"), "")
-            .replace(Regex("&?byteend=\\d+"), "")
-            .replace(Regex("\\?&"), "?")
-            .trimEnd('?', '&')
-
-        val resolvedUrl = if (cleanMediaUrl.startsWith("http://") || cleanMediaUrl.startsWith("https://")) {
-            cleanMediaUrl
-        } else {
-            "$baseUrl${if (cleanMediaUrl.startsWith("/")) "" else "/"}$cleanMediaUrl"
         }
 
         try {
@@ -833,6 +892,28 @@ class QwikSaveClient(
                             retryCount++
                             try { activeConn.disconnect() } catch (_: Exception) {}
 
+                            // If direct stream cut off or failed, fallback to server proxy-download
+                            if (!currentUrl.contains("/api/proxy-download")) {
+                                try {
+                                    val proxyUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(resolvedUrl, "UTF-8")}&filename=${java.net.URLEncoder.encode(filename, "UTF-8")}"
+                                    val proxyConn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
+                                        setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
+                                        setRequestProperty("Accept", "*/*")
+                                        if (totalBytes > 0) {
+                                            setRequestProperty("Range", "bytes=$totalBytes-")
+                                        }
+                                        connectTimeout = 30000
+                                        readTimeout = 180000
+                                        instanceFollowRedirects = true
+                                    }
+                                    if (proxyConn.responseCode in 200..299) {
+                                        currentUrl = proxyUrl
+                                        activeConn = proxyConn
+                                        continue
+                                    }
+                                } catch (_: Exception) {}
+                            }
+
                             if (totalBytes > 0 && retryCount < 4) {
                                 try {
                                     val resumeConn = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
@@ -917,6 +998,28 @@ class QwikSaveClient(
                         } catch (streamEx: java.io.IOException) {
                             retryCount++
                             try { activeConn.disconnect() } catch (_: Exception) {}
+
+                            // If direct stream cut off or failed, fallback to server proxy-download
+                            if (!currentUrl.contains("/api/proxy-download")) {
+                                try {
+                                    val proxyUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(resolvedUrl, "UTF-8")}&filename=${java.net.URLEncoder.encode(filename, "UTF-8")}"
+                                    val proxyConn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
+                                        setRequestProperty("User-Agent", "Mozilla/5.0 QwikSave-Android")
+                                        setRequestProperty("Accept", "*/*")
+                                        if (totalBytes > 0) {
+                                            setRequestProperty("Range", "bytes=$totalBytes-")
+                                        }
+                                        connectTimeout = 30000
+                                        readTimeout = 180000
+                                        instanceFollowRedirects = true
+                                    }
+                                    if (proxyConn.responseCode in 200..299) {
+                                        currentUrl = proxyUrl
+                                        activeConn = proxyConn
+                                        continue
+                                    }
+                                } catch (_: Exception) {}
+                            }
 
                             if (totalBytes > 0 && retryCount < 4) {
                                 try {
@@ -1315,8 +1418,8 @@ class QwikSaveClient(
 
     /**
      * Create formatted Academic PDF from AI study notes, matching the website's layout.
-     * Supports Custom Title, Subtitle, Student/Prof Name, Watermark, Page Borders (Shadow/Clean),
-     * College Study Partner Header, Custom Footer, and Structured Question Builder.
+     * Supports Custom Title, Subtitle, Student/Prof Name, Watermark, Page Borders (Shadow/Clean/None),
+     * College Study Partner Header (All Pages/First Page/None), Typography, Font Scaling, Paper Size, and Custom Footer.
      */
     suspend fun createAcademicNotesPdf(
         context: Context,
@@ -1327,48 +1430,67 @@ class QwikSaveClient(
         watermarkText: String? = null,
         borderStyle: String = "shadow", // "shadow", "clean", "none"
         includePartnerBadge: Boolean = true,
+        partnerBadgeScope: String = "all-pages", // "all-pages", "first-page", "none"
+        paperSize: String = "A4", // "A4", "Letter"
+        fontSizeScale: String = "medium", // "small", "medium", "large"
+        fontFamily: String = "Helvetica", // "Helvetica", "Times", "Courier"
+        includeTitle: Boolean = true,
+        includeDate: Boolean = true,
+        includePageNumbers: Boolean = true,
         footerText: String? = null,
         questions: List<ExamQuestionItem> = emptyList(),
         outputFileName: String = "QwikSave_Notes.pdf"
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
             val pdfDocument = PdfDocument()
-            val pageWidth = 595
-            val pageHeight = 842
+            val (pageWidth, pageHeight) = if (paperSize.equals("Letter", true)) Pair(612, 792) else Pair(595, 842)
             val margin = 36f
             val printableWidth = (pageWidth - (margin * 2)).toInt()
 
+            val baseTypeface = when {
+                fontFamily.contains("Times", true) || fontFamily.contains("Serif", true) -> Typeface.SERIF
+                fontFamily.contains("Courier", true) || fontFamily.contains("Mono", true) -> Typeface.MONOSPACE
+                else -> Typeface.DEFAULT
+            }
+
+            val (titleSize, subSize, qTitleSize, bodySize) = when (fontSizeScale.lowercase()) {
+                "small" -> listOf(14f, 9.5f, 10f, 8.5f)
+                "large" -> listOf(18f, 12.5f, 13f, 11.5f)
+                else -> listOf(16f, 11f, 11.5f, 10f)
+            }
+
             val titlePaint = TextPaint().apply {
                 color = Color.rgb(15, 23, 42)
-                textSize = 16f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textSize = titleSize
+                typeface = Typeface.create(baseTypeface, Typeface.BOLD)
                 isAntiAlias = true
             }
 
             val subtitlePaint = TextPaint().apply {
                 color = Color.rgb(71, 85, 105)
-                textSize = 11f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textSize = subSize
+                typeface = Typeface.create(baseTypeface, Typeface.BOLD)
                 isAntiAlias = true
             }
 
             val questionTitlePaint = TextPaint().apply {
                 color = Color.rgb(15, 23, 42)
-                textSize = 11.5f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textSize = qTitleSize
+                typeface = Typeface.create(baseTypeface, Typeface.BOLD)
                 isAntiAlias = true
             }
 
             val metaPaint = TextPaint().apply {
                 color = Color.rgb(100, 116, 139)
                 textSize = 8.5f
+                typeface = baseTypeface
                 isAntiAlias = true
             }
 
             val bodyPaint = TextPaint().apply {
                 color = Color.rgb(51, 65, 85)
-                textSize = 10f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                textSize = bodySize
+                typeface = Typeface.create(baseTypeface, Typeface.NORMAL)
                 isAntiAlias = true
             }
 
@@ -1397,7 +1519,7 @@ class QwikSaveClient(
             val partnerTextPaint = TextPaint().apply {
                 color = Color.rgb(67, 56, 202) // #4338CA
                 textSize = 8.5f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                typeface = Typeface.create(baseTypeface, Typeface.BOLD)
                 isAntiAlias = true
             }
 
@@ -1405,21 +1527,24 @@ class QwikSaveClient(
                 BitmapFactory.decodeResource(context.resources, R.drawable.app_logo_transparent)
             } catch (_: Exception) { null }
 
-            fun applyPageDecorations(c: Canvas) {
-                // 1. Mandatory Qwik Save watermark in center of page (matching website layout)
-                val wmPaint = TextPaint().apply {
-                    color = Color.argb(20, 100, 116, 139)
-                    textSize = 44f
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    isAntiAlias = true
-                    textAlign = Paint.Align.CENTER
+            fun applyPageDecorations(c: Canvas, pageNum: Int) {
+                // 1. Watermark
+                val activeWatermark = watermarkText ?: "QWIK SAVE"
+                if (activeWatermark.isNotBlank()) {
+                    val wmPaint = TextPaint().apply {
+                        color = Color.argb(20, 100, 116, 139)
+                        textSize = 44f
+                        typeface = Typeface.create(baseTypeface, Typeface.BOLD)
+                        isAntiAlias = true
+                        textAlign = Paint.Align.CENTER
+                    }
+                    c.save()
+                    c.rotate(-35f, pageWidth / 2f, pageHeight / 2f)
+                    c.drawText(activeWatermark, pageWidth / 2f, pageHeight / 2f, wmPaint)
+                    c.restore()
                 }
-                c.save()
-                c.rotate(-35f, pageWidth / 2f, pageHeight / 2f)
-                c.drawText("QWIK SAVE", pageWidth / 2f, pageHeight / 2f, wmPaint)
-                c.restore()
 
-                // 2. Page Border (MS Word Shadow Box or Clean Line)
+                // 2. Page Border (MS Word Shadow Box, Clean Line, or None)
                 if (borderStyle.equals("shadow", ignoreCase = true)) {
                     val shadowPaint = Paint().apply {
                         color = Color.rgb(203, 213, 225)
@@ -1444,20 +1569,26 @@ class QwikSaveClient(
             }
 
             val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-            val dateStr = dateFormat.format(Date())
+            val dateStr = if (includeDate) dateFormat.format(Date()) else ""
 
             var currentPageNumber = 1
             var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
             var page = pdfDocument.startPage(pageInfo)
             var canvas = page.canvas
 
-            applyPageDecorations(canvas)
+            applyPageDecorations(canvas, currentPageNumber)
 
             // Page 1 Header
             var yPosition = margin + 12f
 
             // Partner Badge Top Right
-            if (includePartnerBadge) {
+            val shouldShowBadgeOnPage1 = when (partnerBadgeScope.lowercase()) {
+                "all-pages" -> includePartnerBadge
+                "first-page" -> includePartnerBadge
+                else -> false
+            }
+
+            if (shouldShowBadgeOnPage1) {
                 val badgeW = 140f
                 val badgeH = 22f
                 val badgeX = pageWidth - margin - badgeW - 10f
@@ -1468,8 +1599,10 @@ class QwikSaveClient(
             }
 
             // Document Title
-            canvas.drawText(title.ifBlank { "Qwik Save AI Study Notes" }, margin + 12f, yPosition + 16f, titlePaint)
-            yPosition += 26f
+            if (includeTitle) {
+                canvas.drawText(title.ifBlank { "Qwik Save AI Study Notes" }, margin + 12f, yPosition + 16f, titlePaint)
+                yPosition += 26f
+            }
 
             // Subtitle / Subject
             if (!subtitle.isNullOrBlank()) {
@@ -1478,8 +1611,9 @@ class QwikSaveClient(
             }
 
             // Student / Faculty Name & Date
-            val authorPart = if (!studentName.isNullOrBlank()) "Candidate/Faculty: $studentName • " else ""
-            canvas.drawText("${authorPart}Academic Revision • $dateStr", margin + 12f, yPosition + 8f, metaPaint)
+            val authorPart = if (!studentName.isNullOrBlank()) "Candidate/Faculty: $studentName" else "Academic Revision"
+            val metaLine = if (dateStr.isNotBlank()) "$authorPart • $dateStr" else authorPart
+            canvas.drawText(metaLine, margin + 12f, yPosition + 8f, metaPaint)
             yPosition += 16f
 
             // Divider line
@@ -1518,14 +1652,14 @@ class QwikSaveClient(
 
                     val itemTotalHeight = qLayout.height + 16f + aLayout.height + 20f
                     if (yPosition + itemTotalHeight + 45f > pageHeight - margin) {
-                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
+                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
                         pdfDocument.finishPage(page)
 
                         currentPageNumber++
                         pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
                         page = pdfDocument.startPage(pageInfo)
                         canvas = page.canvas
-                        applyPageDecorations(canvas)
+                        applyPageDecorations(canvas, currentPageNumber)
                         yPosition = margin + 18f
                     }
 
@@ -1574,14 +1708,14 @@ class QwikSaveClient(
 
                         val boxHeight = qLayout.height + 14f
                         if (yPosition + boxHeight + 45f > pageHeight - margin) {
-                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
+                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
                             pdfDocument.finishPage(page)
 
                             currentPageNumber++
                             pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
                             page = pdfDocument.startPage(pageInfo)
                             canvas = page.canvas
-                            applyPageDecorations(canvas)
+                            applyPageDecorations(canvas, currentPageNumber)
                             yPosition = margin + 18f
                         }
 
@@ -1608,14 +1742,14 @@ class QwikSaveClient(
                         )
 
                         if (yPosition + bLayout.height + 45f > pageHeight - margin) {
-                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
+                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
                             pdfDocument.finishPage(page)
 
                             currentPageNumber++
                             pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
                             page = pdfDocument.startPage(pageInfo)
                             canvas = page.canvas
-                            applyPageDecorations(canvas)
+                            applyPageDecorations(canvas, currentPageNumber)
                             yPosition = margin + 18f
                         }
 
@@ -1629,7 +1763,7 @@ class QwikSaveClient(
                 }
             }
 
-            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText)
+            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
             pdfDocument.finishPage(page)
 
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
@@ -1656,7 +1790,8 @@ class QwikSaveClient(
         pageWidth: Int,
         pageHeight: Int,
         logoBitmap: Bitmap?,
-        customFooter: String? = null
+        customFooter: String? = null,
+        includePageNumbers: Boolean = true
     ) {
         val y = pageHeight - 24f
         val linePaint = Paint().apply {
@@ -1690,13 +1825,16 @@ class QwikSaveClient(
         }
 
         val textStartX = margin + 34f
-        canvas.drawText("Qwik Save PDF", textStartX, y + 2f, brandPaint)
+        val effectiveBrand = if (!customFooter.isNullOrBlank()) customFooter else "Qwik Save PDF"
+        canvas.drawText(effectiveBrand, textStartX, y + 2f, brandPaint)
         val devLine = "Developer: Priyal Kumar • www.ai-chat2pdf.live"
         canvas.drawText(devLine, textStartX, y + 12f, devPaint)
 
-        val pageStr = "Page $pageNum"
-        val pWidth = pageTextPaint.measureText(pageStr)
-        canvas.drawText(pageStr, pageWidth - margin - pWidth - 10f, y + 6f, pageTextPaint)
+        if (includePageNumbers) {
+            val pageStr = "Page $pageNum"
+            val pWidth = pageTextPaint.measureText(pageStr)
+            canvas.drawText(pageStr, pageWidth - margin - pWidth - 10f, y + 6f, pageTextPaint)
+        }
     }
 
     /**
