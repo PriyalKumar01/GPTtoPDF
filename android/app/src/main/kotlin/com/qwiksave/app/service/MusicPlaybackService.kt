@@ -3,6 +3,8 @@ package com.qwiksave.app.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
@@ -21,6 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Android Foreground Service for Continuous Background Audio Playback
@@ -31,6 +35,8 @@ class MusicPlaybackService : Service() {
     private var mediaPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var mediaSession: MediaSessionCompat? = null
+    private var currentCoverBitmap: Bitmap? = null
+    private var lastLoadedCoverUrl: String? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private var progressJob: Job? = null
 
@@ -95,6 +101,8 @@ class MusicPlaybackService : Service() {
 
     private fun playMedia(track: SongTrack) {
         try {
+            currentCoverBitmap = null
+            lastLoadedCoverUrl = null
             wakeLock?.acquire(10 * 60 * 1000L /* 10 minutes */)
             mediaPlayer?.release()
             mediaPlayer = MediaPlayer().apply {
@@ -200,7 +208,46 @@ class MusicPlaybackService : Service() {
         }
     }
 
-    private fun updateMediaSession(track: SongTrack, isPlaying: Boolean) {
+    private fun getDefaultArtBitmap(): Bitmap {
+        val width = 256
+        val height = 256
+        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+        // Spotify Green to Deep Forest gradient background
+        val shader = android.graphics.LinearGradient(
+            0f, 0f, width.toFloat(), height.toFloat(),
+            intArrayOf(0xFF1DB954.toInt(), 0xFF064E3B.toInt(), 0xFF121212.toInt()),
+            floatArrayOf(0f, 0.55f, 1f),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        paint.shader = shader
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+
+        // Vinyl grooves & glowing music aura
+        paint.shader = null
+        paint.color = 0xFF1DB954.toInt()
+        paint.alpha = 140
+        paint.style = android.graphics.Paint.Style.STROKE
+        paint.strokeWidth = 4f
+        canvas.drawCircle(width / 2f, height / 2f, 75f, paint)
+        canvas.drawCircle(width / 2f, height / 2f, 50f, paint)
+
+        // Center vinyl disc
+        paint.style = android.graphics.Paint.Style.FILL
+        paint.color = 0xFF18181B.toInt()
+        paint.alpha = 230
+        canvas.drawCircle(width / 2f, height / 2f, 30f, paint)
+
+        paint.color = 0xFF1DB954.toInt()
+        paint.alpha = 255
+        canvas.drawCircle(width / 2f, height / 2f, 12f, paint)
+
+        return bmp
+    }
+
+    private fun updateMediaSession(track: SongTrack, isPlaying: Boolean, artBitmap: Bitmap?) {
         val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
         val pos = (mediaPlayer?.currentPosition ?: 0).toLong()
         val playbackState = PlaybackStateCompat.Builder()
@@ -217,17 +264,29 @@ class MusicPlaybackService : Service() {
             .build()
         mediaSession?.setPlaybackState(playbackState)
 
-        val metadata = MediaMetadataCompat.Builder()
+        val metadataBuilder = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, track.artist)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, track.albumOrMovie)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, (track.durationSec * 1000).toLong())
-            .build()
-        mediaSession?.setMetadata(metadata)
+
+        if (track.coverUrl.isNotBlank()) {
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ART_URI, track.coverUrl)
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, track.coverUrl)
+            metadataBuilder.putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, track.coverUrl)
+        }
+
+        val effectiveBitmap = artBitmap ?: getDefaultArtBitmap()
+        metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, effectiveBitmap)
+        metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, effectiveBitmap)
+        metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, effectiveBitmap)
+
+        mediaSession?.setMetadata(metadataBuilder.build())
     }
 
-    private fun buildNotification(track: SongTrack, isPlaying: Boolean): Notification {
-        updateMediaSession(track, isPlaying)
+    private fun buildNotification(track: SongTrack, isPlaying: Boolean, artBitmap: Bitmap? = currentCoverBitmap): Notification {
+        val effectiveBitmap = artBitmap ?: getDefaultArtBitmap()
+        updateMediaSession(track, isPlaying, effectiveBitmap)
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -286,6 +345,9 @@ class MusicPlaybackService : Service() {
             .setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setColor(0xFF1DB954.toInt()) // Vibrant Spotify Green
+            .setColorized(true)
+            .setLargeIcon(effectiveBitmap)
             .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
@@ -299,14 +361,45 @@ class MusicPlaybackService : Service() {
     }
 
     private fun startForegroundWithNotification(track: SongTrack, isPlaying: Boolean) {
-        val notification = buildNotification(track, isPlaying)
+        val notification = buildNotification(track, isPlaying, currentCoverBitmap)
         startForeground(NOTIFICATION_ID, notification)
+        loadCoverArtAsync(track)
     }
 
     private fun updateNotification(track: SongTrack, isPlaying: Boolean) {
-        val notification = buildNotification(track, isPlaying)
+        val notification = buildNotification(track, isPlaying, currentCoverBitmap)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, notification)
+        loadCoverArtAsync(track)
+    }
+
+    private fun loadCoverArtAsync(track: SongTrack) {
+        if (track.coverUrl.isBlank()) return
+        if (track.coverUrl == lastLoadedCoverUrl && currentCoverBitmap != null) return
+
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val conn = (URL(track.coverUrl).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    connectTimeout = 6000
+                    readTimeout = 8000
+                }
+                if (conn.responseCode == 200) {
+                    val rawBmp = BitmapFactory.decodeStream(conn.inputStream)
+                    if (rawBmp != null) {
+                        // Scale to 280x280 to comfortably fit IPC binder limits and guarantee crisp rendering
+                        val scaledBmp = Bitmap.createScaledBitmap(rawBmp, 280, 280, true)
+                        currentCoverBitmap = scaledBmp
+                        lastLoadedCoverUrl = track.coverUrl
+                        withContext(Dispatchers.Main) {
+                            val notifWithArt = buildNotification(track, MusicController.isPlaying.value, scaledBmp)
+                            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            nm.notify(NOTIFICATION_ID, notifWithArt)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     override fun onDestroy() {
