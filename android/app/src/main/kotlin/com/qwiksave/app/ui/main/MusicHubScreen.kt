@@ -7,6 +7,9 @@ import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -77,7 +80,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Heer Raanjha",
         durationText = "7:09",
         durationSec = 429,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080036110.mp3",
+        streamUrl = "https://aac.saavncdn.com/780/ff5c71080a06b31b2098f9afda2cb887_sar_160.mp4",
         coverUrl = "https://c.saavncdn.com/780/Heer-Raanjha-Hindi-1970-20190710084802-500x500.jpg",
         category = "90s"
     ),
@@ -88,7 +91,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Jigar",
         durationText = "7:04",
         durationSec = 424,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010911261743316.mp3",
+        streamUrl = "https://aac.saavncdn.com/046/12e8316720caf80c786f16d4a2bf9db0_160.mp4",
         coverUrl = "https://c.saavncdn.com/046/Jigar-Hindi-1992-20261103214604-500x500.jpg",
         category = "90s"
     ),
@@ -99,8 +102,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Jaanwar",
         durationText = "5:09",
         durationSec = 309,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948510.mp3",
+        streamUrl = "https://aac.saavncdn.com/630/d00d30fb920aa9255533823f1849a41b_160.mp4",
         coverUrl = "https://c.saavncdn.com/630/Jaanwar-Hindi-1999-20210407130950-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "09Tm7xXj",
+        title = "Jise Dekh Mera Dil Dhadke",
+        artist = "Kumar Sanu",
+        albumOrMovie = "Phool Aur Kaante",
+        durationText = "6:36",
+        durationSec = 396,
+        streamUrl = "https://aac.saavncdn.com/882/a8ef4e3347a884863d3e8c092dd3d32c_160.mp4",
+        coverUrl = "https://c.saavncdn.com/882/Phool-Aur-Kaante-Hindi-1991-20240408213850-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -110,7 +124,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Mere Mehboob",
         durationText = "6:51",
         durationSec = 411,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010911261764373.mp3",
+        streamUrl = "https://aac.saavncdn.com/348/ff5ae74154f401517344e79778d7d47d_160.mp4",
         coverUrl = "https://c.saavncdn.com/348/Mere-Mehboob-Hindi-2008-20261103220851-500x500.jpg",
         category = "90s"
     ),
@@ -121,7 +135,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Zara Hatke Zara Bachke",
         durationText = "4:26",
         durationSec = 266,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910081922589.mp3",
+        streamUrl = "https://aac.saavncdn.com/336/04a9e11d6a93631726fb55e04f8690b9_160.mp4",
         coverUrl = "https://c.saavncdn.com/336/Zara-Hatke-Zara-Bachke-Hindi-2023-20250129153124-500x500.jpg",
         category = "Trending"
     ),
@@ -132,7 +146,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Aadmi Khilona Hai (Original Motion Picture Soundtrack)",
         durationText = "7:11",
         durationSec = 431,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020947981.mp3",
+        streamUrl = "https://aac.saavncdn.com/361/485b4597858dfabd17ee1d9a92ef2de8_160.mp4",
         coverUrl = "https://c.saavncdn.com/361/Aadmi-Khilona-Hai-Original-Motion-Picture-Soundtrack-Hindi-1993-20250819191246-500x500.jpg",
         category = "90s"
     ),
@@ -143,19 +157,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Aadmi Khilona Hai (Original Motion Picture Soundtrack)",
         durationText = "6:47",
         durationSec = 407,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020947984.mp3",
+        streamUrl = "https://aac.saavncdn.com/361/c3e11a3f5187300fd6681c37949f247e_160.mp4",
         coverUrl = "https://c.saavncdn.com/361/Aadmi-Khilona-Hai-Original-Motion-Picture-Soundtrack-Hindi-1993-20250819191246-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
-        id = "s7QNVZKi",
+        id = "zEPw7jMp",
         title = "Aadmi Khilona Hai",
         artist = "Alka Yagnik",
         albumOrMovie = "Aadmi Khilona Hai (Original Motion Picture Soundtrack)",
         durationText = "5:03",
         durationSec = 303,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020947985.mp3",
-        coverUrl = "https://c.saavncdn.com/361/Aadmi-Khilona-Hai-Original-Motion-Picture-Soundtrack-Hindi-1993-20250819191246-500x500.jpg",
+        streamUrl = "https://aac.saavncdn.com/412/78f3d6d3cd7e321705f9bf5d692c68ea_160.mp4",
+        coverUrl = "https://c.saavncdn.com/412/Golden-Melodies-of-Alka-Yagnik-and-Kumar-Sanu-Hindi-2021-20260401031240-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -165,8 +179,41 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Sangraam (Original Motion Picture Soundtrack)",
         durationText = "6:09",
         durationSec = 369,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020949024.mp3",
+        streamUrl = "https://aac.saavncdn.com/533/9dd6eeb4717f03b9e0bbb00762dc65a8_160.mp4",
         coverUrl = "https://c.saavncdn.com/533/Sangraam-Original-Motion-Picture-Soundtrack-Hindi-1993-20250912131400-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "O5OEVwrW",
+        title = "Mhara Ram Raghunath",
+        artist = "Bollywood Artist",
+        albumOrMovie = "Hits of Moinuddin Manchala And Prakash Mali",
+        durationText = "8:09",
+        durationSec = 489,
+        streamUrl = "https://aac.saavncdn.com/055/5ec0fc954d3b71073fea03af78a65585_160.mp4",
+        coverUrl = "https://c.saavncdn.com/055/Hits-of-Moinuddin-Manchala-And-Prakash-Mali-Rajasthani-2014-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "HUtdX98U",
+        title = "Agar Aasman Tak Mere Haath Jaate (From Meherbaan)",
+        artist = "Bollywood Artist",
+        albumOrMovie = "All Time Romantic Hits Of Mithun Chakraborty",
+        durationText = "5:02",
+        durationSec = 302,
+        streamUrl = "https://aac.saavncdn.com/121/cc6ab583cf3349e56a0d06f4907e5026_160.mp4",
+        coverUrl = "https://c.saavncdn.com/121/All-Time-Romantic-Hits-Of-Mithun-Chakraborty-Hindi-2016-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "4mhcWo1B",
+        title = "Yeh Aankhen Hai Aaina",
+        artist = "Kumar Sanu, Alka Yagnik",
+        albumOrMovie = "Stunttman",
+        durationText = "5:38",
+        durationSec = 338,
+        streamUrl = "https://aac.saavncdn.com/407/ad47335916d89947aceff1c781b312bc_160.mp4",
+        coverUrl = "https://c.saavncdn.com/407/Stunttman-Hindi-1994-20240408213744-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -176,8 +223,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Divya Shakti",
         durationText = "6:33",
         durationSec = 393,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910140561620.mp3",
+        streamUrl = "https://aac.saavncdn.com/019/4e239dfe9ae6def67cf9c22b77880d7c_160.mp4",
         coverUrl = "https://c.saavncdn.com/019/Divya-Shakti-Hindi-2017-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "KhF4WaRa",
+        title = "Kitni Hasrat Hai Humein",
+        artist = "Kumar Sanu, Sadhana Sargam",
+        albumOrMovie = "Sainik",
+        durationText = "6:32",
+        durationSec = 392,
+        streamUrl = "https://aac.saavncdn.com/179/cb59ec805f3846d8db1d6ace2b499d0e_160.mp4",
+        coverUrl = "https://c.saavncdn.com/179/Sainik-Hindi-1993-20240408213840-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -187,7 +245,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Hum To Mohabbat Karega",
         durationText = "7:02",
         durationSec = 422,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080025693.mp3",
+        streamUrl = "https://aac.saavncdn.com/934/46e4de3df5c128d01716236d5a274dfc_sar_160.mp4",
         coverUrl = "https://c.saavncdn.com/934/Hum-To-Mohabbat-Karega-Hindi-2000-20171009061149-500x500.jpg",
         category = "90s"
     ),
@@ -198,8 +256,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Bewafa Sanam",
         durationText = "6:10",
         durationSec = 370,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090396034.mp3",
+        streamUrl = "https://aac.saavncdn.com/019/15ccc2fad39b383dc6ccbf1359568137_160.mp4",
         coverUrl = "https://c.saavncdn.com/019/Bewafa-Sanam-Hindi-1995-20230124185643-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "BkLmSY4P",
+        title = "Milne Ki Tum Koshish Karna",
+        artist = "Asha Bhosle, Kumar Sanu",
+        albumOrMovie = "Dil Ka Kya Kasoor",
+        durationText = "6:03",
+        durationSec = 363,
+        streamUrl = "https://aac.saavncdn.com/572/0c2ffa7ee7f17fe1e5a64246ed10963a_160.mp4",
+        coverUrl = "https://c.saavncdn.com/572/Dil-Ka-Kya-Kasoor-Hindi-1992-20261028195249-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -209,7 +278,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Phir Bewafaai Deceived In Love",
         durationText = "6:27",
         durationSec = 387,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910091606550.mp3",
+        streamUrl = "https://aac.saavncdn.com/887/89350e791b08ff163595794896b5f1d6_160.mp4",
         coverUrl = "https://c.saavncdn.com/887/Phir-Bewafaai-Deceived-In-Love-2007-500x500.jpg",
         category = "90s"
     ),
@@ -220,294 +289,8 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Dilwale Kabhi Na Hare",
         durationText = "5:20",
         durationSec = 320,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910140647878.mp3",
+        streamUrl = "https://aac.saavncdn.com/502/1e7fbeb7d4090bde45a246d89641802a_160.mp4",
         coverUrl = "https://c.saavncdn.com/502/Dilwale-Kabhi-Na-Hare-Hindi-1992-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "HyqbmeHP",
-        title = "Tumne Rakh To Lee Tasveer Hamari",
-        artist = "Anuradha Paudwal, Pankaj Udhas",
-        albumOrMovie = "Lal Dupatta Malmal Ka",
-        durationText = "5:15",
-        durationSec = 315,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090117584.mp3",
-        coverUrl = "https://c.saavncdn.com/921/Lal-Dupatta-Malmal-Ka-Hindi-1990-20221208021455-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "UeXh39z0",
-        title = "Mohabbat Inayat Karam Dekhte Hain",
-        artist = "Anuradha Paudwal, Pankaj Udhas",
-        albumOrMovie = "Bahaar Aane Tak",
-        durationText = "6:58",
-        durationSec = 418,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090343063.mp3",
-        coverUrl = "https://c.saavncdn.com/752/Bahaar-Aane-Tak-Hindi-1990-20221207235431-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "KDaVdEp7",
-        title = "Woh To Hai Albela",
-        artist = "Kumar Sanu, Devaki Pandit",
-        albumOrMovie = "Kabhi Haan Kabhi Naa",
-        durationText = "5:09",
-        durationSec = 309,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910140014978.mp3",
-        coverUrl = "https://c.saavncdn.com/051/Kabhi-Haan-Kabhi-Naa-Hindi-1999-20200620121926-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "JY15hO0_",
-        title = "Koi Na Koi Chahiye",
-        artist = "Vinod Rathod",
-        albumOrMovie = "Deewana",
-        durationText = "6:23",
-        durationSec = 383,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948947.mp3",
-        coverUrl = "https://c.saavncdn.com/793/Deewana-Hindi-1992-20221215163751-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "n3CdyaXl",
-        title = "Na Milo Kahin Pyar",
-        artist = "Sonu Nigam, Kavita Krishnamurthy",
-        albumOrMovie = "Badal",
-        durationText = "6:43",
-        durationSec = 403,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912023396848.mp3",
-        coverUrl = "https://c.saavncdn.com/533/Badal-Hindi-1999-20221119140222-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "0fHe7Cqu",
-        title = "Dil Kehta Hai (From Akele Hum Akele Tum)",
-        artist = "Alka Yagnik, Kumar Sanu",
-        albumOrMovie = "Majrooh Sultanpuri's Bollywood Collection",
-        durationText = "6:55",
-        durationSec = 415,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948014.mp3",
-        coverUrl = "https://c.saavncdn.com/614/Majrooh-Sultanpuri-s-Bollywood-Collection-Hindi-2016-20260331205731-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "Cmki9uze",
-        title = "Main Tera Ashiq Hoon",
-        artist = "Roop Kumar Rathod",
-        albumOrMovie = "Gumraah",
-        durationText = "6:57",
-        durationSec = 417,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080036065.mp3",
-        coverUrl = "https://c.saavncdn.com/657/Gumrah-Hindi-1993-20171005103813-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "LsnT84OS",
-        title = "Dil Jab Se Toot Gaya",
-        artist = "Pankaj Udhas",
-        albumOrMovie = "Salaami (Original Motion Picture Soundtrack)",
-        durationText = "5:33",
-        durationSec = 333,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948717.mp3",
-        coverUrl = "https://c.saavncdn.com/151/Salaami-Original-Motion-Picture-Soundtrack-Hindi-1993-20250815044606-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "CGfOlner",
-        title = "Ae Kash Ke Hum",
-        artist = "Kumar Sanu",
-        albumOrMovie = "Kabhi Haan Kabhi Naa",
-        durationText = "5:07",
-        durationSec = 307,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910140014973.mp3",
-        coverUrl = "https://c.saavncdn.com/051/Kabhi-Haan-Kabhi-Naa-Hindi-1999-20200620121926-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "EkvSn2po",
-        title = "To Chalun",
-        artist = "Roop Kumar Rathod",
-        albumOrMovie = "Border (Original Motion Picture Soundtrack)",
-        durationText = "7:38",
-        durationSec = 458,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948985.mp3",
-        coverUrl = "https://c.saavncdn.com/843/Border-Original-Motion-Picture-Soundtrack-Hindi-1999-20250912124905-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "JJrg3uv5",
-        title = "Humko Mohabbat Dhoond Rahi Thi (Kitne Door Kitne Paas / Soundtrack Version)",
-        artist = "Roop Kumar Rathod, Jayshri Shivram",
-        albumOrMovie = "Kitne Door Kitne Paas",
-        durationText = "6:14",
-        durationSec = 374,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912291576113.mp3",
-        coverUrl = "https://c.saavncdn.com/328/Kitne-Door-Kitne-Paas-Hindi-2008-20201126220008-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "_ilNTn4a",
-        title = "Chhupana Bhi Nahin Aata",
-        artist = "Pankaj Udhas",
-        albumOrMovie = "Golden Era",
-        durationText = "6:59",
-        durationSec = 419,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020947956.mp3",
-        coverUrl = "https://c.saavncdn.com/185/Golden-Era-Hindi-2026-20260813171634-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "U9ac0v-y",
-        title = "Yeh Teri Aankhen Jhuki Jhuki",
-        artist = "Jatin-Lalit",
-        albumOrMovie = "Fareb",
-        durationText = "3:22",
-        durationSec = 202,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910440719002.mp3",
-        coverUrl = "https://c.saavncdn.com/887/Fareb-Hindi-2018-20180220-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "rkXa7yEx",
-        title = "Kaash Kahin Aisa Hota",
-        artist = "Kumar Sanu",
-        albumOrMovie = "Heart Touching Love Songs",
-        durationText = "5:05",
-        durationSec = 305,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948650.mp3",
-        coverUrl = "https://c.saavncdn.com/700/Heart-Touching-Love-Songs-Hindi-2021-20260401031231-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "TOyzlrBQ",
-        title = "Kuch Baatein",
-        artist = "Payal Dev, Jubin Nautiyal",
-        albumOrMovie = "Kuch Baatein",
-        durationText = "4:45",
-        durationSec = 285,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910091493655.mp3",
-        coverUrl = "https://c.saavncdn.com/241/Kuch-Baatein-Hindi-2022-20220310031017-500x500.jpg",
-        category = "Trending"
-    ),
-    SongTrack(
-        id = "CKQKCTpJ",
-        title = "Kahan Laya Mera Yaar",
-        artist = "Suresh Wadkar, Alka Yagnik",
-        albumOrMovie = "Suresh Wadkars Bollywood Hits",
-        durationText = "7:44",
-        durationSec = 464,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912261611121.mp3",
-        coverUrl = "https://c.saavncdn.com/578/Suresh-Wadkars-Bollywood-Hits-Hindi-2021-20260401031228-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "VDE7p9P3",
-        title = "Jaan - E - Jigar Jaaneman",
-        artist = "Anuradha Paudwal, Kumar Sanu",
-        albumOrMovie = "Aashiqui",
-        durationText = "5:10",
-        durationSec = 310,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090109224.mp3",
-        coverUrl = "https://c.saavncdn.com/088/Aashiqui-Hindi-1989-20241225141825-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "1Uu08jB-",
-        title = "Agar Aasman Tak Mere Haat Jaate",
-        artist = "Bollywood Artist",
-        albumOrMovie = "Meherbaan",
-        durationText = "4:57",
-        durationSec = 297,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090301251.mp3",
-        coverUrl = "https://c.saavncdn.com/003/Meherbaan-Hindi-1993-20221208022345-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "CvUYEydi",
-        title = "Maa Ka Bulaava Aayega",
-        artist = "Bollywood Artist",
-        albumOrMovie = "Sandeep Aur Pinky Faraar",
-        durationText = "0:56",
-        durationSec = 56,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910391199371.mp3",
-        coverUrl = "https://c.saavncdn.com/149/Sandeep-Aur-Pinky-Faraar-Hindi-2021-20210309125304-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "BAiADMge",
-        title = "Pehli Baarish Mein",
-        artist = "Bollywood Artist",
-        albumOrMovie = "Pehli Baarish Mein",
-        durationText = "4:00",
-        durationSec = 240,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910091967386.mp3",
-        coverUrl = "https://c.saavncdn.com/726/Pehli-Baarish-Mein-Hindi-2023-20230615181015-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "09Tm7xXj",
-        title = "Jise Dekh Mera Dil Dhadke",
-        artist = "Kumar Sanu",
-        albumOrMovie = "Phool Aur Kaante",
-        durationText = "6:36",
-        durationSec = 396,
-        streamUrl = "https://preview.saavncdn.com/882/DmmMTnaIlfkczAPzx86UZGh9oHYLfYfq_96_p.mp4",
-        coverUrl = "https://c.saavncdn.com/882/Phool-Aur-Kaante-Hindi-1991-20240408213850-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "0fUBGGzb",
-        title = "Aayega Bulava to Jana Padega",
-        artist = "Moinudin Manchala",
-        albumOrMovie = "Aayega Bulava to Jana Padega",
-        durationText = "6:09",
-        durationSec = 369,
-        streamUrl = "https://preview.saavncdn.com/691/fLAyv2SmfBbFfBRI7uCMcTUsgUzOFarualhliG_96_p.mp4",
-        coverUrl = "https://c.saavncdn.com/691/Aayega-Bulava-to-Jana-Padega-Hindi-2020-20200925060524-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "xazV6TRo",
-        title = "Agar Aasman Tak Mera",
-        artist = "Anuradha Paudwal, Sonu Nigam",
-        albumOrMovie = "Naaraaz",
-        durationText = "6:16",
-        durationSec = 376,
-        streamUrl = "https://preview.saavncdn.com/362/NpGhmGn0bWcjaDXc3JT9Uydrzt4Am6gPTF3xrJN_96_p.mp4",
-        coverUrl = "https://c.saavncdn.com/362/Naaraaz-Hindi-1994-20240408213718-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "4mhcWo1B",
-        title = "Yeh Aankhen Hai Aaina",
-        artist = "Kumar Sanu, Alka Yagnik",
-        albumOrMovie = "Stunttman",
-        durationText = "5:38",
-        durationSec = 338,
-        streamUrl = "https://preview.saavncdn.com/407/aqyD3eFuCoHc5VCCNPZIrfPJj9rYMl9AAc_96_p.mp4",
-        coverUrl = "https://c.saavncdn.com/407/Stunttman-Hindi-1994-20240408213744-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "KhF4WaRa",
-        title = "Kitni Hasrat Hai Humein",
-        artist = "Kumar Sanu, Sadhana Sargam",
-        albumOrMovie = "Sainik",
-        durationText = "6:32",
-        durationSec = 392,
-        streamUrl = "https://preview.saavncdn.com/179/2U6Lc0eVyeoLqrH07nRwnW62WnLdOLLdQhZ_96_p.mp4",
-        coverUrl = "https://c.saavncdn.com/179/Sainik-Hindi-1993-20240408213840-500x500.jpg",
-        category = "90s"
-    ),
-    SongTrack(
-        id = "BkLmSY4P",
-        title = "Milne Ki Tum Koshish Karna",
-        artist = "Asha Bhosle, Kumar Sanu",
-        albumOrMovie = "Dil Ka Kya Kasoor",
-        durationText = "6:03",
-        durationSec = 363,
-        streamUrl = "https://preview.saavncdn.com/572/veG5oLn18v2h3elPv4PIlBtDOW59J2wnOU9Ju7ypXAAd1K_96_p.mp4",
-        coverUrl = "https://c.saavncdn.com/572/Dil-Ka-Kya-Kasoor-Hindi-1992-20261028195249-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -517,7 +300,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Hum Hain Rahi Pyar Ke",
         durationText = "6:16",
         durationSec = 376,
-        streamUrl = "https://preview.saavncdn.com/080/3eVMZO679OCICVNgXMbpQ1QrcqYIbhZd_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/080/5d0943b0a115e7276f0febd52ed41a15_160.mp4",
         coverUrl = "https://c.saavncdn.com/080/Hum-Hain-Rahi-Pyar-Ke-Hindi-1993-20240408213752-500x500.jpg",
         category = "90s"
     ),
@@ -528,7 +311,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Banjaran",
         durationText = "5:43",
         durationSec = 343,
-        streamUrl = "https://preview.saavncdn.com/183/WP69PksplgK7cPmhDy4UaOgOmS57W7EZIS_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/183/d7c386ae53cbb49f1cc23ef5ae7403a6_160.mp4",
         coverUrl = "https://c.saavncdn.com/183/Banjaran-Hindi-1991-20240408213830-500x500.jpg",
         category = "90s"
     ),
@@ -539,8 +322,30 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Imtihan",
         durationText = "7:57",
         durationSec = 477,
-        streamUrl = "https://preview.saavncdn.com/458/CeBmojK4nTi5zqIIzGvK4JtzabI2vzgJghSGOO_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/458/74b559ef217557e3b118f23c6cf248b9_160.mp4",
         coverUrl = "https://c.saavncdn.com/458/Imtihan-Hindi-1994-20240408214016-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "HyqbmeHP",
+        title = "Tumne Rakh To Lee Tasveer Hamari",
+        artist = "Anuradha Paudwal, Pankaj Udhas",
+        albumOrMovie = "Lal Dupatta Malmal Ka",
+        durationText = "5:15",
+        durationSec = 315,
+        streamUrl = "https://aac.saavncdn.com/921/5e6929453ce932824f40d959b3f54e39_160.mp4",
+        coverUrl = "https://c.saavncdn.com/921/Lal-Dupatta-Malmal-Ka-Hindi-1990-20221208021455-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "0HB3AYN1",
+        title = "Mohabbat Inayat Karam Dekhte Hain",
+        artist = "Anuradha Paudwal, Pankaj Udhas",
+        albumOrMovie = "Bahaar Aane Tak",
+        durationText = "7:00",
+        durationSec = 420,
+        streamUrl = "https://aac.saavncdn.com/063/ac9e7784a4ffb248e7c6d20fb5aeb44e_160.mp4",
+        coverUrl = "https://c.saavncdn.com/752/Bahaar-Aane-Tak-Hindi-1990-20221207235431-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -550,7 +355,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Phir Teri Kahani Yaad Aayee",
         durationText = "6:14",
         durationSec = 374,
-        streamUrl = "https://preview.saavncdn.com/643/2lqxRdcoEXq5T2ggoid58aYfOixyBGPZ8GttjKUKj_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/643/e05d707e8ef51023cd68445c8ca5a7ef_160.mp4",
         coverUrl = "https://c.saavncdn.com/643/Phir-Teri-Kahani-Yaad-Aayee-Hindi-1993-20240408213831-500x500.jpg",
         category = "90s"
     ),
@@ -561,7 +366,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Phool Aur Kaante",
         durationText = "4:52",
         durationSec = 292,
-        streamUrl = "https://preview.saavncdn.com/882/LiA4We1rV022tmTjRdH5JqifAA6mxybhL9_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/882/44bca62adbf456fec2f278ed14978901_160.mp4",
         coverUrl = "https://c.saavncdn.com/882/Phool-Aur-Kaante-Hindi-1991-20240408213850-500x500.jpg",
         category = "90s"
     ),
@@ -572,7 +377,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Himmat",
         durationText = "6:41",
         durationSec = 401,
-        streamUrl = "https://preview.saavncdn.com/992/Kmu2ON8h1hfUH6rAkWhelK3mAQZhOnuQL4nhtnn8JN_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/992/d679d25fc163da9c8fdd363af157816f_160.mp4",
         coverUrl = "https://c.saavncdn.com/992/Himmat-Hindi-1996-20240408222459-500x500.jpg",
         category = "90s"
     ),
@@ -583,7 +388,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Yeh Dillagi",
         durationText = "4:52",
         durationSec = 292,
-        streamUrl = "https://preview.saavncdn.com/669/3PnV7WSeRgADNpQDzjl5P3UPTW0Y1NSg41Z_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/669/54af09a64eddf9d8f55744f7a4831f39_160.mp4",
         coverUrl = "https://c.saavncdn.com/669/Yeh-Dillagi-Hindi-1994-20240408213825-500x500.jpg",
         category = "90s"
     ),
@@ -594,8 +399,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Phool Aur Kaante",
         durationText = "5:28",
         durationSec = 328,
-        streamUrl = "https://preview.saavncdn.com/882/Jm2rg5DrV8GmWLy8zENKgFwA4JGJPtLmscpaYqs_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/882/d02978cd015f04e88bd9b469eeaa7859_160.mp4",
         coverUrl = "https://c.saavncdn.com/882/Phool-Aur-Kaante-Hindi-1991-20240408213850-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "KDaVdEp7",
+        title = "Woh To Hai Albela",
+        artist = "Kumar Sanu, Devaki Pandit",
+        albumOrMovie = "Kabhi Haan Kabhi Naa",
+        durationText = "5:09",
+        durationSec = 309,
+        streamUrl = "https://aac.saavncdn.com/051/aa57685e5952b36d4837dcf2f85c8fd1_160.mp4",
+        coverUrl = "https://c.saavncdn.com/051/Kabhi-Haan-Kabhi-Naa-Hindi-1999-20200620121926-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -605,7 +421,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Phir Teri Kahani Yaad Aayee",
         durationText = "6:06",
         durationSec = 366,
-        streamUrl = "https://preview.saavncdn.com/643/zaWzaKCnDGzbXQldjhMLleFLXMQTdfObrWcDiPUW_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/643/d6d3dbc9fae91d246e13eb6bb6d0c23d_160.mp4",
         coverUrl = "https://c.saavncdn.com/643/Phir-Teri-Kahani-Yaad-Aayee-Hindi-1993-20240408213831-500x500.jpg",
         category = "90s"
     ),
@@ -616,8 +432,85 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Gopi Kishan",
         durationText = "5:52",
         durationSec = 352,
-        streamUrl = "https://preview.saavncdn.com/886/gquWzNIj4GNet0ciJCUkKyWUPnuuYxbAnDsoftg6_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/886/486691b0d166de37d64f99abd5421e2a_160.mp4",
         coverUrl = "https://c.saavncdn.com/886/Gopi-Kishan-Hindi-1994-20240408213920-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "JY15hO0_",
+        title = "Koi Na Koi Chahiye",
+        artist = "Vinod Rathod",
+        albumOrMovie = "Deewana",
+        durationText = "6:23",
+        durationSec = 383,
+        streamUrl = "https://aac.saavncdn.com/793/c3e470fb2da21f9f2200b546662a3835_160.mp4",
+        coverUrl = "https://c.saavncdn.com/793/Deewana-Hindi-1992-20221215163751-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "n3CdyaXl",
+        title = "Na Milo Kahin Pyar",
+        artist = "Sonu Nigam, Kavita Krishnamurthy",
+        albumOrMovie = "Badal",
+        durationText = "6:43",
+        durationSec = 403,
+        streamUrl = "https://aac.saavncdn.com/533/f6f7e2e7422865439dbc3de49703885d_160.mp4",
+        coverUrl = "https://c.saavncdn.com/533/Badal-Hindi-1999-20221119140222-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "0fHe7Cqu",
+        title = "Dil Kehta Hai (From Akele Hum Akele Tum)",
+        artist = "Alka Yagnik, Kumar Sanu",
+        albumOrMovie = "Majrooh Sultanpuri's Bollywood Collection",
+        durationText = "6:55",
+        durationSec = 415,
+        streamUrl = "https://aac.saavncdn.com/614/64df48dd550a8a9572c0a91bbf2fb503_160.mp4",
+        coverUrl = "https://c.saavncdn.com/614/Majrooh-Sultanpuri-s-Bollywood-Collection-Hindi-2016-20260331205731-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "Cmki9uze",
+        title = "Main Tera Ashiq Hoon",
+        artist = "Roop Kumar Rathod",
+        albumOrMovie = "Gumraah",
+        durationText = "6:57",
+        durationSec = 417,
+        streamUrl = "https://aac.saavncdn.com/657/8bd36bd9f263568492c2e1a22563c723_sar_160.mp4",
+        coverUrl = "https://c.saavncdn.com/657/Gumrah-Hindi-1993-20171005103813-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "fqx90e2H",
+        title = "Dil Jab Se Toot Gaya (From Salaami)",
+        artist = "Bollywood Artist",
+        albumOrMovie = "Why Did U Break My Heart",
+        durationText = "5:33",
+        durationSec = 333,
+        streamUrl = "https://aac.saavncdn.com/775/c2e4cbaa59aa1b166ea0d8d7db648b16_160.mp4",
+        coverUrl = "https://c.saavncdn.com/775/Why-Did-U-Break-My-Heart-Hindi-2016-20250731053347-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "CGfOlner",
+        title = "Ae Kash Ke Hum",
+        artist = "Kumar Sanu",
+        albumOrMovie = "Kabhi Haan Kabhi Naa",
+        durationText = "5:07",
+        durationSec = 307,
+        streamUrl = "https://aac.saavncdn.com/051/991edfb17cffed7028aa6940beeb7658_160.mp4",
+        coverUrl = "https://c.saavncdn.com/051/Kabhi-Haan-Kabhi-Naa-Hindi-1999-20200620121926-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "kcvIMgBv",
+        title = "To Chalun (From Border)",
+        artist = "Bollywood Artist",
+        albumOrMovie = "Musical Voice of Roop Kumar Rathod",
+        durationText = "7:38",
+        durationSec = 458,
+        streamUrl = "https://aac.saavncdn.com/143/40c145ef468fb5f507461003b6f93c96_160.mp4",
+        coverUrl = "https://c.saavncdn.com/143/Musical-Voice-of-Roop-Kumar-Rathod-Hindi-2016-20260420220240-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -627,8 +520,30 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Jaan Tere Naam",
         durationText = "4:51",
         durationSec = 291,
-        streamUrl = "https://preview.saavncdn.com/172/k7Ct4SzWbSSuZqY3akuaKVt5LJ6PmFKkD_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/172/2c243a3386c9fb3180dadd0f27faf119_160.mp4",
         coverUrl = "https://c.saavncdn.com/172/Jaan-Tere-Naam-Hindi-1992-20240408213836-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "JJrg3uv5",
+        title = "Humko Mohabbat Dhoond Rahi Thi (Kitne Door Kitne Paas / Soundtrack Version)",
+        artist = "Roop Kumar Rathod, Jayshri Shivram",
+        albumOrMovie = "Kitne Door Kitne Paas",
+        durationText = "6:14",
+        durationSec = 374,
+        streamUrl = "https://aac.saavncdn.com/328/6964d656b99e8cab72318ef76f8b7489_160.mp4",
+        coverUrl = "https://c.saavncdn.com/328/Kitne-Door-Kitne-Paas-Hindi-2008-20201126220008-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "olzQefIm",
+        title = "Chhupana Bhi Nahin Aata-Pankaj Udhas",
+        artist = "Bollywood Artist",
+        albumOrMovie = "Baazigar",
+        durationText = "5:31",
+        durationSec = 331,
+        streamUrl = "https://aac.saavncdn.com/409/82e75dcc6abaf1a0c92cab5d38ee1f5e_160.mp4",
+        coverUrl = "https://c.saavncdn.com/409/Baazigar-Hindi-1993-20210226141521-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -638,8 +553,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Takkar",
         durationText = "5:35",
         durationSec = 335,
-        streamUrl = "https://preview.saavncdn.com/476/KivnooGQWGbZtBsFZX5dNzijjJerTf51AzIOOR_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/476/27d2c0a290cf4d5244277949b3e3d99b_160.mp4",
         coverUrl = "https://c.saavncdn.com/476/Takkar-Hindi-1995-20240408221331-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "U9ac0v-y",
+        title = "Yeh Teri Aankhen Jhuki Jhuki",
+        artist = "Jatin-Lalit",
+        albumOrMovie = "Fareb",
+        durationText = "3:22",
+        durationSec = 202,
+        streamUrl = "https://aac.saavncdn.com/887/dee0bed0223a8d4ceea253c745729e1e_160.mp4",
+        coverUrl = "https://c.saavncdn.com/887/Fareb-Hindi-2018-20180220-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -649,8 +575,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Dil Ka Rishta",
         durationText = "1:35",
         durationSec = 95,
-        streamUrl = "https://preview.saavncdn.com/589/Qa0xZsfUqCBpd8GOyGIcONQAyAxNtrwCMo0XFnjSlOmfIi_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/589/d6e48ac9a0878c821dc5b9819c76578d_160.mp4",
         coverUrl = "https://c.saavncdn.com/589/Dil-Ka-Rishta-Hindi-2003-20261105195257-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "C9EPvjE0",
+        title = "Kaash Kahin Aisa Hota",
+        artist = "Kumar Sanu",
+        albumOrMovie = "Heart Touching Love Songs",
+        durationText = "5:05",
+        durationSec = 305,
+        streamUrl = "https://aac.saavncdn.com/041/bcf832e5f823d647c689c1758e71a3dd_160.mp4",
+        coverUrl = "https://c.saavncdn.com/041/Mohra-Hindi-1994-20210226141759-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -660,7 +597,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Sanam",
         durationText = "5:59",
         durationSec = 359,
-        streamUrl = "https://preview.saavncdn.com/186/avCqAigli170whovFARxm4Ijk9dCnVGdH8XjE6f_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/186/a7be497a523c107bc41c53bd6e84a7f8_160.mp4",
         coverUrl = "https://c.saavncdn.com/186/Sanam-Hindi-1997-20240408213817-500x500.jpg",
         category = "90s"
     ),
@@ -671,7 +608,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Coolie No.1",
         durationText = "6:25",
         durationSec = 385,
-        streamUrl = "https://preview.saavncdn.com/442/fdRUqZRfexWQXwJz2e1mwm1a3Uw6SmhvSW24haUMeltn_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/442/55f28cfc2306c8c597c91102ba1a1e7a_160.mp4",
         coverUrl = "https://c.saavncdn.com/442/Coolie-No-1-Hindi-1995-20240408213912-500x500.jpg",
         category = "90s"
     ),
@@ -682,8 +619,30 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Rang",
         durationText = "7:03",
         durationSec = 423,
-        streamUrl = "https://preview.saavncdn.com/056/oSkzxu2k9PAMzQ22YkvDnb8z1vO8GF2xMp1rXgQAbbnilW_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/056/e3b1a2eda23601de337c2b1aee2e1aa2_160.mp4",
         coverUrl = "https://c.saavncdn.com/056/Rang-Hindi-1993-20240408213822-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "TOyzlrBQ",
+        title = "Kuch Baatein",
+        artist = "Payal Dev, Jubin Nautiyal",
+        albumOrMovie = "Kuch Baatein",
+        durationText = "4:45",
+        durationSec = 285,
+        streamUrl = "https://aac.saavncdn.com/241/3e1b0710bac64063546d09095baafdcd_160.mp4",
+        coverUrl = "https://c.saavncdn.com/241/Kuch-Baatein-Hindi-2022-20220310031017-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "S_u0toEn",
+        title = "Kahan Laya Mera Yaar",
+        artist = "Suresh Wadkar, Alka Yagnik",
+        albumOrMovie = "Suresh Wadkars Bollywood Hits",
+        durationText = "7:44",
+        durationSec = 464,
+        streamUrl = "https://aac.saavncdn.com/611/9944873d89c340f85465392c4907c423_160.mp4",
+        coverUrl = "https://c.saavncdn.com/337/Agnee-Hindi-1995-20210511172844-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -693,7 +652,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Saajan Chale Sasural",
         durationText = "5:52",
         durationSec = 352,
-        streamUrl = "https://preview.saavncdn.com/124/ZLGTawsTtsiUEt5hG5kHMiIqwsafz08r_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/124/fb38cbc77188b50e1c8ebe62026937d1_160.mp4",
         coverUrl = "https://c.saavncdn.com/124/Saajan-Chale-Sasural-Hindi-1996-20240408213758-500x500.jpg",
         category = "90s"
     ),
@@ -704,7 +663,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Jeet",
         durationText = "9:09",
         durationSec = 549,
-        streamUrl = "https://preview.saavncdn.com/257/MPs8GccX0ahYMghtHK0o1XgDFl14S1n5xzXOBWvnLVO1E_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/257/47256d20096eaefb7a357f51d757aa1b_160.mp4",
         coverUrl = "https://c.saavncdn.com/257/Jeet-Hindi-1996-20240408213927-500x500.jpg",
         category = "90s"
     ),
@@ -715,8 +674,19 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Imtihan",
         durationText = "7:23",
         durationSec = 443,
-        streamUrl = "https://preview.saavncdn.com/458/aC8kUN6kt0u0OFrVjc6mu4Ltw1rlCZ3xoj4dL4x_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/458/c488424c5528d08ba50576843c95c404_160.mp4",
         coverUrl = "https://c.saavncdn.com/458/Imtihan-Hindi-1994-20240408214016-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "VDE7p9P3",
+        title = "Jaan - E - Jigar Jaaneman",
+        artist = "Anuradha Paudwal, Kumar Sanu",
+        albumOrMovie = "Aashiqui",
+        durationText = "5:10",
+        durationSec = 310,
+        streamUrl = "https://aac.saavncdn.com/088/9d85698c399527698b782b1a88b80c72_160.mp4",
+        coverUrl = "https://c.saavncdn.com/088/Aashiqui-Hindi-1989-20241225141825-500x500.jpg",
         category = "90s"
     ),
     SongTrack(
@@ -726,7 +696,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Phool Aur Kaante",
         durationText = "7:02",
         durationSec = 422,
-        streamUrl = "https://preview.saavncdn.com/882/VAhfMac932TPYujVxP2738gDqPqNLkkAuK_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/882/830d7d312fec4a009a0371d5a5133d1c_160.mp4",
         coverUrl = "https://c.saavncdn.com/882/Phool-Aur-Kaante-Hindi-1991-20240408213850-500x500.jpg",
         category = "90s"
     ),
@@ -737,7 +707,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Rang",
         durationText = "5:13",
         durationSec = 313,
-        streamUrl = "https://preview.saavncdn.com/056/ccJZ1uCb7IJhbn693EswkYsmYNpmsuY82hFNOh8c74jsV_96_p.mp4",
+        streamUrl = "https://aac.saavncdn.com/056/a855f32c8049b8120e31a9b293d1e3a0_160.mp4",
         coverUrl = "https://c.saavncdn.com/056/Rang-Hindi-1993-20240408213822-500x500.jpg",
         category = "90s"
     )
@@ -1239,7 +1209,7 @@ fun MusicHubScreen(
                         onClick = onBack,
                         modifier = Modifier
                             .size(26.dp)
-                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                            .background(Color.White.copy(alpha = 0.15f), CircleShape)
                     ) {
                         Icon(
                             Icons.Default.ArrowBack,
@@ -1271,36 +1241,66 @@ fun MusicHubScreen(
                 }
             }
 
-            // Slim Single-Line Search Bar strictly in One Line
-            OutlinedTextField(
+            // Slim Single-Line Search Bar strictly in One Line (Zero-Clipping BasicTextField)
+            BasicTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search songs, lyrics, 70s-90s classics...", fontSize = 11.5.sp, color = Color(0xFF71717A), maxLines = 1) },
                 singleLine = true,
                 maxLines = 1,
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(17.dp))
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                },
+                textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+                cursorBrush = SolidColor(Color(0xFF1DB954)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
-                    .padding(horizontal = 14.dp, vertical = 2.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF1DB954),
-                    unfocusedBorderColor = Color(0xFF27272A),
-                    focusedContainerColor = Color(0xFF18181B),
-                    unfocusedContainerColor = Color(0xFF18181B),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                )
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                decorationBox = { innerTextField ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF18181B))
+                            .border(
+                                width = 1.dp,
+                                color = if (searchQuery.isNotEmpty()) Color(0xFF1DB954) else Color(0xFF27272A),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = Color(0xFF1DB954),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    "Search songs, lyrics, 70s-90s classics...",
+                                    color = Color(0xFF71717A),
+                                    fontSize = 12.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            innerTextField()
+                        }
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Clear",
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             )
 
             // Category Filter Chips
