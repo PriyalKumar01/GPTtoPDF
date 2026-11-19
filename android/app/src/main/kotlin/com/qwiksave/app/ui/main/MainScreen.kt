@@ -13,6 +13,7 @@ import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,6 +54,7 @@ import com.qwiksave.app.sdk.ExtractedMedia
 import com.qwiksave.app.sdk.QwikSaveClient
 import com.qwiksave.app.ui.components.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -131,7 +133,10 @@ fun MainScreen(
             if (isMusicHubOpen) {
                 MusicHubScreen(
                     client = client,
-                    onBack = { isMusicHubOpen = false }
+                    onBack = {
+                        isMusicHubOpen = false
+                        selectedBottomTab = 2 // Return to Social Media downloader page
+                    }
                 )
             } else {
                 when (selectedBottomTab) {
@@ -443,7 +448,7 @@ fun ExploreTabContent(
                                     result.onSuccess { media ->
                                         quickResult = media
                                         quickStatus = "Extracted: ${media.title} (${media.quality})"
-                                        scrollState.animateScrollTo(scrollState.maxValue)
+                                        scrollState.animateScrollTo((scrollState.value + 350).coerceAtMost(scrollState.maxValue))
                                     }.onFailure { err ->
                                         quickStatus = "Extraction notice: ${err.message}"
                                     }
@@ -2570,7 +2575,7 @@ fun SocialMediaTabContent(
                                         res.onSuccess {
                                             instaResult = it
                                             statusMessage = if (it.items.size > 1) "Ready: Carousel (${it.items.size} items) 📸" else if (!it.isVideo) "Ready: High-Res Photo 🖼️" else "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
-                                            scrollState.animateScrollTo(scrollState.maxValue)
+                                            scrollState.animateScrollTo((scrollState.value + 350).coerceAtMost(scrollState.maxValue))
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
                                     }
                                     1 -> {
@@ -2579,7 +2584,7 @@ fun SocialMediaTabContent(
                                         res.onSuccess {
                                             fbFormats = it
                                             statusMessage = "Found ${it.size} stream formats"
-                                            scrollState.animateScrollTo(scrollState.maxValue)
+                                            scrollState.animateScrollTo((scrollState.value + 350).coerceAtMost(scrollState.maxValue))
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
                                     }
                                     2 -> {
@@ -2588,7 +2593,7 @@ fun SocialMediaTabContent(
                                         res.onSuccess {
                                             ytResult = it
                                             statusMessage = if (it.items.size > 1) "Ready: Carousel (${it.items.size} items) 📸" else if (!it.isVideo) "Ready: High-Res Photo 🖼️" else "Ready: 1080p HD (${it.fileSizeMb ?: "Full HD"})"
-                                            scrollState.animateScrollTo(scrollState.maxValue)
+                                            scrollState.animateScrollTo((scrollState.value + 350).coerceAtMost(scrollState.maxValue))
                                         }.onFailure { statusMessage = "Error: ${it.message}" }
                                     }
                                 }
@@ -2608,6 +2613,12 @@ fun SocialMediaTabContent(
                         }
                     }
                 }
+
+                // Compact Line Progress Bar with live percentage
+                DownloadProgressBar(
+                    isLoading = isLoading,
+                    accentColor = platformColor
+                )
 
                 statusMessage?.let {
                     Text(
@@ -3228,7 +3239,8 @@ fun SocialMediaTabContent(
                 OutlinedTextField(
                     value = audioInputUrl,
                     onValueChange = { audioInputUrl = it },
-                    placeholder = { Text("Paste video link (YouTube, FB, Insta, MP4 URL)...", fontSize = 12.sp, color = Color(0xFF64748B)) },
+                    placeholder = { Text("Paste your link", fontSize = 12.sp, color = Color(0xFF64748B), maxLines = 1) },
+                    maxLines = 1,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
@@ -3319,6 +3331,12 @@ fun SocialMediaTabContent(
                         }
                     }
                 }
+
+                // Compact Line Progress Bar with live percentage for MP3 Extractor
+                DownloadProgressBar(
+                    isLoading = isAudioExtracting,
+                    accentColor = Color(0xFF0284C7)
+                )
 
                 audioStatusMessage?.let {
                     Text(
@@ -3707,6 +3725,110 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Ultra-Compact, Stylish Download Progress Line with Realistic Percentage Counter
+ * Climbs quickly to ~85-90%, then 92%, 95%, 97%, 98%, 99% until complete.
+ */
+@Composable
+fun DownloadProgressBar(
+    isLoading: Boolean,
+    accentColor: Color = Color(0xFF1DB954),
+    modifier: Modifier = Modifier
+) {
+    if (!isLoading) return
+
+    var progress by remember { mutableStateOf(0.05f) }
+    LaunchedEffect(isLoading) {
+        val startTime = System.currentTimeMillis()
+        while (isLoading) {
+            val elapsed = System.currentTimeMillis() - startTime
+            val target = when {
+                elapsed < 400 -> 0.20f
+                elapsed < 900 -> 0.48f
+                elapsed < 1600 -> 0.74f
+                elapsed < 2400 -> 0.88f
+                elapsed < 3600 -> 0.92f
+                elapsed < 5000 -> 0.95f
+                elapsed < 7000 -> 0.97f
+                elapsed < 9000 -> 0.98f
+                else -> 0.99f
+            }
+            if (progress < target) {
+                progress = (progress + 0.04f).coerceAtMost(target)
+            }
+            delay(50)
+        }
+    }
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 160, easing = LinearEasing),
+        label = "progress"
+    )
+
+    val percent = (animatedProgress * 100).toInt().coerceIn(1, 99)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(accentColor)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = when {
+                        percent < 30 -> "Connecting to server..."
+                        percent < 75 -> "Extracting high-speed stream..."
+                        percent < 95 -> "Processing media streams..."
+                        else -> "Finalizing download..."
+                    },
+                    fontSize = 11.sp,
+                    color = Color(0xFF64748B),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Text(
+                text = "$percent%",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = accentColor
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        // Sleek line bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accentColor.copy(alpha = 0.15f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(animatedProgress)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(accentColor.copy(alpha = 0.7f), accentColor)
+                        )
+                    )
+            )
         }
     }
 }
