@@ -236,7 +236,7 @@ object InstagramWebViewExtractor {
                                                         platform = "instagram",
                                                         isVideo = finalIsVideo,
                                                         author = "@instagram_creator",
-                                                        durationText = if (finalIsVideo) "0:30" else null,
+                                                        durationText = null,
                                                         items = mediaItemList
                                                     )
                                                 )
@@ -259,7 +259,7 @@ object InstagramWebViewExtractor {
                                                                 platform = "instagram",
                                                                 isVideo = true,
                                                                 author = "@instagram_creator",
-                                                                durationText = "0:30",
+                                                                durationText = null,
                                                                 items = listOf(MediaItem(v, true, quality = "1080p Full HD"))
                                                             )
                                                         )
@@ -286,7 +286,7 @@ object InstagramWebViewExtractor {
                                                             platform = "instagram",
                                                             isVideo = true,
                                                             author = "@instagram_creator",
-                                                            durationText = "0:30",
+                                                            durationText = null,
                                                             items = listOf(MediaItem(v, true, quality = "1080p Full HD"))
                                                         )
                                                     )
