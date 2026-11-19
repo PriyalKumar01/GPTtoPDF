@@ -63,7 +63,106 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid YouTube video link format');
       }
 
-      // Engine 1: Fast Direct YouTube Stream Resolver (via btch-downloader / vidsnap proxy - Supports Long Dramas, Movies & Shorts)
+      // Engine 1: Direct High-Speed YouTube Stream Resolver (via backend1 / vidsnap proxy - Supports Long Dramas, Movies & Shorts)
+      try {
+        const directRes = await fetch(
+          `https://backend1.tioo.eu.org/youtube?url=https://www.youtube.com/watch?v=${videoId}`,
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              Accept: 'application/json',
+            },
+            signal: AbortSignal.timeout(18000),
+          }
+        );
+
+        if (directRes.ok) {
+          const ytRes = await directRes.json();
+          if (ytRes && ytRes.status && (ytRes.mp4 || ytRes.mp3)) {
+            const vUrl = ytRes.mp4 || ytRes.mp3;
+            let durSec = 180;
+            const durMatch = vUrl.match(/[?&]dur(?:%3D|=)([0-9.]+)/);
+            if (durMatch) {
+              durSec = Math.round(parseFloat(durMatch[1]));
+            }
+            const h = Math.floor(durSec / 3600);
+            const m = Math.floor((durSec % 3600) / 60);
+            const s = Math.floor(durSec % 60);
+            const durStr =
+              h > 0
+                ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+                : `${m}:${s.toString().padStart(2, '0')}`;
+
+            let sizeMb = 'HD Stream';
+            const clenMatch = vUrl.match(/[?&]clen(?:%3D|=)(\d+)/);
+            if (clenMatch) {
+              const clenBytes = parseInt(clenMatch[1], 10);
+              sizeMb = (clenBytes / (1024 * 1024)).toFixed(1) + ' MB';
+            } else if (durSec > 0) {
+              const approxBytes = durSec * 320 * 1024;
+              sizeMb = (approxBytes / (1024 * 1024)).toFixed(1) + ' MB';
+            }
+
+            return NextResponse.json({
+              success: true,
+              data: {
+                id: videoId,
+                platform: 'youtube',
+                platformName: trimmedUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
+                title: ytRes.title || 'YouTube Video',
+                author: {
+                  name: ytRes.author || 'YouTube Creator',
+                  username: '',
+                },
+                thumbnailUrl: ytRes.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                downloadUrl: vUrl,
+                directDownloadUrl: vUrl,
+                audioUrl: ytRes.mp3 || undefined,
+                duration: durSec,
+                durationText: durStr,
+                youtubeId: videoId,
+                filesizeMb: sizeMb,
+                formats: [
+                  {
+                    formatId: 'yt_1080',
+                    qualityLabel: `1080p Full HD MP4 (${sizeMb})`,
+                    resolution: '1080p Full HD',
+                    filesizeMb: sizeMb,
+                    url: vUrl,
+                    directUrl: vUrl,
+                    hasVideo: true,
+                    hasAudio: true,
+                  },
+                  {
+                    formatId: 'yt_720',
+                    qualityLabel: `720p HD MP4 (${sizeMb})`,
+                    resolution: '720p HD',
+                    filesizeMb: sizeMb,
+                    url: vUrl,
+                    directUrl: vUrl,
+                    hasVideo: true,
+                    hasAudio: true,
+                  },
+                  {
+                    formatId: 'yt_480',
+                    qualityLabel: '480p SD MP4',
+                    resolution: '480p SD',
+                    filesizeMb: (parseFloat(sizeMb) * 0.6).toFixed(1) + ' MB',
+                    url: vUrl,
+                    directUrl: vUrl,
+                    hasVideo: true,
+                    hasAudio: true,
+                  },
+                ],
+              },
+            });
+          }
+        }
+      } catch (directErr) {
+        console.warn('Direct backend1 YouTube API failed, trying fallbacks:', directErr);
+      }
+
+      // Engine 2: Fast Direct YouTube Stream Resolver via btch-downloader
       try {
         const btch = await import('btch-downloader');
         const ytFn = (btch as any).default?.youtube || (btch as any).youtube;

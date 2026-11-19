@@ -92,11 +92,9 @@ fun MainScreen(
         Color(0xFF121212) // Dark Greenish Spotify Hub Vibe
     } else when (selectedBottomTab) {
         1 -> when (selectedPdfSubTab) {
-            0 -> Color(0xFFF8FAFC) // AI Notes - Deep Slate tint
-            1 -> Color(0xFFF5F3FF) // Image to PDF - Soft Violet tint
-            2 -> Color(0xFFEEF2FF) // Merge PDF - Soft Indigo tint
-            3 -> Color(0xFFECFDF5) // Compress PDF - Soft Emerald tint
-            else -> Color(0xFFECFEFF) // PDF to Image - Soft Cyan tint
+            0 -> Color(0xFFF8FAFC) // AI Study Notes
+            1 -> Color(0xFFF5F3FF) // Image ↔ PDF
+            else -> Color(0xFFEEF2FF) // Merge & Compress
         }
         2 -> when (selectedSocialPlatform) {
             0 -> Color(0xFFFFF1F2) // Instagram - Soft Rose/Pink tint
@@ -648,7 +646,7 @@ fun ExploreTabContent(
                 badge = "Fast",
                 badgeColor = Color(0xFFF59E0B),
                 logo = { Icon(Icons.Default.Compress, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(32.dp)) },
-                onClick = { onNavigateToPdf(3) }
+                onClick = { onNavigateToPdf(2) }
             )
 
             // 8. PDF to Image
@@ -658,7 +656,7 @@ fun ExploreTabContent(
                 badge = "HD",
                 badgeColor = Color(0xFF06B6D4),
                 logo = { Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF0891B2), modifier = Modifier.size(32.dp)) },
-                onClick = { onNavigateToPdf(4) }
+                onClick = { onNavigateToPdf(1) }
             )
 
             // 9. QR Code Studio
@@ -795,7 +793,7 @@ fun PdfToolsTabContent(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    val subTabs = listOf("AI Notes", "Image to PDF", "Merge PDF", "Compress", "PDF to Image")
+    val subTabs = listOf("AI Study Notes", "Image ↔ PDF", "Merge & Compress")
 
     // Image to PDF states
     var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -930,13 +928,11 @@ fun PdfToolsTabContent(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            AiNotesLogo(size = 32.dp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("AI Chat to Academic Study PDF", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                Text("Generates university study PDFs with College Study Partner badge", fontSize = 11.sp, color = Color(0xFF64748B))
-                            }
+                            AiNotesLogo(size = 24.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("AI Chat to Academic Study Notes", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
                         }
+                        Text("Convert ChatGPT, Claude & Gemini chats into clean exam study PDFs", fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
 
                         // Mode Selector: AI Link vs Direct Text vs Builder
                         Row(
@@ -1538,6 +1534,91 @@ fun PdfToolsTabContent(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // PDF to Image Section
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA5F3FC)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF0891B2), modifier = Modifier.size(28.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text("PDF to Image Converter", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                Text("Extract each page of a PDF document into high-resolution PNG pictures", fontSize = 11.sp, color = Color(0xFF64748B))
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = { pdfToImagePickerLauncher.launch("application/pdf") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (pdfToImageUri == null) "Select PDF File" else "Selected: $pdfToImageName",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        if (pdfToImageUri != null) {
+                            Button(
+                                onClick = {
+                                    isExtractingImages = true
+                                    coroutineScope.launch {
+                                        val base = pdfToImageName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                                        val res = client.convertPdfToImages(context, pdfToImageUri!!, base)
+                                        isExtractingImages = false
+                                        res.onSuccess { files ->
+                                            extractedImagesList = files
+                                            Toast.makeText(context, "Extracted ${files.size} pages to Pictures/QwikSave!", Toast.LENGTH_LONG).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0891B2)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !isExtractingImages
+                            ) {
+                                if (isExtractingImages) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Extracting Pages...", fontSize = 12.sp)
+                                } else {
+                                    Text("Extract All Pages as Pictures 📸", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        if (extractedImagesList.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFECFEFF), RoundedCornerShape(6.dp))
+                                    .border(1.dp, Color(0xFF06B6D4), RoundedCornerShape(6.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("🎉 Pages Extracted Successfully!", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF155E75))
+                                    Text("Saved ${extractedImagesList.size} high-resolution PNGs to: Pictures/QwikSave/", fontSize = 11.sp, color = Color(0xFF0E7490))
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             2 -> {
@@ -1780,9 +1861,9 @@ fun PdfToolsTabContent(
                         }
                     }
                 }
-            }
 
-            3 -> {
+                Spacer(modifier = Modifier.height(14.dp))
+
                 // Compress PDF Section
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -1879,91 +1960,6 @@ fun PdfToolsTabContent(
                                 onOpen = { openFileWithIntent(context, file, "application/pdf") },
                                 onShare = { client.shareFile(context, file, "application/pdf") }
                             )
-                        }
-                    }
-                }
-            }
-
-            4 -> {
-                // PDF to Image Section
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA5F3FC)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF0891B2), modifier = Modifier.size(28.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("PDF to Image Converter", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                Text("Extract each page of a PDF document into high-resolution PNG pictures", fontSize = 11.sp, color = Color(0xFF64748B))
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = { pdfToImagePickerLauncher.launch("application/pdf") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (pdfToImageUri == null) "Select PDF File" else "Selected: $pdfToImageName",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        if (pdfToImageUri != null) {
-                            Button(
-                                onClick = {
-                                    isExtractingImages = true
-                                    coroutineScope.launch {
-                                        val base = pdfToImageName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                                        val res = client.convertPdfToImages(context, pdfToImageUri!!, base)
-                                        isExtractingImages = false
-                                        res.onSuccess { files ->
-                                            extractedImagesList = files
-                                            Toast.makeText(context, "Extracted ${files.size} pages to Pictures/QwikSave!", Toast.LENGTH_LONG).show()
-                                        }.onFailure { err ->
-                                            Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0891B2)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !isExtractingImages
-                            ) {
-                                if (isExtractingImages) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Extracting Pages...", fontSize = 12.sp)
-                                } else {
-                                    Text("Extract All Pages as Pictures 📸", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        if (extractedImagesList.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFECFEFF), RoundedCornerShape(6.dp))
-                                    .border(1.dp, Color(0xFF06B6D4), RoundedCornerShape(6.dp))
-                                    .padding(12.dp)
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("🎉 Pages Extracted Successfully!", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF155E75))
-                                    Text("Saved ${extractedImagesList.size} high-resolution PNGs to: Pictures/QwikSave/", fontSize = 11.sp, color = Color(0xFF0E7490))
-                                }
-                            }
                         }
                     }
                 }
@@ -2119,6 +2115,12 @@ fun SocialMediaTabContent(
     var instaResult by remember { mutableStateOf<ExtractedMedia?>(null) }
     var fbFormats by remember { mutableStateOf<List<ExtractedMedia>>(emptyList()) }
     var ytResult by remember { mutableStateOf<ExtractedMedia?>(null) }
+
+    // Video to Audio MP3 Extractor states
+    var audioInputUrl by remember { mutableStateOf("") }
+    var isAudioExtracting by remember { mutableStateOf(false) }
+    var audioExtractedResult by remember { mutableStateOf<ExtractedMedia?>(null) }
+    var audioStatusMessage by remember { mutableStateOf<String?>(null) }
 
     var isLoading by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
@@ -2884,7 +2886,7 @@ fun SocialMediaTabContent(
                 .clickable { onOpenMusicHub() },
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -2900,7 +2902,7 @@ fun SocialMediaTabContent(
                         RoundedCornerShape(12.dp)
                     )
                     .border(
-                        1.5.dp,
+                        1.2.dp,
                         Brush.horizontalGradient(
                             listOf(Color(0xFF10B981), Color(0xFF1DB954))
                         ),
@@ -2920,7 +2922,7 @@ fun SocialMediaTabContent(
                         // Glowing Music Headphones Icon
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(40.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(Color(0xFF1DB954).copy(alpha = 0.2f))
                                 .border(1.dp, Color(0xFF1DB954), RoundedCornerShape(10.dp)),
@@ -2930,79 +2932,232 @@ fun SocialMediaTabContent(
                                 Icons.Default.Headphones,
                                 contentDescription = null,
                                 tint = Color(0xFF1DB954),
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
 
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "Qwik Music & Travel Beats",
-                                    fontSize = 14.sp,
+                                    text = "Qwik Music Hub",
+                                    fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                listOf(Color(0xFFF59E0B), Color(0xFFD97706))
-                                            )
-                                        )
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        "✨ 90s & TRENDING",
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color.White
-                                    )
-                                }
+                                Text(
+                                    text = "• SPOTIFY VIBE 🎧",
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1DB954)
+                                )
                             }
-                            Spacer(modifier = Modifier.height(3.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "100% Ad-Free • 1500+ Songs • Offline Road Trip Playback 🚗",
-                                fontSize = 10.5.sp,
+                                text = "1500+ Evergreen 90s Hits, Trending Songs & Road Trip Audio • Ad-Free",
+                                fontSize = 10.sp,
                                 color = Color(0xFFCBD5E1),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "★ Unlimited Offline MP3 Downloads for Travel & Commute",
-                                fontSize = 9.5.sp,
-                                color = Color(0xFFFCD34D),
-                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     // Open Button
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFF1DB954))
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Play Now",
-                                color = Color.Black,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = Color.Black,
-                                modifier = Modifier.size(14.dp)
-                            )
+                        Text(
+                            text = "Open ➔",
+                            color = Color.Black,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // In-place Video to Audio MP3 Extractor Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBAE6FD)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AudioExtractorLogo(size = 32.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("Video to Audio MP3 Extractor", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                        Text("Extract 320kbps MP3 audio from any video link or file", fontSize = 11.sp, color = Color(0xFF0369A1))
+                    }
+                }
+
+                Text(
+                    text = "Supports YouTube Shorts, Facebook Clips, Instagram Reels, and direct MP4 URLs. Extracts audio directly in-place and saves into Music/QwikSave.",
+                    fontSize = 11.sp,
+                    color = Color(0xFF334155),
+                    lineHeight = 16.sp
+                )
+
+                // In-place Video Link Input
+                OutlinedTextField(
+                    value = audioInputUrl,
+                    onValueChange = { audioInputUrl = it },
+                    placeholder = { Text("Paste video link (YouTube, FB, Insta, MP4 URL)...", fontSize = 12.sp, color = Color(0xFF64748B)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (audioInputUrl.isNotEmpty()) {
+                            IconButton(onClick = { audioInputUrl = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF0369A1), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF0284C7),
+                        unfocusedBorderColor = Color(0xFFBAE6FD),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedTextColor = Color(0xFF0F172A),
+                        unfocusedTextColor = Color(0xFF0F172A)
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = cm?.primaryClip?.getItemAt(0)?.text?.toString()
+                            if (!clip.isNullOrEmpty()) {
+                                audioInputUrl = clip.trim()
+                                Toast.makeText(context, "Pasted from Clipboard!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0284C7)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0284C7))
+                    ) {
+                        Text("Paste", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            if (audioInputUrl.isBlank()) {
+                                Toast.makeText(context, "Please enter or paste a valid video URL", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            isAudioExtracting = true
+                            audioStatusMessage = "Extracting pristine 320kbps MP3 audio track..."
+                            coroutineScope.launch {
+                                val clean = audioInputUrl.trim()
+                                val res = if (clean.contains("youtube.com") || clean.contains("youtu.be")) {
+                                    client.extractYouTube(clean)
+                                } else if (clean.contains("facebook.com") || clean.contains("fb.watch")) {
+                                    val fbRes = client.extractFacebook(clean)
+                                    if (fbRes.isSuccess && fbRes.getOrNull()?.isNotEmpty() == true) {
+                                        Result.success(fbRes.getOrNull()!![0])
+                                    } else {
+                                        Result.failure(Exception("Unable to extract Facebook audio"))
+                                    }
+                                } else {
+                                    client.extractInstagram(context, clean)
+                                }
+
+                                isAudioExtracting = false
+                                res.onSuccess {
+                                    audioExtractedResult = it
+                                    audioStatusMessage = "Audio track ready: ${it.title.take(30)}..."
+                                }.onFailure {
+                                    audioStatusMessage = "Error: ${it.message}"
+                                    Toast.makeText(context, "Could not extract audio: ${it.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(2f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        shape = RoundedCornerShape(8.dp),
+                        enabled = !isAudioExtracting
+                    ) {
+                        if (isAudioExtracting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Extracting...", fontSize = 12.sp)
+                        } else {
+                            Text("Extract MP3 Audio 🎵", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                audioStatusMessage?.let {
+                    Text(
+                        text = it,
+                        fontSize = 11.sp,
+                        color = Color(0xFF0369A1),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // If audio extracted, show instant Download button directly in card
+                audioExtractedResult?.let { media ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7DD3FC))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("🎵 320 kbps High Quality Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                Text(media.title.take(45), fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val filename = "QwikSave_Audio_${System.currentTimeMillis()}.mp3"
+                                    coroutineScope.launch {
+                                        Toast.makeText(context, "Downloading MP3 audio to Music... 🎵", Toast.LENGTH_SHORT).show()
+                                        val result = client.downloadMediaDirectly(context, media.streamUrl, filename)
+                                        result.onSuccess {
+                                            Toast.makeText(context, "Saved to Music / QwikSave! 🎶", Toast.LENGTH_LONG).show()
+                                        }.onFailure { err ->
+                                            Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Download MP3", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -3021,12 +3176,6 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
 
     var selectedQrType by remember { mutableStateOf(0) }
     val qrTypes = listOf("Website / URL", "Plain Text", "WiFi", "UPI Pay", "Phone / Contact")
-
-    // In-place Video to MP3 Extractor states
-    var audioInputUrl by remember { mutableStateOf("") }
-    var isAudioExtracting by remember { mutableStateOf(false) }
-    var audioExtractedResult by remember { mutableStateOf<ExtractedMedia?>(null) }
-    var audioStatusMessage by remember { mutableStateOf<String?>(null) }
 
     // Clean input states (NO dummy personal details prefilled!)
     var urlInput by remember { mutableStateOf("") }
@@ -3098,8 +3247,8 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
                             .background(Color(0xFF0F172A)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -3107,18 +3256,16 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                             Icons.Default.QrCode,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("QR Code Generator & Downloader", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                        Text("Create QR codes for Websites, WiFi, UPI, Phone, and Plain Text", fontSize = 11.sp, color = Color(0xFF64748B))
-                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("QR Code Generator & Downloader", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
                 }
+                Text("Create & export QR codes for Websites, WiFi, UPI & Contacts", fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
 
                 // Type Switcher: Balanced 2-Row Format (Row 1: 3 items, Row 2: 2 items)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     // Row 1: Website/URL, WiFi, UPI Pay
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3345,185 +3492,6 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Share QR", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Audio Extractor Card - LIGHT SKY BLUISH WHITISH THEME WITH IN-PLACE URL EXTRACTION & DOWNLOAD
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF)), // Very light sky bluish whitish
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF38BDF8)), // Sky-bluish boundary
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AudioExtractorLogo(size = 32.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("Video to Audio MP3 Extractor", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                        Text("Extract 320kbps MP3 audio from any video link or file", fontSize = 11.sp, color = Color(0xFF0369A1))
-                    }
-                }
-
-                Text(
-                    text = "Supports YouTube Shorts, Facebook Clips, Instagram Reels, and direct MP4 URLs. Extracts audio directly in-place and saves into Music/QwikSave.",
-                    fontSize = 11.sp,
-                    color = Color(0xFF334155),
-                    lineHeight = 16.sp
-                )
-
-                // In-place Video Link Input
-                OutlinedTextField(
-                    value = audioInputUrl,
-                    onValueChange = { audioInputUrl = it },
-                    placeholder = { Text("Paste video link (YouTube, FB, Insta, MP4 URL)...", fontSize = 12.sp, color = Color(0xFF64748B)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
-                        if (audioInputUrl.isNotEmpty()) {
-                            IconButton(onClick = { audioInputUrl = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF0369A1), modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0284C7),
-                        unfocusedBorderColor = Color(0xFFBAE6FD),
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        focusedTextColor = Color(0xFF0F172A),
-                        unfocusedTextColor = Color(0xFF0F172A)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            val clip = cm?.primaryClip?.getItemAt(0)?.text?.toString()
-                            if (!clip.isNullOrEmpty()) {
-                                audioInputUrl = clip.trim()
-                                Toast.makeText(context, "Pasted from Clipboard!", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0284C7)),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0284C7))
-                    ) {
-                        Text("Paste", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = {
-                            if (audioInputUrl.isBlank()) {
-                                Toast.makeText(context, "Please enter or paste a valid video URL", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            isAudioExtracting = true
-                            audioStatusMessage = "Extracting pristine 320kbps MP3 audio track..."
-                            coroutineScope.launch {
-                                val clean = audioInputUrl.trim()
-                                val res = if (clean.contains("youtube.com") || clean.contains("youtu.be")) {
-                                    client.extractYouTube(clean)
-                                } else if (clean.contains("facebook.com") || clean.contains("fb.watch")) {
-                                    val fbRes = client.extractFacebook(clean)
-                                    if (fbRes.isSuccess && fbRes.getOrNull()?.isNotEmpty() == true) {
-                                        Result.success(fbRes.getOrNull()!![0])
-                                    } else {
-                                        Result.failure(Exception("Unable to extract Facebook audio"))
-                                    }
-                                } else {
-                                    client.extractInstagram(context, clean)
-                                }
-
-                                isAudioExtracting = false
-                                res.onSuccess {
-                                    audioExtractedResult = it
-                                    audioStatusMessage = "Audio track ready: ${it.title.take(30)}..."
-                                }.onFailure {
-                                    audioStatusMessage = "Error: ${it.message}"
-                                    Toast.makeText(context, "Could not extract audio: ${it.message}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        modifier = Modifier.weight(2f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
-                        shape = RoundedCornerShape(8.dp),
-                        enabled = !isAudioExtracting
-                    ) {
-                        if (isAudioExtracting) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Extracting...", fontSize = 12.sp)
-                        } else {
-                            Text("Extract MP3 Audio 🎵", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                audioStatusMessage?.let {
-                    Text(
-                        text = it,
-                        fontSize = 11.sp,
-                        color = Color(0xFF0369A1),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                // If audio extracted, show instant Download button directly in card
-                audioExtractedResult?.let { media ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7DD3FC))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("🎵 320 kbps High Quality Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                Text(media.title.take(45), fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-
-                            Button(
-                                onClick = {
-                                    val filename = "QwikSave_Audio_${System.currentTimeMillis()}.mp3"
-                                    coroutineScope.launch {
-                                        Toast.makeText(context, "Downloading MP3 audio to Music... 🎵", Toast.LENGTH_SHORT).show()
-                                        val result = client.downloadMediaDirectly(context, media.streamUrl, filename)
-                                        result.onSuccess {
-                                            Toast.makeText(context, "Saved to Music / QwikSave! 🎶", Toast.LENGTH_LONG).show()
-                                        }.onFailure { err ->
-                                            Toast.makeText(context, "Download error: ${err.message}", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Download MP3", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
                         }
                     }
                 }

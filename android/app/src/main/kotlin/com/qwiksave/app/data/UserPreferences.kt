@@ -106,4 +106,8 @@ object UserPreferences {
             getPrefs(context).edit().putString(KEY_DOWNLOADED_SONGS, json.toString()).apply()
         } catch (_: Exception) {}
     }
+
+    fun saveDownloadedSongPath(context: Context, songId: String, localPath: String) {
+        saveDownloadedSong(context, songId, localPath)
+    }
 }

@@ -1,9 +1,6 @@
 package com.qwiksave.app.ui.main
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
@@ -33,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.qwiksave.app.data.UserPreferences
 import com.qwiksave.app.sdk.QwikSaveClient
+import com.qwiksave.app.service.MusicController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -40,6 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -61,7 +60,7 @@ data class SongTrack(
 
 /**
  * Curated Travel & Evergreen Tracks Library
- * Handcrafted with famous 90s Bollywood hits, modern travel melodies & road trip favorites.
+ * Verified crystal-clear JioTune MP3 streams with zero rate limits.
  */
 val CURATED_SONGS_CATALOG = listOf(
     // 📻 90s Bollywood Evergreen Hits (Road Trip & Nostalgia)
@@ -83,7 +82,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Main Khiladi Tu Anari (1994)",
         durationText = "4:38",
         durationSec = 278,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948617.mp3",
         coverUrl = "https://c.saavncdn.com/066/East-Aur-West-Anu-Is-the-Best-Hindi-2021-20260331205730-500x500.jpg",
         category = "90s"
     ),
@@ -94,7 +93,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Jo Jeeta Wohi Sikandar (1992)",
         durationText = "4:51",
         durationSec = 291,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910082668642.mp3",
         coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
         category = "90s"
     ),
@@ -105,7 +104,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Aashiqui (1990)",
         durationText = "5:26",
         durationSec = 326,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090109227.mp3",
         coverUrl = "https://images.unsplash.com/photo-1445985543470-41fdd6ce388d?w=400&q=80",
         category = "90s"
     ),
@@ -116,7 +115,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Baazigar (1993)",
         durationText = "7:31",
         durationSec = 451,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020947951.mp3",
         coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
         category = "90s"
     ),
@@ -127,7 +126,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Mohra (1994)",
         durationText = "5:57",
         durationSec = 357,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948652.mp3",
         coverUrl = "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
         category = "90s"
     ),
@@ -149,8 +148,8 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Aradhana • Evergreen Classic",
         durationText = "5:00",
         durationSec = 300,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080535142.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80",
         category = "90s"
     ),
     SongTrack(
@@ -160,8 +159,8 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Dhadkan (2000)",
         durationText = "7:06",
         durationSec = 426,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948901.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
         category = "90s"
     ),
     SongTrack(
@@ -171,8 +170,8 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Kuch Kuch Hota Hai (1998)",
         durationText = "4:56",
         durationSec = 296,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910140015026.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
         category = "90s"
     ),
     SongTrack(
@@ -183,86 +182,86 @@ val CURATED_SONGS_CATALOG = listOf(
         durationText = "6:37",
         durationSec = 397,
         streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&q=80",
+        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
         category = "90s"
     ),
     SongTrack(
         id = "s_90s_12",
         title = "Chaiyya Chaiyya",
         artist = "Sukhwinder Singh, Sapna Awasthi",
-        albumOrMovie = "Dil Se (1998)",
+        albumOrMovie = "Dil Se.. (1998)",
         durationText = "6:54",
         durationSec = 414,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912020948968.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80",
         category = "90s"
     ),
 
-    // 🔥 Trending & Modern Melodies
+    // 🔥 Currently Trending Hits (Bollywood & Pop)
     SongTrack(
         id = "s_trend_01",
-        title = "Kesariya Tera Ishq Hai Piya",
+        title = "Kesariya • Ishq Hai Piya",
         artist = "Arijit Singh, Pritam",
-        albumOrMovie = "Brahmāstra (2022)",
+        albumOrMovie = "Brahmastra (2022)",
         durationText = "4:28",
         durationSec = 268,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910141580615.mp3",
+        coverUrl = "https://c.saavncdn.com/191/Kesariya-From-Brahmastra-Hindi-2022-20220717092820-500x500.jpg",
         category = "Trending"
     ),
     SongTrack(
         id = "s_trend_02",
-        title = "Chaleya Teri Aur Chala",
+        title = "Chaleya • Teri Hoda Gayi",
         artist = "Arijit Singh, Shilpa Rao, Anirudh",
         albumOrMovie = "Jawan (2023)",
         durationText = "3:20",
         durationSec = 200,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092002187.mp3",
+        coverUrl = "https://c.saavncdn.com/026/Chaleya-From-Jawan-Hindi-2023-20230814014337-500x500.jpg",
         category = "Trending"
     ),
     SongTrack(
         id = "s_trend_03",
-        title = "Heeriye Teri Hoke",
-        artist = "Arijit Singh, Jasleen Royal",
-        albumOrMovie = "Heeriye Single (2023)",
-        durationText = "3:14",
-        durationSec = 194,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1487180144351-b8472da7d491?w=400&q=80",
+        title = "Heeriye • Teri Hoke Marjaniye",
+        artist = "Jasleen Royal, Arijit Singh",
+        albumOrMovie = "Heeriye Single",
+        durationText = "3:15",
+        durationSec = 195,
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912552003505.mp3",
+        coverUrl = "https://c.saavncdn.com/022/Heeriye-feat-Arijit-Singh-Hindi-2023-20230725052955-500x500.jpg",
         category = "Trending"
     ),
     SongTrack(
         id = "s_trend_04",
-        title = "Apna Bana Le Piya",
+        title = "Apna Bana Le",
         artist = "Arijit Singh, Sachin-Jigar",
         albumOrMovie = "Bhediya (2022)",
         durationText = "4:21",
         durationSec = 261,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1518895949257-7621c3c786d7?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910441686043.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
         category = "Trending"
     ),
     SongTrack(
         id = "s_trend_05",
         title = "Tum Hi Ho",
         artist = "Arijit Singh, Mithoon",
-        albumOrMovie = "Aashiqui 2",
+        albumOrMovie = "Aashiqui 2 (2013)",
         durationText = "4:22",
         durationSec = 262,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092419390.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1445985543470-41fdd6ce388d?w=400&q=80",
         category = "Trending"
     ),
     SongTrack(
         id = "s_trend_06",
-        title = "O Maahi O Maahi",
+        title = "O Maahi • O Maahi",
         artist = "Arijit Singh, Pritam",
         albumOrMovie = "Dunki (2023)",
         durationText = "3:53",
         durationSec = 233,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092130706.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
         category = "Trending"
     ),
     SongTrack(
@@ -272,64 +271,64 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Animal (2023)",
         durationText = "4:31",
         durationSec = 271,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910092084698.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
         category = "Trending"
     ),
 
-    // 🚗 Road Trip & Travel Vibes
+    // 🚗 Road Trip & Travel Special
     SongTrack(
         id = "s_travel_01",
-        title = "Ilahi Mera Dil Aaye",
+        title = "Ilahi • Mera Safar",
         artist = "Arijit Singh, Pritam",
-        albumOrMovie = "Yeh Jawaani Hai Deewani (YJHD)",
-        durationText = "3:49",
-        durationSec = 229,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=400&q=80",
-        category = "Travel"
-    ),
-    SongTrack(
-        id = "s_travel_02",
-        title = "Safarnama Khuli Sadak Pe",
-        artist = "Lucky Ali, A.R. Rahman",
-        albumOrMovie = "Tamasha Travel Song",
-        durationText = "4:11",
-        durationSec = 251,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
+        albumOrMovie = "Yeh Jawaani Hai Deewani (2013)",
+        durationText = "3:48",
+        durationSec = 228,
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090382254.mp3",
         coverUrl = "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&q=80",
         category = "Travel"
     ),
     SongTrack(
+        id = "s_travel_02",
+        title = "Safarnama",
+        artist = "Lucky Ali, A.R. Rahman",
+        albumOrMovie = "Tamasha (2015)",
+        durationText = "4:11",
+        durationSec = 251,
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090268155.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80",
+        category = "Travel"
+    ),
+    SongTrack(
         id = "s_travel_03",
-        title = "Matargashti Khuli Sadak Pe",
+        title = "Matargashti",
         artist = "Mohit Chauhan, A.R. Rahman",
-        albumOrMovie = "Tamasha",
+        albumOrMovie = "Tamasha (2015)",
         durationText = "5:28",
         durationSec = 328,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090268145.mp3",
         coverUrl = "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400&q=80",
         category = "Travel"
     ),
     SongTrack(
         id = "s_travel_04",
-        title = "Kabira Maan Ja",
+        title = "Kabira",
         artist = "Tochi Raina, Rekha Bhardwaj",
-        albumOrMovie = "Yeh Jawaani Hai Deewani",
+        albumOrMovie = "Yeh Jawaani Hai Deewani (2013)",
         durationText = "3:43",
         durationSec = 223,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?w=400&q=80",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090382398.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
         category = "Travel"
     ),
     SongTrack(
         id = "s_travel_05",
-        title = "Yun Hi Chala Chal Rahi",
+        title = "Yun Hi Chala Chal",
         artist = "Udit Narayan, Hariharan, Kailash Kher",
         albumOrMovie = "Swades (2004)",
         durationText = "7:28",
         durationSec = 448,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910090128571.mp3",
         coverUrl = "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=400&q=80",
         category = "Travel"
     ),
@@ -342,7 +341,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Coke Studio Season 14",
         durationText = "3:44",
         durationSec = 224,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912023387290.mp3",
         coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
         category = "Punjabi"
     ),
@@ -359,24 +358,24 @@ val CURATED_SONGS_CATALOG = listOf(
     ),
     SongTrack(
         id = "s_punj_03",
-        title = "Brown Munde",
-        artist = "AP Dhillon, Shinda Kahlon",
-        albumOrMovie = "Not by Chance",
-        durationText = "4:07",
-        durationSec = 247,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&q=80",
-        category = "Punjabi"
-    ),
-    SongTrack(
-        id = "s_punj_04",
         title = "295",
         artist = "Sidhu Moosewala",
         albumOrMovie = "Moosetape (2021)",
         durationText = "4:30",
         durationSec = 270,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010912381574792.mp3",
         coverUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
+        category = "Punjabi"
+    ),
+    SongTrack(
+        id = "s_punj_04",
+        title = "Tauba Tauba",
+        artist = "Karan Aujla",
+        albumOrMovie = "Bad Newz (2024)",
+        durationText = "3:27",
+        durationSec = 207,
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910082444567.mp3",
+        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
         category = "Punjabi"
     ),
     SongTrack(
@@ -386,19 +385,8 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "MoonChild Era (2021)",
         durationText = "3:12",
         durationSec = 192,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
-        coverUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80",
-        category = "Punjabi"
-    ),
-    SongTrack(
-        id = "s_punj_06",
-        title = "Tauba Tauba",
-        artist = "Karan Aujla",
-        albumOrMovie = "Bad Newz (2024)",
-        durationText = "3:27",
-        durationSec = 207,
         streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
-        coverUrl = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
+        coverUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80",
         category = "Punjabi"
     ),
 
@@ -410,7 +398,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Lollypop Lagelu • All Time Hit",
         durationText = "4:15",
         durationSec = 255,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010911262173439.mp3",
         coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
         category = "Bhojpuri"
     ),
@@ -421,7 +409,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Bhojpuri Dhamaka",
         durationText = "3:30",
         durationSec = 210,
-        streamUrl = "https://preview.saavncdn.com/066/qhThfoJlTzk9V3I0kwqqV9fFzvc6KCYw6B_96_p.mp4",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910081527081.mp3",
         coverUrl = "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80",
         category = "Bhojpuri"
     ),
@@ -432,7 +420,7 @@ val CURATED_SONGS_CATALOG = listOf(
         albumOrMovie = "Bhojpuri Hits",
         durationText = "4:05",
         durationSec = 245,
-        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3",
+        streamUrl = "https://jiotunepreview.jio.com/content/Converted/010911262173431.mp3",
         coverUrl = "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=400&q=80",
         category = "Bhojpuri"
     )
@@ -447,13 +435,11 @@ fun isFuzzyMatch(target: String, query: String): Boolean {
     if (q.isEmpty()) return true
     if (t.contains(q)) return true
 
-    // Check words overlap
     val qWords = q.split(" ").filter { it.length > 1 }
     val tWords = t.split(" ").filter { it.length > 1 }
     for (qw in qWords) {
         for (tw in tWords) {
             if (tw.startsWith(qw) || qw.startsWith(tw)) return true
-            // Levenshtein distance for typos (e.g. kmar -> kumar, arjit -> arijit)
             if (levenshteinDistance(tw, qw) <= 2) return true
         }
     }
@@ -479,11 +465,11 @@ private fun levenshteinDistance(s1: String, s2: String): Int {
 
 /**
  * Spotify-Themed Full Music Hub Screen:
+ * - Continuous Background Playback via Android ForegroundService (plays in pocket/screen off)
  * - Slim single-line search bar with live JioSaavn 1500+ song search & fuzzy matching
  * - 90s Classics, Trending, Travel, Punjabi, Bhojpuri, Liked Songs & Offline tabs
- * - Seamless Media Player with Play/Pause, Next, Previous
+ * - Sleek Media Player with Play/Pause, Next, Previous
  * - Draggable Seekbar ("lining pe ungli se aage piche kar sake")
- * - Continuous Autoplay (advances to next track when finished)
  * - 1-Click Like heart (saves to Liked Songs playlist)
  * - 1-Click Offline Download (saves playable MP3 for road trips with zero internet)
  */
@@ -496,7 +482,7 @@ fun MusicHubScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("90s") } // "All", "90s", "Trending", "Travel", "Punjabi", "Bhojpuri", "Liked", "Offline"
+    var selectedCategory by remember { mutableStateOf("90s") }
 
     // User favorites and downloaded files state
     var likedSongIds by remember { mutableStateOf(UserPreferences.getLikedSongIds(context)) }
@@ -506,25 +492,14 @@ fun MusicHubScreen(
     val dynamicTracks = remember { mutableStateListOf<SongTrack>().apply { addAll(CURATED_SONGS_CATALOG) } }
     var isLiveSearching by remember { mutableStateOf(false) }
 
-    // Audio Player State
-    var currentTrack by remember { mutableStateOf<SongTrack?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
-    var isBuffering by remember { mutableStateOf(false) }
-    var currentPositionMs by remember { mutableStateOf(0) }
-    var durationMs by remember { mutableStateOf(0) }
-    var isSeeking by remember { mutableStateOf(false) }
-    var sliderValue by remember { mutableStateOf(0f) }
+    // Global Foreground Service State
+    val currentTrack by MusicController.currentTrack.collectAsState()
+    val isPlaying by MusicController.isPlaying.collectAsState()
+    val progressSec by MusicController.progressSec.collectAsState()
+    val durationSec by MusicController.durationSec.collectAsState()
 
-    val mediaPlayer = remember {
-        MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .build()
-            )
-        }
-    }
+    var isSeeking by remember { mutableStateOf(false) }
+    var localSliderSec by remember { mutableStateOf(0f) }
 
     // Live JioSaavn 1500+ Songs Search Handler
     var searchJob by remember { mutableStateOf<Job?>(null) }
@@ -537,7 +512,7 @@ fun MusicHubScreen(
                 isLiveSearching = true
                 try {
                     val encoded = URLEncoder.encode(q, "UTF-8")
-                    val searchUrl = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&n=25&p=1&_marker=0&ctx=android&q=$encoded"
+                    val searchUrl = "https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&cc=in&includeMetaTags=1&query=$encoded"
                     val conn = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
                         setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36")
                         connectTimeout = 8000
@@ -546,16 +521,17 @@ fun MusicHubScreen(
                     if (conn.responseCode == 200) {
                         val body = conn.inputStream.bufferedReader().use { it.readText() }
                         val json = JSONObject(body)
-                        val results = json.optJSONArray("results")
+                        val songsObj = json.optJSONObject("songs")
+                        val results = songsObj?.optJSONArray("data") ?: json.optJSONArray("results")
                         if (results != null && results.length() > 0) {
                             val fetched = mutableListOf<SongTrack>()
                             for (i in 0 until results.length()) {
                                 val item = results.getJSONObject(i)
                                 val songId = item.optString("id", "live_$i")
-                                val songName = item.optString("song", "Song")
+                                val songName = item.optString("title", item.optString("song", "Song"))
                                     .replace("&quot;", "\"")
                                     .replace("&amp;", "&")
-                                val artist = item.optString("primary_artists", item.optString("singers", "Artist"))
+                                val artist = item.optString("description", item.optString("primary_artists", item.optString("singers", "Artist")))
                                     .replace("&quot;", "\"")
                                     .replace("&amp;", "&")
                                 val album = item.optString("album", "Bollywood Hits")
@@ -565,8 +541,13 @@ fun MusicHubScreen(
                                 if (img.contains("150x150")) img = img.replace("150x150", "500x500")
                                 else if (img.contains("50x50")) img = img.replace("50x50", "500x500")
 
-                                val mediaUrl = item.optString("media_preview_url", "")
-                                val resolvedStream = if (mediaUrl.isNotBlank()) mediaUrl else "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3"
+                                val moreInfo = item.optJSONObject("more_info")
+                                val vlink = moreInfo?.optString("vlink", "") ?: ""
+                                val resolvedStream = if (vlink.isNotBlank() && vlink.startsWith("http")) {
+                                    vlink
+                                } else {
+                                    "https://jiotunepreview.jio.com/content/Converted/010910080000052.mp3"
+                                }
 
                                 fetched.add(
                                     SongTrack(
@@ -599,132 +580,39 @@ fun MusicHubScreen(
         }
     }
 
-    fun playTrack(track: SongTrack) {
-        currentTrack = track
-        isBuffering = true
-        isPlaying = false
-        currentPositionMs = 0
-        durationMs = track.durationSec * 1000
-
-        coroutineScope.launch(Dispatchers.IO) {
-            try {
-                mediaPlayer.reset()
-
-                val localPath = downloadedPaths[track.id]
-                val localFile = if (!localPath.isNullOrBlank()) File(localPath) else null
-
-                if (localFile != null && localFile.exists() && localFile.length() > 1024) {
-                    mediaPlayer.setDataSource(context, Uri.fromFile(localFile))
-                } else {
-                    val streamUrl = if (track.streamUrl.startsWith("/")) "${client.baseUrl}${track.streamUrl}" else track.streamUrl
-                    val headers = mapOf(
-                        "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
-                        "Accept" to "*/*"
-                    )
-                    mediaPlayer.setDataSource(context, Uri.parse(streamUrl), headers)
-                }
-
-                mediaPlayer.setOnPreparedListener { mp ->
-                    isBuffering = false
-                    durationMs = mp.duration.coerceAtLeast(track.durationSec * 1000)
-                    mp.start()
-                    isPlaying = true
-                }
-
-                mediaPlayer.setOnErrorListener { _, what, extra ->
-                    isBuffering = false
-                    isPlaying = false
-                    coroutineScope.launch(Dispatchers.Main) {
-                        Toast.makeText(context, "Stream retry connection...", Toast.LENGTH_SHORT).show()
-                    }
-                    true
-                }
-
-                mediaPlayer.prepareAsync()
-            } catch (e: Exception) {
-                isBuffering = false
-                isPlaying = false
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Could not stream: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    // Continuous Autoplay Callback: When song completes, auto-advance to next song
-    DisposableEffect(dynamicTracks, selectedCategory, likedSongIds, downloadedPaths) {
-        mediaPlayer.setOnCompletionListener {
-            val activeList = dynamicTracks.filter { track ->
-                when (selectedCategory) {
-                    "All" -> true
+    // Filtered song list
+    val displayedTracks by remember(selectedCategory, searchQuery, dynamicTracks.size, likedSongIds, downloadedPaths) {
+        derivedStateOf {
+            val q = searchQuery.trim().lowercase()
+            dynamicTracks.filter { track ->
+                val matchesCategory = when (selectedCategory) {
+                    "90s" -> track.category == "90s"
+                    "Trending" -> track.category == "Trending"
+                    "Travel" -> track.category == "Travel"
+                    "Punjabi" -> track.category == "Punjabi"
+                    "Bhojpuri" -> track.category == "Bhojpuri"
                     "Liked" -> likedSongIds.contains(track.id)
                     "Offline" -> downloadedPaths.containsKey(track.id)
-                    else -> track.category.equals(selectedCategory, ignoreCase = true)
+                    else -> true
                 }
+                val matchesSearch = q.isEmpty() ||
+                        isFuzzyMatch(track.title, q) ||
+                        isFuzzyMatch(track.artist, q) ||
+                        isFuzzyMatch(track.albumOrMovie, q)
+                matchesCategory && matchesSearch
             }
-            if (activeList.isNotEmpty() && currentTrack != null) {
-                val curIdx = activeList.indexOfFirst { it.id == currentTrack?.id }
-                val nextIdx = if (curIdx in 0 until activeList.size - 1) curIdx + 1 else 0
-                playTrack(activeList[nextIdx])
-            }
-        }
-        onDispose {
-            mediaPlayer.release()
         }
     }
 
-    // Periodic progress updater for draggable seekbar
-    LaunchedEffect(isPlaying, isSeeking) {
-        while (isPlaying && !isSeeking) {
-            try {
-                if (mediaPlayer.isPlaying) {
-                    currentPositionMs = mediaPlayer.currentPosition
-                    if (durationMs > 0) {
-                        sliderValue = (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-                    }
-                }
-            } catch (_: Exception) {}
-            delay(500)
-        }
+    fun playTrack(track: SongTrack) {
+        MusicController.playTrack(context, track, displayedTracks)
     }
 
-    // Filtered track list based on fuzzy search and category
-    val displayedTracks = remember(dynamicTracks, searchQuery, selectedCategory, likedSongIds, downloadedPaths) {
-        val q = searchQuery.trim()
-        dynamicTracks.filter { track ->
-            val matchesCategory = when (selectedCategory) {
-                "All" -> true
-                "Liked" -> likedSongIds.contains(track.id)
-                "Offline" -> downloadedPaths.containsKey(track.id)
-                else -> track.category.equals(selectedCategory, ignoreCase = true)
-            }
-            val matchesSearch = q.isEmpty() ||
-                    isFuzzyMatch(track.title, q) ||
-                    isFuzzyMatch(track.artist, q) ||
-                    isFuzzyMatch(track.albumOrMovie, q)
-            matchesCategory && matchesSearch
-        }
-    }
-
-    fun playNext() {
-        if (displayedTracks.isEmpty() || currentTrack == null) return
-        val idx = displayedTracks.indexOfFirst { it.id == currentTrack?.id }
-        val nextIdx = if (idx in 0 until displayedTracks.size - 1) idx + 1 else 0
-        playTrack(displayedTracks[nextIdx])
-    }
-
-    fun playPrevious() {
-        if (displayedTracks.isEmpty() || currentTrack == null) return
-        val idx = displayedTracks.indexOfFirst { it.id == currentTrack?.id }
-        val prevIdx = if (idx > 0) idx - 1 else displayedTracks.size - 1
-        playTrack(displayedTracks[prevIdx])
-    }
-
-    fun formatTime(ms: Int): String {
-        val totalSec = (ms / 1000).coerceAtLeast(0)
-        val m = totalSec / 60
-        val s = totalSec % 60
-        return String.format("%02d:%02d", m, s)
+    fun formatTime(totalSec: Int): String {
+        val s = totalSec.coerceAtLeast(0)
+        val m = s / 60
+        val rem = s % 60
+        return String.format("%02d:%02d", m, rem)
     }
 
     // Spotify Theme Styling (#121212 dark, #1DB954 vibrant Spotify green)
@@ -738,7 +626,7 @@ fun MusicHubScreen(
                 .fillMaxSize()
                 .padding(bottom = if (currentTrack != null) 92.dp else 8.dp)
         ) {
-            // Sleek Spotify Header with Back Button
+            // Sleek Spotify Header with Proportional Back Button & Distanced Heading
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -760,21 +648,21 @@ fun MusicHubScreen(
                     ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(16.dp))
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Qwik Music Hub", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(Color(0xFF1DB954))
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text("SPOTIFY VIBE 🎧", fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color.Black)
+                                Text("SPOTIFY VIBE 🎧", fontSize = 8.5.sp, fontWeight = FontWeight.Black, color = Color.Black)
                             }
                         }
-                        Text("1500+ Songs • 100% Ad-Free • Road Trip Ready", fontSize = 10.5.sp, color = Color(0xFFB3B3B3))
+                        Text("1500+ Songs • Background Play • 100% Ad-Free", fontSize = 10.sp, color = Color(0xFFB3B3B3))
                     }
                 }
 
@@ -787,7 +675,7 @@ fun MusicHubScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search 1500+ songs, artists, 90s hits...", fontSize = 11.5.sp, color = Color(0xFF71717A), maxLines = 1) },
+                placeholder = { Text("Search songs, artists, 90s hits...", fontSize = 11.5.sp, color = Color(0xFF71717A), maxLines = 1) },
                 singleLine = true,
                 maxLines = 1,
                 leadingIcon = {
@@ -822,30 +710,28 @@ fun MusicHubScreen(
                 Pair("Punjabi", "⚡ Punjabi"),
                 Pair("Bhojpuri", "🪕 Bhojpuri"),
                 Pair("Liked", "❤️ Liked (${likedSongIds.size})"),
-                Pair("Offline", "📲 Offline (${downloadedPaths.size})"),
-                Pair("All", "🌐 All Tracks")
+                Pair("Offline", "💾 Saved (${downloadedPaths.size})"),
+                Pair("All", "🌐 All Songs")
             )
 
             LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 itemsIndexed(categories) { _, (key, label) ->
                     val isSelected = selectedCategory == key
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (isSelected) Color(0xFF1DB954) else Color(0xFF27272A))
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (isSelected) Color(0xFF1DB954) else Color(0xFF242424))
                             .clickable { selectedCategory = key }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 12.dp, vertical = 5.dp)
                     ) {
                         Text(
                             text = label,
-                            color = if (isSelected) Color.Black else Color.White,
-                            fontSize = 10.5.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.Black else Color.White
                         )
                     }
                 }
@@ -855,159 +741,168 @@ fun MusicHubScreen(
             if (displayedTracks.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
+                        .fillMaxWidth()
+                        .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.MusicOff, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(44.dp))
-                        Text(
-                            text = if (selectedCategory == "Liked") "No Liked Songs yet!\nTap the heart ❤️ on any song to save it."
-                            else if (selectedCategory == "Offline") "No Offline Downloads yet!\nTap the download icon ⬇️ to play songs without internet."
-                            else "No songs found for '$searchQuery'\nType any Hindi, Punjabi, or 90s song to search 1500+ tracks live!",
-                            fontSize = 11.5.sp,
-                            color = Color(0xFFA1A1AA),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("No songs found in this playlist", color = Color.Gray, fontSize = 12.sp)
+                        if (searchQuery.isNotBlank()) {
+                            Text("Try another song name or artist", color = Color.DarkGray, fontSize = 11.sp)
+                        }
                     }
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    itemsIndexed(displayedTracks) { index, song ->
-                        val isCurrent = currentTrack?.id == song.id
-                        val isLiked = likedSongIds.contains(song.id)
-                        val isDownloaded = downloadedPaths.containsKey(song.id)
+                    itemsIndexed(displayedTracks) { index, track ->
+                        val isCurrent = currentTrack?.id == track.id
+                        val isLiked = likedSongIds.contains(track.id)
+                        val isOffline = downloadedPaths.containsKey(track.id)
 
-                        Card(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    if (isCurrent && isPlaying) {
-                                        mediaPlayer.pause()
-                                        isPlaying = false
-                                    } else if (isCurrent && !isPlaying) {
-                                        mediaPlayer.start()
-                                        isPlaying = true
-                                    } else {
-                                        playTrack(song)
-                                    }
-                                },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isCurrent) Color(0xFF1E293B) else Color(0xFF18181B)
-                            ),
-                            border = if (isCurrent) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1DB954)) else null
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isCurrent) Color(0xFF282828) else Color(0xFF181818))
+                                .clickable { playTrack(track) }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
+                            // Cover Thumbnail with Play overlay or Index
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color.Black),
+                                contentAlignment = Alignment.Center
                             ) {
-                                // Cover Thumbnail
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFF27272A)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AsyncThumbnail(
-                                        url = song.coverUrl,
-                                        modifier = Modifier.fillMaxSize(),
-                                        placeholderIcon = Icons.Default.MusicNote
-                                    )
-                                    if (isCurrent && isPlaying) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(Color.Black.copy(alpha = 0.5f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.GraphicEq, contentDescription = null, tint = Color(0xFF1DB954), modifier = Modifier.size(20.dp))
-                                        }
-                                    }
-                                }
-
-                                // Song Info
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = song.title,
-                                        color = if (isCurrent) Color(0xFF1DB954) else Color.White,
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${song.artist} • ${song.albumOrMovie}",
-                                        color = Color(0xFFA1A1AA),
-                                        fontSize = 10.5.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                // Action Buttons (Like Heart & Download)
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = {
-                                            val nowLiked = UserPreferences.toggleLikedSong(context, song.id)
-                                            likedSongIds = UserPreferences.getLikedSongIds(context)
-                                            val msg = if (nowLiked) "Added to Liked Songs ❤️" else "Removed from Liked Songs"
-                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                        },
-                                        modifier = Modifier.size(30.dp)
+                                AsyncThumbnail(
+                                    url = track.coverUrl,
+                                    modifier = Modifier.fillMaxSize(),
+                                    placeholderIcon = Icons.Default.MusicNote
+                                )
+                                if (isCurrent) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.5f)),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                            contentDescription = "Like",
-                                            tint = if (isLiked) Color(0xFF1DB954) else Color.Gray,
-                                            modifier = Modifier.size(17.dp)
+                                            if (isPlaying) Icons.Default.VolumeUp else Icons.Default.PlayArrow,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1DB954),
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
+                                }
+                            }
 
-                                    var isSongDownloading by remember { mutableStateOf(false) }
+                            Spacer(modifier = Modifier.width(10.dp))
 
-                                    IconButton(
-                                        onClick = {
-                                            if (isDownloaded) {
-                                                Toast.makeText(context, "Already downloaded! Plays offline 📲", Toast.LENGTH_SHORT).show()
-                                                return@IconButton
-                                            }
-                                            isSongDownloading = true
-                                            coroutineScope.launch {
-                                                val cleanName = "QwikSave_Song_${song.id}_${song.title.replace(Regex("[^a-zA-Z0-9]"), "_")}.mp3"
-                                                val res = client.downloadMediaDirectly(context, song.streamUrl, cleanName)
-                                                isSongDownloading = false
-                                                res.onSuccess { f ->
-                                                    UserPreferences.saveDownloadedSong(context, song.id, f.absolutePath)
-                                                    downloadedPaths = UserPreferences.getDownloadedSongPaths(context)
-                                                    Toast.makeText(context, "Downloaded for offline road trips! 🎵", Toast.LENGTH_LONG).show()
-                                                }.onFailure { err ->
-                                                    Toast.makeText(context, "Download saved! 🎵", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.size(30.dp)
-                                    ) {
-                                        if (isSongDownloading) {
-                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color(0xFF1DB954), strokeWidth = 2.dp)
-                                        } else if (isDownloaded) {
-                                            Icon(Icons.Default.CheckCircle, contentDescription = "Downloaded", tint = Color(0xFF1DB954), modifier = Modifier.size(17.dp))
-                                        } else {
-                                            Icon(Icons.Default.Download, contentDescription = "Download Offline", tint = Color(0xFFCBD5E1), modifier = Modifier.size(17.dp))
-                                        }
+                            // Title, Artist & Offline Indicator
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = track.title,
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCurrent) Color(0xFF1DB954) else Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    if (isOffline) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.Default.DownloadDone,
+                                            contentDescription = "Saved Offline",
+                                            tint = Color(0xFF1DB954),
+                                            modifier = Modifier.size(13.dp)
+                                        )
                                     }
                                 }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "${track.artist} • ${track.albumOrMovie}",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFFA1A1AA),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            // Like Heart Button
+                            IconButton(
+                                onClick = {
+                                    val nowLiked = UserPreferences.toggleLikedSong(context, track.id)
+                                    likedSongIds = UserPreferences.getLikedSongIds(context)
+                                    val msg = if (nowLiked) "Added to Liked Songs ❤️" else "Removed from Liked Songs"
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = "Like",
+                                    tint = if (isLiked) Color(0xFF1DB954) else Color.Gray,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            // Offline Download Button
+                            IconButton(
+                                onClick = {
+                                    if (isOffline) {
+                                        Toast.makeText(context, "Already saved for offline playback! 💾", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Saving \"${track.title}\" for road trips...", Toast.LENGTH_SHORT).show()
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            try {
+                                                val cacheDir = File(context.cacheDir, "music_offline").apply { mkdirs() }
+                                                val localFile = File(cacheDir, "${track.id}.mp3")
+                                                val conn = (URL(track.streamUrl).openConnection() as HttpURLConnection).apply {
+                                                    connectTimeout = 15000
+                                                    readTimeout = 30000
+                                                }
+                                                if (conn.responseCode in 200..299) {
+                                                    conn.inputStream.use { input ->
+                                                        FileOutputStream(localFile).use { output ->
+                                                            input.copyTo(output)
+                                                        }
+                                                    }
+                                                    UserPreferences.saveDownloadedSongPath(context, track.id, localFile.absolutePath)
+                                                    withContext(Dispatchers.Main) {
+                                                        downloadedPaths = UserPreferences.getDownloadedSongPaths(context)
+                                                        Toast.makeText(context, "Saved offline! Play anytime without internet 🎧", Toast.LENGTH_LONG).show()
+                                                    }
+                                                } else {
+                                                    withContext(Dispatchers.Main) {
+                                                        Toast.makeText(context, "Failed to download stream.", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            } catch (e: Exception) {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    if (isOffline) Icons.Default.CheckCircle else Icons.Default.Download,
+                                    contentDescription = "Save Offline",
+                                    tint = if (isOffline) Color(0xFF1DB954) else Color.Gray,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }
@@ -1015,38 +910,38 @@ fun MusicHubScreen(
             }
         }
 
-        // Persistent Spotify-Style Player Bar at Bottom (With Interactive Draggable Seekbar)
-        currentTrack?.let { track ->
+        // Sleek Spotify Floating Bottom Player Bar with Foreground Service Control
+        if (currentTrack != null) {
+            val track = currentTrack!!
             val isLiked = likedSongIds.contains(track.id)
 
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1DB954).copy(alpha = 0.6f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF202020)),
+                elevation = CardDefaults.cardElevation(8.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp, start = 10.dp, end = 10.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    // Top: Track Info & Controls
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Track Info
+                        // Song Cover & Info
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(4.dp))
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(6.dp))
                                     .background(Color.Black)
                             ) {
                                 AsyncThumbnail(
@@ -1066,7 +961,7 @@ fun MusicHubScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = track.artist,
+                                    text = "${track.artist} • ${track.albumOrMovie}",
                                     color = Color(0xFF94A3B8),
                                     fontSize = 9.5.sp,
                                     maxLines = 1,
@@ -1081,41 +976,29 @@ fun MusicHubScreen(
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             IconButton(
-                                onClick = { playPrevious() },
+                                onClick = { MusicController.prevTrack(context) },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(18.dp))
                             }
 
-                            // Circular Spotify Play/Pause Button
+                            // Sleek Circular Spotify Play/Pause Button
                             IconButton(
-                                onClick = {
-                                    if (isPlaying) {
-                                        mediaPlayer.pause()
-                                        isPlaying = false
-                                    } else {
-                                        mediaPlayer.start()
-                                        isPlaying = true
-                                    }
-                                },
+                                onClick = { MusicController.togglePlayPause(context) },
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(32.dp)
                                     .background(Color(0xFF1DB954), CircleShape)
                             ) {
-                                if (isBuffering) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.Black, strokeWidth = 2.dp)
-                                } else {
-                                    Icon(
-                                        if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                        contentDescription = "Play/Pause",
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                Icon(
+                                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(17.dp)
+                                )
                             }
 
                             IconButton(
-                                onClick = { playNext() },
+                                onClick = { MusicController.nextTrack(context) },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(18.dp))
@@ -1141,19 +1024,19 @@ fun MusicHubScreen(
                     }
 
                     // Draggable Seekbar ("lining pe ungli se aage piche kar sake")
+                    val maxDur = durationSec.coerceAtLeast(1)
+                    val currentVal = if (isSeeking) localSliderSec else progressSec.toFloat()
+
                     Slider(
-                        value = sliderValue,
+                        value = currentVal.coerceIn(0f, maxDur.toFloat()),
+                        valueRange = 0f..maxDur.toFloat(),
                         onValueChange = { newVal ->
                             isSeeking = true
-                            sliderValue = newVal
-                            currentPositionMs = (newVal * durationMs).toInt()
+                            localSliderSec = newVal
                         },
                         onValueChangeFinished = {
                             isSeeking = false
-                            try {
-                                val target = (sliderValue * durationMs).toInt()
-                                mediaPlayer.seekTo(target)
-                            } catch (_: Exception) {}
+                            MusicController.seekTo(context, localSliderSec.toInt())
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1170,8 +1053,8 @@ fun MusicHubScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(formatTime(currentPositionMs), color = Color(0xFF94A3B8), fontSize = 9.sp)
-                        Text(formatTime(durationMs), color = Color(0xFF94A3B8), fontSize = 9.sp)
+                        Text(formatTime(if (isSeeking) localSliderSec.toInt() else progressSec), color = Color(0xFF94A3B8), fontSize = 9.sp)
+                        Text(formatTime(durationSec), color = Color(0xFF94A3B8), fontSize = 9.sp)
                     }
                 }
             }
