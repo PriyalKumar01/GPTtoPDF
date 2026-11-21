@@ -39,6 +39,7 @@ enum class ActiveDialog {
 @Composable
 fun TopBarOverflowMenu(
     activeDialog: MutableState<ActiveDialog>,
+    onSignOut: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -140,6 +141,33 @@ fun TopBarOverflowMenu(
                 onClick = {
                     expanded = false
                     activeDialog.value = ActiveDialog.FOUNDER
+                }
+            )
+
+            HorizontalDivider(color = Color(0xFF1E293B), thickness = 1.dp)
+
+            // Line 4: Sign Out / Switch Account
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ExitToApp,
+                            contentDescription = null,
+                            tint = Color(0xFFF43F5E),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Sign Out / Switch Account",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFFDA4AF)
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onSignOut()
                 }
             )
         }
