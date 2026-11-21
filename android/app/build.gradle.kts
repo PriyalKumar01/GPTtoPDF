@@ -67,6 +67,8 @@ dependencies {
   implementation("com.google.zxing:core:3.5.3")
   // Media session & playback notifications
   implementation("androidx.media:media:1.7.0")
+  // Google Sign-In & Play Services Auth
+  implementation("com.google.android.gms:play-services-auth:21.3.0")
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests
