@@ -279,7 +279,14 @@ class MusicPlaybackService : Service() {
         val effectiveBitmap = artBitmap ?: getDefaultArtBitmap()
         metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, effectiveBitmap)
         metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, effectiveBitmap)
-        metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, effectiveBitmap)
+
+        // Set official colored app logo for system media notification player source icon
+        val appLogoBitmap = try {
+            BitmapFactory.decodeResource(resources, R.drawable.app_logo)
+        } catch (_: Exception) {
+            effectiveBitmap
+        }
+        metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, appLogoBitmap ?: effectiveBitmap)
 
         mediaSession?.setMetadata(metadataBuilder.build())
     }
@@ -337,7 +344,7 @@ class MusicPlaybackService : Service() {
         mediaSession?.sessionToken?.let { mediaStyle.setMediaSession(it) }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.drawable.ic_stat_qwiksave)
             .setContentTitle(track.title)
             .setContentText("${track.artist} • ${track.albumOrMovie}")
             .setContentIntent(openAppPendingIntent)
