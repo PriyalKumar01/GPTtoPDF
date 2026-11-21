@@ -9,6 +9,7 @@ object UserPreferences {
     private const val KEY_ONBOARDING_DONE = "onboarding_done"
     private const val KEY_USER_NAME = "user_name"
     private const val KEY_USER_EMAIL = "user_email"
+    private const val KEY_USER_AGE = "user_age"
     private const val KEY_AUTH_PROVIDER = "auth_provider"
     private const val KEY_IS_VERIFIED = "is_verified"
 
@@ -35,6 +36,14 @@ object UserPreferences {
         getPrefs(context).edit().putString(KEY_USER_NAME, finalName).apply()
     }
 
+    fun getUserAge(context: Context): Int {
+        return getPrefs(context).getInt(KEY_USER_AGE, 0)
+    }
+
+    fun setUserAge(context: Context, age: Int) {
+        getPrefs(context).edit().putInt(KEY_USER_AGE, age.coerceIn(1, 100)).apply()
+    }
+
     fun getUserEmail(context: Context): String {
         return getPrefs(context).getString(KEY_USER_EMAIL, "") ?: ""
     }
@@ -47,14 +56,32 @@ object UserPreferences {
         return getPrefs(context).getBoolean(KEY_IS_VERIFIED, false)
     }
 
-    fun saveVerifiedAuth(context: Context, name: String, email: String, provider: String) {
-        val trimmedName = name.trim().ifBlank { email.substringBefore("@").replace(".", " ").capitalize() }
-        getPrefs(context).edit()
+    fun saveVerifiedAuth(context: Context, name: String, email: String, provider: String, age: Int = 0) {
+        val trimmedName = name.trim().ifBlank { 
+            email.substringBefore("@").replace(".", " ")
+                .split(" ")
+                .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+        }
+        val editor = getPrefs(context).edit()
             .putString(KEY_USER_NAME, trimmedName)
             .putString(KEY_USER_EMAIL, email.trim())
             .putString(KEY_AUTH_PROVIDER, provider.trim())
             .putBoolean(KEY_IS_VERIFIED, true)
             .putBoolean(KEY_ONBOARDING_DONE, true)
+        if (age in 1..100) {
+            editor.putInt(KEY_USER_AGE, age)
+        }
+        editor.apply()
+    }
+
+    fun clearAuth(context: Context) {
+        getPrefs(context).edit()
+            .remove(KEY_USER_NAME)
+            .remove(KEY_USER_EMAIL)
+            .remove(KEY_USER_AGE)
+            .remove(KEY_AUTH_PROVIDER)
+            .putBoolean(KEY_IS_VERIFIED, false)
+            .putBoolean(KEY_ONBOARDING_DONE, false)
             .apply()
     }
 
