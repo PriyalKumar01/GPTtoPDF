@@ -220,6 +220,33 @@ export function Footer() {
                 </li>
                 <li>
                   <Link
+                    href="/terms"
+                    className="text-slate-700 dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#3B82F6] hover:underline transition-colors flex items-center gap-2"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                    <span>Terms of Service</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/data-deletion"
+                    className="text-slate-700 dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#3B82F6] hover:underline transition-colors flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span>User Data Deletion</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/owner"
+                    className="text-slate-700 dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#3B82F6] hover:underline transition-colors flex items-center gap-2"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Owner Portal (Admin)</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link
                     href="/faq"
                     className="text-slate-700 dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#3B82F6] hover:underline transition-colors flex items-center gap-2"
                   >
