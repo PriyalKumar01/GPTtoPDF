@@ -3,6 +3,7 @@ import './globals.css';
 import { ThemeProvider } from '@/lib/theme-context';
 import { APP_CONFIG } from '@/lib/config';
 import { InitialSplashScreen } from '@/components/InitialSplashScreen';
+import { RealtimeBanGuard } from '@/components/RealtimeBanGuard';
 
 export const metadata: Metadata = {
   metadataBase: new URL(APP_CONFIG.appUrl),
@@ -137,6 +138,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-[#EEF2F6] dark:bg-[#090E17] text-slate-900 dark:text-[#F1F5F9] flex flex-col selection:bg-blue-600 selection:text-white transition-colors duration-200">
         <ThemeProvider>
           <InitialSplashScreen />
+          <RealtimeBanGuard />
           {children}
         </ThemeProvider>
       </body>
