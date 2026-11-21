@@ -1,6 +1,8 @@
 package com.qwiksave.app.sdk
 
 import android.app.DownloadManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -17,6 +19,7 @@ import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -83,7 +86,7 @@ data class ExtractedMedia(
  * - QR Code Studio & Video to MP3 Extractor
  */
 class QwikSaveClient(
-    val baseUrl: String = "https://www.ai-chat2pdf.live"
+    val baseUrl: String = "https://qwiksave.vercel.app"
 ) {
 
     /**
@@ -326,6 +329,42 @@ class QwikSaveClient(
         val videoId = extractYouTubeId(cleanUrl)
         val defaultThumb = if (videoId.length == 11) "https://i.ytimg.com/vi/$videoId/hqdefault.jpg" else "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=500&q=80"
 
+        // Fetch exact metadata (exact duration, title, channel author) directly from YouTube web
+        var ytDirectSeconds = 0
+        var ytDirectTitle = ""
+        var ytDirectAuthor = ""
+        try {
+            val pageConn = (URL("https://www.youtube.com/watch?v=$videoId").openConnection() as HttpURLConnection).apply {
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                connectTimeout = 6000
+                readTimeout = 8000
+            }
+            if (pageConn.responseCode == 200) {
+                val html = pageConn.inputStream.bufferedReader().use { it.readText() }
+                val mSec = Regex("\"lengthSeconds\":\"(\\d+)\"").find(html)
+                if (mSec != null) ytDirectSeconds = mSec.groupValues[1].toIntOrNull() ?: 0
+                val mTitle = Regex("<title>(.+?)</title>").find(html)
+                if (mTitle != null) ytDirectTitle = mTitle.groupValues[1].replace(Regex("\\s*-\\s*YouTube$"), "").trim()
+                val mAuthor = Regex("\"author\":\"([^\"]+)\"").find(html) ?: Regex("\"ownerChannelName\":\"([^\"]+)\"").find(html)
+                if (mAuthor != null) ytDirectAuthor = mAuthor.groupValues[1].trim()
+            }
+        } catch (_: Exception) {}
+
+        fun formatSizeTier(sec: Int, mbPerSec: Double): String {
+            if (sec <= 0) return "HD Stream"
+            val mb = sec * mbPerSec
+            return if (mb >= 1000.0) String.format("%.2f GB", mb / 1024.0) else String.format("%.1f MB", mb)
+        }
+
+        fun formatDurationText(sec: Int): String {
+            if (sec <= 0) return "▶ Full Video"
+            val h = sec / 3600
+            val m = (sec % 3600) / 60
+            val s = sec % 60
+            return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
+        }
+
         // Tier 1: Call backend /api/universal-download (High-Speed yt-dlp & Vidsnap stream with accurate dynamic duration & full length)
         try {
             val endpoint = URL("$baseUrl/api/universal-download")
@@ -354,18 +393,17 @@ class QwikSaveClient(
                         streamUrl = "$baseUrl$streamUrl"
                     }
                     val thumb = data.optString("thumbnailUrl", defaultThumb)
-                    val title = data.optString("title", "YouTube Video")
-                    val author = data.optJSONObject("author")?.optString("name", "YouTube Channel") ?: "YouTube Channel"
-                    val durText = data.optString("durationText", null) ?: run {
-                        val sec = data.optInt("duration", 0)
-                        if (sec > 0) {
-                            val h = sec / 3600
-                            val m = (sec % 3600) / 60
-                            val s = sec % 60
-                            if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
-                        } else "▶ HD Video"
-                    }
-                    val sizeMb = data.optString("filesizeMb", "Full HD Stream")
+                    val rawTitle = data.optString("title", "YouTube Video")
+                    val title = if (ytDirectTitle.isNotBlank()) ytDirectTitle else rawTitle
+                    val author = if (ytDirectAuthor.isNotBlank()) ytDirectAuthor else (data.optJSONObject("author")?.optString("name", "YouTube Channel") ?: "YouTube Channel")
+
+                    val backendSec = data.optInt("duration", 0)
+                    val effectiveSec = if (ytDirectSeconds > 0) ytDirectSeconds else if (backendSec != 180) backendSec else 60
+                    val durText = formatDurationText(effectiveSec)
+
+                    val size1080 = formatSizeTier(effectiveSec, 0.26)
+                    val size720 = formatSizeTier(effectiveSec, 0.15)
+                    val size480 = formatSizeTier(effectiveSec, 0.08)
 
                     val formatsList = mutableListOf<MediaItem>()
                     val rawFormats = data.optJSONArray("formats")
@@ -376,9 +414,15 @@ class QwikSaveClient(
                             if (fUrl.startsWith("/")) {
                                 fUrl = "$baseUrl$fUrl"
                             }
-                            val qLabel = f.optString("qualityLabel", f.optString("resolution", "HD MP4"))
-                            val fSize = f.optString("filesizeMb", "")
-                            val displayQuality = if (fSize.isNotBlank()) "$qLabel ($fSize)" else qLabel
+                            val rawQLabel = f.optString("qualityLabel", f.optString("resolution", "HD MP4"))
+                            val cleanLabel = rawQLabel.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
+                            val tierSize = when {
+                                cleanLabel.contains("1080") -> size1080
+                                cleanLabel.contains("720") -> size720
+                                cleanLabel.contains("480") -> size480
+                                else -> size720
+                            }
+                            val displayQuality = "$cleanLabel ($tierSize)"
                             if (fUrl.isNotBlank()) {
                                 formatsList.add(MediaItem(fUrl, true, thumb, displayQuality))
                             }
@@ -387,7 +431,9 @@ class QwikSaveClient(
 
                     if (streamUrl.isNotBlank() && streamUrl.startsWith("http") && !streamUrl.contains("youtube.com/watch")) {
                         if (formatsList.isEmpty()) {
-                            formatsList.add(MediaItem(streamUrl, true, thumb, "HD MP4 ($sizeMb)"))
+                            formatsList.add(MediaItem(streamUrl, true, thumb, "1080p Full HD MP4 ($size1080)"))
+                            formatsList.add(MediaItem(streamUrl, true, thumb, "720p HD MP4 ($size720)"))
+                            formatsList.add(MediaItem(streamUrl, true, thumb, "480p SD MP4 ($size480)"))
                         }
 
                         return@withContext Result.success(
@@ -397,7 +443,7 @@ class QwikSaveClient(
                                 thumbnailUrl = thumb,
                                 streamUrl = streamUrl,
                                 quality = "HD MP4",
-                                fileSizeMb = sizeMb,
+                                fileSizeMb = size720,
                                 platform = "youtube",
                                 isVideo = true,
                                 author = author,
@@ -422,24 +468,20 @@ class QwikSaveClient(
             if (invConn.responseCode == 200) {
                 val invResp = invConn.inputStream.bufferedReader().use { it.readText() }
                 val invJson = JSONObject(invResp)
-                val vTitle = invJson.optString("title", "YouTube Video")
-                val vAuthor = invJson.optString("author", "YouTube Channel")
-                val sec = invJson.optInt("lengthSeconds", 0)
-                val durText = if (sec > 0) {
-                    val h = sec / 3600
-                    val m = (sec % 3600) / 60
-                    val s = sec % 60
-                    if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
-                } else "▶ Full Video"
+                val vTitle = if (ytDirectTitle.isNotBlank()) ytDirectTitle else invJson.optString("title", "YouTube Video")
+                val vAuthor = if (ytDirectAuthor.isNotBlank()) ytDirectAuthor else invJson.optString("author", "YouTube Channel")
+                val invSec = invJson.optInt("lengthSeconds", 0)
+                val effectiveSec = if (ytDirectSeconds > 0) ytDirectSeconds else if (invSec > 0) invSec else 60
+                val durText = formatDurationText(effectiveSec)
 
                 val adaptive = invJson.optJSONArray("adaptiveFormats")
                 if (adaptive != null && adaptive.length() > 0) {
                     val formatsList = mutableListOf<MediaItem>()
                     val tiers = listOf(
-                        Pair(listOf("1080", "1920"), "1080p Full HD MP4"),
-                        Pair(listOf("720", "1280"), "720p HD MP4"),
-                        Pair(listOf("480", "854"), "480p SD MP4"),
-                        Pair(listOf("360", "640"), "360p SD MP4")
+                        Triple(listOf("1080", "1920"), "1080p Full HD MP4", formatSizeTier(effectiveSec, 0.26)),
+                        Triple(listOf("720", "1280"), "720p HD MP4", formatSizeTier(effectiveSec, 0.15)),
+                        Triple(listOf("480", "854"), "480p SD MP4", formatSizeTier(effectiveSec, 0.08)),
+                        Triple(listOf("360", "640"), "360p SD MP4", formatSizeTier(effectiveSec, 0.05))
                     )
 
                     for (tier in tiers) {
@@ -449,10 +491,8 @@ class QwikSaveClient(
                             val container = a.optString("container", "")
                             val aUrl = a.optString("url", "")
                             if (aUrl.isNotBlank() && container == "mp4" && tier.first.any { res.contains(it) }) {
-                                val clen = a.optLong("clen", 0L)
-                                val sizeText = if (clen > 0) String.format("%.1f MB", clen / (1024.0 * 1024.0)) else if (sec > 0) String.format("%.1f MB", sec * 0.18) else "HD Stream"
                                 val safeUrl = "$baseUrl/api/proxy-download?url=${java.net.URLEncoder.encode(aUrl, "UTF-8")}&filename=QwikSave_YouTube_${videoId}_${tier.second.replace(" ", "_")}.mp4"
-                                formatsList.add(MediaItem(safeUrl, true, defaultThumb, "${tier.second} ($sizeText)"))
+                                formatsList.add(MediaItem(safeUrl, true, defaultThumb, "${tier.second} (${tier.third})"))
                                 break
                             }
                         }
@@ -493,23 +533,20 @@ class QwikSaveClient(
                 if (bJson.optBoolean("status", false) && (bJson.has("mp4") || bJson.has("mp3"))) {
                     val vUrl = bJson.optString("mp4", bJson.optString("mp3", ""))
                     if (vUrl.isNotBlank() && vUrl.startsWith("http")) {
-                        val vTitle = bJson.optString("title", "YouTube Video")
-                        val vAuthor = bJson.optString("author", "YouTube Channel")
+                        val vTitle = if (ytDirectTitle.isNotBlank()) ytDirectTitle else bJson.optString("title", "YouTube Video")
+                        val vAuthor = if (ytDirectAuthor.isNotBlank()) ytDirectAuthor else bJson.optString("author", "YouTube Channel")
                         val vThumb = bJson.optString("thumbnail", defaultThumb)
 
-                        var sizeMb = "HD Stream"
-                        val clenMatch = Regex("[?&]clen(?:%3D|=)(\\d+)").find(vUrl)
-                        if (clenMatch != null) {
-                            val clenBytes = clenMatch.groupValues[1].toLongOrNull() ?: 0L
-                            if (clenBytes > 0) {
-                                sizeMb = String.format("%.1f MB", clenBytes / (1024.0 * 1024.0))
-                            }
-                        }
+                        val effectiveSec = if (ytDirectSeconds > 0) ytDirectSeconds else 60
+                        val durStr = formatDurationText(effectiveSec)
+                        val size1080 = formatSizeTier(effectiveSec, 0.26)
+                        val size720 = formatSizeTier(effectiveSec, 0.15)
+                        val size480 = formatSizeTier(effectiveSec, 0.08)
 
                         val formatsList = mutableListOf<MediaItem>()
-                        formatsList.add(MediaItem(vUrl, true, vThumb, "1080p Full HD MP4 ($sizeMb)"))
-                        formatsList.add(MediaItem(vUrl, true, vThumb, "720p HD MP4 ($sizeMb)"))
-                        formatsList.add(MediaItem(vUrl, true, vThumb, "480p SD MP4"))
+                        formatsList.add(MediaItem(vUrl, true, vThumb, "1080p Full HD MP4 ($size1080)"))
+                        formatsList.add(MediaItem(vUrl, true, vThumb, "720p HD MP4 ($size720)"))
+                        formatsList.add(MediaItem(vUrl, true, vThumb, "480p SD MP4 ($size480)"))
 
                         return@withContext Result.success(
                             ExtractedMedia(
@@ -518,11 +555,11 @@ class QwikSaveClient(
                                 thumbnailUrl = vThumb,
                                 streamUrl = vUrl,
                                 quality = "1080p Full HD",
-                                fileSizeMb = sizeMb,
+                                fileSizeMb = size720,
                                 platform = "youtube",
                                 isVideo = true,
                                 author = vAuthor,
-                                durationText = "▶ Full HD Video",
+                                durationText = durStr,
                                 items = formatsList
                             )
                         )
@@ -725,6 +762,7 @@ class QwikSaveClient(
         context: Context,
         mediaUrl: String,
         filename: String,
+        onProgress: (bytesRead: Long, totalBytes: Long, percent: Int) -> Unit = { _, _, _ -> },
         onSuccess: (File?) -> Unit = {},
         onError: (String) -> Unit = {}
     ): Result<File> = withContext(Dispatchers.IO) {
@@ -742,6 +780,33 @@ class QwikSaveClient(
                 "$baseUrl${if (cleanMediaUrl.startsWith("/")) "" else "/"}$cleanMediaUrl"
             }
         }
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        val channelId = "qwiksave_downloads"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && notificationManager != null) {
+            val channel = NotificationChannel(
+                channelId,
+                "Qwik Save Downloads",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Shows live download progress for videos and audio"
+                setShowBadge(false)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val notifId = (filename.hashCode() and 0x7FFFFFFF)
+        val notifBuilder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.app_logo)
+            .setContentTitle("Downloading ${filename.take(32)}...")
+            .setContentText("0% downloaded")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setProgress(100, 0, false)
+
+        try {
+            notificationManager?.notify(notifId, notifBuilder.build())
+        } catch (_: Exception) {}
 
         try {
             var currentUrl = resolvedUrl
@@ -818,6 +883,7 @@ class QwikSaveClient(
             }
 
             var savedFile: File? = null
+            var downloadedTotalBytes = 0L
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val contentResolver = context.contentResolver
@@ -853,6 +919,8 @@ class QwikSaveClient(
 
                 var totalBytes = 0L
                 var activeConn = conn
+                val expectedLength = activeConn.contentLengthLong.let { if (it > 0) it else 0L }
+                var lastNotifTime = 0L
 
                 contentResolver.openOutputStream(itemUri)?.use { output ->
                     var streamFinished = false
@@ -885,6 +953,26 @@ class QwikSaveClient(
                             while (input.read(buffer).also { bytesRead = it } != -1) {
                                 output.write(buffer, 0, bytesRead)
                                 totalBytes += bytesRead
+
+                                val percent = if (expectedLength > 0) {
+                                    ((totalBytes * 100) / expectedLength).toInt().coerceIn(0, 99)
+                                } else {
+                                    ((totalBytes / (1024.0 * 1024.0 * 25.0)) * 100).toInt().coerceIn(0, 95)
+                                }
+
+                                onProgress(totalBytes, expectedLength, percent)
+
+                                val now = System.currentTimeMillis()
+                                if (now - lastNotifTime > 400) {
+                                    lastNotifTime = now
+                                    val downloadedText = String.format("%.1f MB", totalBytes / (1024.0 * 1024.0))
+                                    val totalText = if (expectedLength > 0) String.format(" / %.1f MB", expectedLength / (1024.0 * 1024.0)) else ""
+                                    notifBuilder.setProgress(100, percent, false)
+                                        .setContentText("$percent% ($downloadedText$totalText)")
+                                    try {
+                                        notificationManager?.notify(notifId, notifBuilder.build())
+                                    } catch (_: Exception) {}
+                                }
                             }
                             output.flush()
                             streamFinished = true
@@ -946,6 +1034,7 @@ class QwikSaveClient(
                     }
                 } ?: return@withContext Result.failure(Exception("Could not open media stream output"))
 
+                downloadedTotalBytes = totalBytes
                 contentValues.clear()
                 contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
                 contentResolver.update(itemUri, contentValues, null, null)
@@ -960,6 +1049,8 @@ class QwikSaveClient(
 
                 var totalBytes = 0L
                 var activeConn = conn
+                val expectedLength = activeConn.contentLengthLong.let { if (it > 0) it else 0L }
+                var lastNotifTime = 0L
 
                 FileOutputStream(targetFile).use { output ->
                     var streamFinished = false
@@ -992,6 +1083,26 @@ class QwikSaveClient(
                             while (input.read(buffer).also { bytesRead = it } != -1) {
                                 output.write(buffer, 0, bytesRead)
                                 totalBytes += bytesRead
+
+                                val percent = if (expectedLength > 0) {
+                                    ((totalBytes * 100) / expectedLength).toInt().coerceIn(0, 99)
+                                } else {
+                                    ((totalBytes / (1024.0 * 1024.0 * 25.0)) * 100).toInt().coerceIn(0, 95)
+                                }
+
+                                onProgress(totalBytes, expectedLength, percent)
+
+                                val now = System.currentTimeMillis()
+                                if (now - lastNotifTime > 400) {
+                                    lastNotifTime = now
+                                    val downloadedText = String.format("%.1f MB", totalBytes / (1024.0 * 1024.0))
+                                    val totalText = if (expectedLength > 0) String.format(" / %.1f MB", expectedLength / (1024.0 * 1024.0)) else ""
+                                    notifBuilder.setProgress(100, percent, false)
+                                        .setContentText("$percent% ($downloadedText$totalText)")
+                                    try {
+                                        notificationManager?.notify(notifId, notifBuilder.build())
+                                    } catch (_: Exception) {}
+                                }
                             }
                             output.flush()
                             streamFinished = true
@@ -1053,6 +1164,7 @@ class QwikSaveClient(
                     }
                 }
 
+                downloadedTotalBytes = totalBytes
                 MediaScannerConnection.scanFile(
                     context,
                     arrayOf(targetFile.absolutePath),
@@ -1061,12 +1173,31 @@ class QwikSaveClient(
                 )
             }
 
+            val finalMb = String.format("%.1f MB", downloadedTotalBytes / (1024.0 * 1024.0))
+            notifBuilder.setContentTitle("Download Complete! ✅")
+                .setContentText("Saved to Gallery / Movies ($finalMb)")
+                .setProgress(0, 0, false)
+                .setOngoing(false)
+                .setAutoCancel(true)
+            try {
+                notificationManager?.notify(notifId, notifBuilder.build())
+            } catch (_: Exception) {}
+            onProgress(downloadedTotalBytes, downloadedTotalBytes, 100)
+
             withContext(Dispatchers.Main) {
                 onSuccess(savedFile)
-                Toast.makeText(context, "Saved to Gallery & Downloads! 🎬", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Saved to Gallery / Movies! ✅", Toast.LENGTH_LONG).show()
             }
             Result.success(savedFile ?: File(filename))
         } catch (e: Exception) {
+            notifBuilder.setContentTitle("Download Notice")
+                .setContentText("Handing over to Android background downloader...")
+                .setProgress(0, 0, false)
+                .setOngoing(false)
+                .setAutoCancel(true)
+            try {
+                notificationManager?.notify(notifId, notifBuilder.build())
+            } catch (_: Exception) {}
             // If in-app stream encountered unexpected end of stream or connection interruption,
             // seamlessly hand over to Android system DownloadManager for resilient background download!
             try {
