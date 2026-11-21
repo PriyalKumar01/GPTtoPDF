@@ -74,6 +74,28 @@ data class SongTrack(
  */
 val CURATED_SONGS_CATALOG = listOf(
     SongTrack(
+        id = "4Ph_1SJr",
+        title = "Aana Mere Pyar Ko",
+        artist = "Jatin-Lalit, Alka Yagnik, Kumar Sanu",
+        albumOrMovie = "Kabhi Haan Kabhi Naa",
+        durationText = "3:57",
+        durationSec = 237,
+        streamUrl = "https://aac.saavncdn.com/051/314e3268847c9b358505af5ed15d066b_160.mp4",
+        coverUrl = "https://c.saavncdn.com/051/Kabhi-Haan-Kabhi-Naa-Hindi-1999-20200620121926-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
+        id = "c8PT0p2N",
+        title = "Dil Diwane Ka Dola Dildar Ke Liye",
+        artist = "Anuradha Paudwal, Kumar Sanu, Babla Mehta",
+        albumOrMovie = "Tahalka",
+        durationText = "9:26",
+        durationSec = 566,
+        streamUrl = "https://aac.saavncdn.com/508/762460afcaae1415914a3fabeb5f84b9_160.mp4",
+        coverUrl = "https://c.saavncdn.com/508/Tahalka-Hindi-1990-20221208023954-500x500.jpg",
+        category = "90s"
+    ),
+    SongTrack(
         id = "K5VHIn3A",
         title = "Yeh Duniya Yeh Mehfil",
         artist = "Mohammed Rafi",
@@ -719,6 +741,14 @@ val CURATED_SONGS_CATALOG = listOf(
  * Maps popular lyrics lines, verses, and movie names to their official song title
  */
 val FAMOUS_LYRICS_ALIASES = mapOf(
+    "anna me baba" to "Aana Mere Pyar Ko",
+    "anna me baba song" to "Aana Mere Pyar Ko",
+    "aana mere pyar" to "Aana Mere Pyar Ko",
+    "aana mere pyar ko" to "Aana Mere Pyar Ko",
+    "dil diwane ka dola" to "Dil Diwane Ka Dola Dildar Ke Liye",
+    "dil diwane ka dola dildaar ke liye" to "Dil Diwane Ka Dola Dildar Ke Liye",
+    "dildar ke liye" to "Dil Diwane Ka Dola Dildar Ke Liye",
+    "dola dildar ke liye" to "Dil Diwane Ka Dola Dildar Ke Liye",
     "apna pata mile na khabar" to "Yeh Duniya Yeh Mehfil",
     "apna pata mile" to "Yeh Duniya Yeh Mehfil",
     "apna pata" to "Yeh Duniya Yeh Mehfil",
@@ -817,6 +847,60 @@ fun isFuzzyMatch(target: String, query: String): Boolean {
         }
     }
     return false
+}
+
+/**
+ * Smart Relevance Scoring for Music Search
+ * Ensures exact and multi-word title matches appear at the very TOP (index 0).
+ */
+fun computeSongSearchScore(track: SongTrack, raw: String, q: String): Int {
+    val title = track.title.lowercase().trim()
+    val artist = track.artist.lowercase().trim()
+    val album = track.albumOrMovie.lowercase().trim()
+
+    var score = 0
+
+    // Direct Lyrics/Common Title Alias boost (e.g. "anna me baba" -> "Aana Mere Pyar Ko", "dola dildar ke liye" -> "Dil Diwane Ka Dola")
+    val aliasTarget = FAMOUS_LYRICS_ALIASES[q] ?: FAMOUS_LYRICS_ALIASES[raw]
+    if (aliasTarget != null && track.title.contains(aliasTarget, ignoreCase = true)) {
+        score += 30000
+    }
+
+    if (title == raw || title == q) score += 10000
+    else if (title.startsWith(raw) || title.startsWith(q)) score += 8000
+    else if (title.contains(raw) || title.contains(q)) score += 5000
+
+    val queryToUse = if (q.isNotBlank()) q else raw
+    val qWords = queryToUse.split(" ", "-", "_", ".").filter { it.length > 1 }
+    val titleWords = title.split(" ", "-", "_", ".").filter { it.length > 1 }
+
+    var matchedWords = 0
+    var matchedSignificantWords = 0
+    for (qw in qWords) {
+        val isShort = qw.length <= 2
+        val match = if (isShort) {
+            titleWords.any { it == qw }
+        } else {
+            titleWords.any { it == qw || it.startsWith(qw) || qw.startsWith(it) || (it.length > 3 && qw.length > 3 && levenshteinDistance(it, qw) <= 1) }
+        }
+        if (match) {
+            matchedWords++
+            if (!isShort) matchedSignificantWords++
+        }
+    }
+
+    if (qWords.isNotEmpty()) {
+        if (matchedWords == qWords.size) {
+            score += 4500
+        } else if (matchedSignificantWords > 0) {
+            score += (matchedSignificantWords * 1200)
+        }
+    }
+
+    if (artist.contains(raw) || artist.contains(q)) score += 1500
+    if (album.contains(raw) || album.contains(q)) score += 1200
+
+    return score
 }
 
 private fun levenshteinDistance(s1: String, s2: String): Int {
@@ -1140,29 +1224,35 @@ fun MusicHubScreen(
         }
     }
 
-    // Filtered song list
+    // Filtered song list with intelligent relevance ranking (Exact match appears at index 0 on TOP!)
     val displayedTracks by remember(selectedCategory, searchQuery, dynamicTracks.size, likedSongIds, downloadedPaths) {
         derivedStateOf {
             val raw = searchQuery.trim().lowercase()
             val q = cleanSearchQuery(raw)
-            dynamicTracks.filter { track ->
-                val matchesCategory = when (selectedCategory) {
-                    "90s" -> track.category == "90s"
-                    "Trending" -> track.category == "Trending"
-                    "Travel" -> track.category == "Travel"
-                    "Punjabi" -> track.category == "Punjabi"
-                    "Bhojpuri" -> track.category == "Bhojpuri"
-                    "Liked" -> likedSongIds.contains(track.id)
-                    "Offline" -> downloadedPaths.containsKey(track.id)
-                    else -> true
+            if (raw.isNotEmpty()) {
+                // When user searches, search universally across all tracks and rank by relevance score
+                dynamicTracks
+                    .map { track ->
+                        val score = computeSongSearchScore(track, raw, q)
+                        Pair(track, score)
+                    }
+                    .filter { it.second > 0 }
+                    .sortedByDescending { it.second }
+                    .map { it.first }
+            } else {
+                // Standard category filter when no search is typed
+                dynamicTracks.filter { track ->
+                    when (selectedCategory) {
+                        "90s" -> track.category == "90s"
+                        "Trending" -> track.category == "Trending"
+                        "Travel" -> track.category == "Travel"
+                        "Punjabi" -> track.category == "Punjabi"
+                        "Bhojpuri" -> track.category == "Bhojpuri"
+                        "Liked" -> likedSongIds.contains(track.id)
+                        "Offline" -> downloadedPaths.containsKey(track.id)
+                        else -> true
+                    }
                 }
-                val matchesSearch = raw.isEmpty() ||
-                        isFuzzyMatch(track.title, raw) ||
-                        isFuzzyMatch(track.title, q) ||
-                        isFuzzyMatch(track.artist, raw) ||
-                        isFuzzyMatch(track.artist, q) ||
-                        isFuzzyMatch(track.albumOrMovie, raw)
-                matchesCategory && matchesSearch
             }
         }
     }
@@ -1190,7 +1280,7 @@ fun MusicHubScreen(
                 .fillMaxSize()
                 .padding(bottom = if (currentTrack != null) 92.dp else 8.dp)
         ) {
-            // Sleek Spotify Header with Small Compact Back Button
+            // Sleek Spotify Header with Small Compact Back Button & Spotify Vibe badge on the far right
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1200,44 +1290,69 @@ fun MusicHubScreen(
                         )
                     )
                     .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Small Compact Back Button as Requested by User
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .background(Color.White.copy(alpha = 0.15f), CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Qwik Music Hub", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF1DB954))
-                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                            ) {
-                                Text("SPOTIFY VIBE 🎧", fontSize = 8.5.sp, fontWeight = FontWeight.Black, color = Color.Black)
-                            }
-                        }
-                        Text("All 70s, 80s, 90s, 2000s & Any Search • Ad-Free", fontSize = 9.5.sp, color = Color(0xFFB3B3B3))
-                    }
+                // Small Compact Back Button as Requested by User
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Heading & Subheading with minimum gap
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy((-2).dp)
+                ) {
+                    Text(
+                        text = "Qwik Music Hub",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        lineHeight = 16.sp
+                    )
+                    Text(
+                        text = "All 70s, 80s, 90s, 2000s & Any Search • Ad-Free",
+                        fontSize = 9.sp,
+                        color = Color(0xFFB3B3B3),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 11.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Spotify Vibe Badge pushed to the far right
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF1DB954))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "SPOTIFY VIBE 🎧",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.Black
+                    )
                 }
 
                 if (isLiveSearching) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color(0xFF1DB954), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color(0xFF1DB954), strokeWidth = 2.dp)
                 }
             }
 
@@ -1574,31 +1689,39 @@ fun MusicHubScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            IconButton(
-                                onClick = { MusicController.prevTrack(context) },
-                                modifier = Modifier.size(28.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .clickable { MusicController.prevTrack(context) },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(18.dp))
                             }
 
-                            // Small Circular Spotify Play/Pause Button as Requested
-                            IconButton(
-                                onClick = { MusicController.togglePlayPause(context) },
+                            // Sleek Small Circular Spotify Play/Pause Button
+                            Box(
                                 modifier = Modifier
-                                    .size(28.dp)
-                                    .background(Color(0xFF1DB954), CircleShape)
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF1DB954))
+                                    .clickable { MusicController.togglePlayPause(context) },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = "Play/Pause",
                                     tint = Color.Black,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
 
-                            IconButton(
-                                onClick = { MusicController.nextTrack(context) },
-                                modifier = Modifier.size(28.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .clickable { MusicController.nextTrack(context) },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(18.dp))
                             }
