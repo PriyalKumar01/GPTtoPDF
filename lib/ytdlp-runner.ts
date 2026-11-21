@@ -34,37 +34,48 @@ export interface YtDlpExtractionResult {
 
 function calculateMb(f: any, duration?: number): string {
   if (f?.filesize && f.filesize > 0) {
-    return `${(f.filesize / (1024 * 1024)).toFixed(2)} MB`;
+    const mb = f.filesize / (1024 * 1024);
+    return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
   }
   if (f?.filesize_approx && f.filesize_approx > 0) {
-    return `${(f.filesize_approx / (1024 * 1024)).toFixed(2)} MB`;
+    const mb = f.filesize_approx / (1024 * 1024);
+    return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
   }
   const bitrate = f?.tbr || (f?.vbr ? f.vbr + (f?.abr || 128) : 0);
   if (bitrate > 0 && duration && duration > 0) {
     const bytes = (bitrate * 1000 * duration) / 8;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    const mb = bytes / (1024 * 1024);
+    return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
   }
 
-  // Sensible heuristics based on resolution or audio
+  // Realistic estimates based on resolution and duration for long or short videos
   const h = f?.height || (f?.width && f.width >= 1080 ? 1080 : f?.width && f.width >= 720 ? 720 : 480);
   if (h >= 1080) {
-    return duration && duration > 0
-      ? `${Math.max(1.5, (duration * 0.22)).toFixed(2)} MB`
-      : '5.85 MB';
+    if (duration && duration > 0) {
+      const mb = duration * 0.28; // ~2.2 Mbps
+      return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+    }
+    return '1.20 GB';
   }
   if (h >= 720) {
-    return duration && duration > 0
-      ? `${Math.max(0.9, (duration * 0.14)).toFixed(2)} MB`
-      : '3.58 MB';
+    if (duration && duration > 0) {
+      const mb = duration * 0.16; // ~1.3 Mbps
+      return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+    }
+    return '480.0 MB';
   }
   if (h >= 480) {
-    return duration && duration > 0
-      ? `${Math.max(0.5, (duration * 0.08)).toFixed(2)} MB`
-      : '2.10 MB';
+    if (duration && duration > 0) {
+      const mb = duration * 0.09;
+      return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+    }
+    return '240.0 MB';
   }
-  return duration && duration > 0
-    ? `${Math.max(0.3, (duration * 0.05)).toFixed(2)} MB`
-    : '1.20 MB';
+  if (duration && duration > 0) {
+    const mb = duration * 0.05;
+    return mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+  }
+  return '120.0 MB';
 }
 
 export async function extractWithYtDlp(url: string, timeoutMs = 45000): Promise<YtDlpExtractionResult | null> {
@@ -74,8 +85,6 @@ export async function extractWithYtDlp(url: string, timeoutMs = 45000): Promise<
       [
         '-m',
         'yt_dlp',
-        '--extractor-args',
-        'youtube:player_client=android,ios,web',
         '--dump-json',
         '--no-warnings',
         '--no-playlist',
@@ -134,26 +143,27 @@ export async function extractWithYtDlp(url: string, timeoutMs = 45000): Promise<
         const height = f.height || 0;
         const width = f.width || 0;
         const maxDim = Math.max(height, width);
+        const minDim = Math.min(height, width) || maxDim;
 
         let tierKey = '480p SD';
-        let qualityLabel = '480p Standard';
+        let qualityLabel = '480p SD MP4';
         let rank = 1;
 
-        if (maxDim >= 1920 || height >= 1080 || width >= 1080) {
+        if (maxDim >= 1920 || minDim >= 1080 || height >= 1080 || width >= 1080) {
           tierKey = '1080p Full HD';
-          qualityLabel = '1080p Full HD';
+          qualityLabel = '1080p Full HD MP4';
           rank = 4;
-        } else if (maxDim >= 1280 || height >= 720 || width >= 720) {
+        } else if (maxDim >= 1280 || minDim >= 720 || height >= 720 || width >= 720) {
           tierKey = '720p HD';
-          qualityLabel = '720p HD';
+          qualityLabel = '720p HD MP4';
           rank = 3;
-        } else if (height >= 480 || width >= 480) {
+        } else if (maxDim >= 800 || minDim >= 480 || height >= 480 || width >= 480) {
           tierKey = '480p SD';
-          qualityLabel = '480p SD';
+          qualityLabel = '480p SD MP4';
           rank = 2;
         } else {
           tierKey = '360p Mobile';
-          qualityLabel = '360p Mobile';
+          qualityLabel = '360p Mobile MP4';
           rank = 1;
         }
 
