@@ -81,10 +81,67 @@ async function fetchFileSizeMb(mediaUrl: string): Promise<string | undefined> {
 }
 
 /**
- * Extracts Facebook video/reel media stream links
+ * Extracts Facebook video/reel media stream links (Supports Long Videos, Watch & Reels)
  */
 export async function extractFacebookMedia(inputUrl: string): Promise<FacebookResult> {
   let targetUrl = inputUrl.trim();
+
+  // Engine 0: yt-dlp Native Engine (Accurate Long Video Support, Exact MB & Duration)
+  try {
+    const ytdlp = await extractWithYtDlp(targetUrl, 30000);
+    if (ytdlp && ytdlp.videoUrl) {
+      const formats: FacebookVideoFormat[] = [];
+      const seen = new Set<string>();
+
+      for (const f of ytdlp.formats) {
+        if (f.hasVideo && f.url && !seen.has(f.url)) {
+          seen.add(f.url);
+          const isHd = f.qualityLabel?.includes('HD') || (f.resolution && parseInt(f.resolution) >= 720);
+          formats.push({
+            quality: isHd ? 'HD' : 'SD',
+            label: f.qualityLabel || (isHd ? '1080p Full HD' : '480p SD'),
+            url: f.url,
+            resolution: f.resolution,
+            filesizeMb: f.filesizeMb,
+          });
+        }
+      }
+
+      if (formats.length === 0) {
+        formats.push({
+          quality: 'HD',
+          label: '1080p Full HD MP4',
+          url: ytdlp.videoUrl,
+          filesizeMb: ytdlp.filesizeMb || 'HD Video',
+        });
+      }
+
+      const durSec = ytdlp.duration || 0;
+      const h = Math.floor(durSec / 3600);
+      const m = Math.floor((durSec % 3600) / 60);
+      const s = Math.floor(durSec % 60);
+      const durStr = durSec > 0
+        ? (h > 0
+            ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+            : `${m}:${s.toString().padStart(2, '0')}`)
+        : undefined;
+
+      return {
+        id: ytdlp.id,
+        title: ytdlp.title || 'Facebook Video',
+        description: ytdlp.description,
+        author: {
+          name: ytdlp.uploader || ytdlp.channel || 'Facebook Creator',
+        },
+        thumbnailUrl: ytdlp.thumbnailUrl,
+        duration: durStr,
+        formats,
+        downloadUrl: ytdlp.videoUrl,
+      };
+    }
+  } catch (err) {
+    console.warn('yt-dlp facebook extraction failed, trying fallbacks:', err);
+  }
 
   // Primary Engine 1: SnapSave Media Downloader (Real Thumbnails, Full Streams, Reels & Watch)
   try {
