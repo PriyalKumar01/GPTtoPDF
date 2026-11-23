@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Official Anthropic Claude Terracotta Squircle Background -->
+    <path
+        android:fillColor="#FFD97706"
+        android:pathData="M11,0 L37,0 C43.075,0 48,4.925 48,11 L48,37 C48,43.075 43.075,48 37,48 L11,48 C4.925,48 0,43.075 0,37 L0,11 C0,4.925 4.925,0 11,0 Z" />
+    <!-- Official Anthropic Claude Starburst / Sun Motif -->
+    <group
+        android:scaleX="1.35"
+        android:scaleY="1.35"
+        android:translateX="7.8"
+        android:translateY="7.8">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M12,2 L9.95,9.15 H14.05 L12,2 Z M4.7,8.91 L9.4,10.64 L6.52,5.32 L4.7,8.91 Z M19.3,8.91 L17.48,5.32 L14.6,10.64 L19.3,8.91 Z M12,22 L14.05,14.85 H9.95 L12,22 Z M4.7,15.09 L6.52,18.68 L9.4,13.36 L4.7,15.09 Z M19.3,15.09 L14.6,13.36 L17.48,18.68 L19.3,15.09 Z M2,12 L9.15,14.05 V9.95 L2,12 Z M22,12 L14.85,9.95 V14.05 L22,12 Z" />
+    </group>
+</vector>

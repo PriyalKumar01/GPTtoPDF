@@ -58,7 +58,7 @@ export class NotesPdfGenerator {
   private checkBreak(needed: number) {
     if (this.currentY + needed > this.pageHeight - this.marginBottom) {
       this.doc.addPage();
-      this.currentY = this.marginTop;
+      this.currentY = this.options.partnerBadgeScope === 'all-pages' ? 22 : this.marginTop;
     }
   }
 
@@ -68,10 +68,18 @@ export class NotesPdfGenerator {
   private cleanText(raw: string): string {
     if (!raw) return '';
     return raw
+      .replace(/#{1,6}\s+/g, '') // strip leading markdown heading hashes
       .replace(/\*\*(.*?)\*\*/g, '$1')
       .replace(/\*(.*?)\*/g, '$1')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/&#x20;/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
       .replace(/\$\$(.*?)\$\$/g, '$1')
       .replace(/\$(.*?)\$/g, '$1')
       .replace(/<[^>]+>/g, '') // remove any residual HTML or XML tags (<text...>, </text>, etc.)
@@ -120,8 +128,8 @@ export class NotesPdfGenerator {
       this.doc.setTextColor(15, 23, 42);
       this.doc.text('College Study', badgeX + 13.5, badgeY + 7.8);
 
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.setFontSize(5.8);
+      this.doc.setFont('helvetica', 'bold');
+      this.doc.setFontSize(6.0);
       this.doc.setTextColor(2, 132, 199);
       this.doc.textWithLink('Your Study Hub', badgeX + 13.5, badgeY + 11.2, {
         url: APP_CONFIG.partner.url,
@@ -265,14 +273,51 @@ export class NotesPdfGenerator {
       this.checkBreak(4);
     }
 
-    const rawLines = content.split('\n');
+    // Strip any raw XML tags (Entity, divider, citation) before message rendering
+    content = content
+      .replace(/<Entity[^>]*\/?>/gi, '')
+      .replace(/<divider[^>]*\/?>/gi, '')
+      .replace(/<citation[^>]*\/?>/gi, '');
+
+    // 1. Extract all embedded images (Markdown ![alt](url)) safely into a tokenized map
+    const imgTokenMap = new Map<string, { alt: string; src: string }>();
+    let tokenIndex = 0;
+
+    // Robust tokenization of markdown images
+    let normalized = content.replace(/!\[([\s\S]*?)\]\s*\(([\s\S]*?)\)/gi, (match, alt, src) => {
+      const cleanSrc = src.replace(/[\r\n\s]+/g, '').trim();
+      const cleanAlt = (alt || '').replace(/\s+logo\b/gi, '').replace(/^diagram:\s*/i, '').trim();
+      if (cleanSrc.startsWith('data:image/') || cleanSrc.startsWith('http')) {
+        const token = `__IMG_DIAGRAM_TOKEN_${tokenIndex++}__`;
+        imgTokenMap.set(token, { alt: cleanAlt, src: cleanSrc });
+        return `\n\n${token}\n\n`;
+      }
+      return match;
+    });
+
+    // 2. Strictly purge any remaining raw base64 data URLs anywhere in the content to guarantee zero raw text dumps
+    normalized = normalized
+      .replace(/data:image\/[^;\s"'>]+;base64,[A-Za-z0-9+/=\s\r\n_-]+/gi, '')
+      .replace(/!\[([^\]]*)\]\s*\(\s*\)/g, '');
+
+    const rawLines = normalized.split('\n');
     let i = 0;
 
     while (i < rawLines.length) {
       const line = rawLines[i];
+      const trimmed = line.trim();
+
+      // Skip empty lines or pure raw base64 leftover artifacts (>30 chars of base64 charset)
+      if (
+        trimmed.length > 30 &&
+        /^[A-Za-z0-9+/=]+$/.test(trimmed)
+      ) {
+        i++;
+        continue;
+      }
 
       // 1. Table
-      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
         const tableLines: string[] = [];
         while (i < rawLines.length && rawLines[i].trim().startsWith('|') && rawLines[i].trim().endsWith('|')) {
           tableLines.push(rawLines[i]);
@@ -321,7 +366,7 @@ export class NotesPdfGenerator {
       }
 
       // 2. Code Block
-      if (line.trim().startsWith('```')) {
+      if (trimmed.startsWith('```')) {
         const codeLines: string[] = [];
         i++;
         while (i < rawLines.length && !rawLines[i].trim().startsWith('```')) {
@@ -350,55 +395,82 @@ export class NotesPdfGenerator {
         continue;
       }
 
-      // 2b. Markdown Images & Diagrams (High-resolution embedded diagrams)
-      const imgMatch = line.trim().match(/^!\[(.*?)\]\((data:image\/[^;]+;base64,[^)]+|https?:\/\/[^)]+)\)$/);
-      if (imgMatch) {
-        const altText = (imgMatch[1] || '').trim();
-        const imgData = imgMatch[2];
+      // 2b. Markdown Images & Diagrams (via Token or Direct Match)
+      const tokenMatch = trimmed.match(/^__IMG_DIAGRAM_TOKEN_(\d+)__$/);
+      if (tokenMatch || trimmed.startsWith('![') || trimmed.includes('data:image/')) {
+        const tokenItem = tokenMatch ? imgTokenMap.get(trimmed) : null;
+        let altText = tokenItem ? tokenItem.alt : 'Diagram';
+        let imgData = tokenItem ? tokenItem.src : '';
 
-        try {
-          const imgProps = this.doc.getImageProperties(imgData);
-          const aspect =
-            imgProps.width && imgProps.height
-              ? imgProps.width / imgProps.height
-              : 1.6;
-          const maxW = Math.min(125, this.contentWidth - 10);
-          const maxH = 55;
-          let w = maxW;
-          let h = w / aspect;
-          if (h > maxH) {
-            h = maxH;
-            w = h * aspect;
+        if (!imgData) {
+          const directMatch = trimmed.match(/^!\[(.*?)\]\s*\((data:image\/[^;]+;base64,[^)]+|https?:\/\/[^)]+)\)$/i);
+          if (directMatch) {
+            altText = directMatch[1] || 'Diagram';
+            imgData = directMatch[2];
           }
+        }
 
-          this.checkBreak(h + 12);
-          const imgX = this.marginX + (this.contentWidth - w) / 2;
+        if (imgData) {
+          try {
+            const imgProps = this.doc.getImageProperties(imgData);
+            const aspect =
+              imgProps.width && imgProps.height
+                ? imgProps.width / imgProps.height
+                : 1.6;
+            const maxW = Math.min(125, this.contentWidth - 10);
+            const maxH = 55;
+            let w = maxW;
+            let h = w / aspect;
+            if (h > maxH) {
+              h = maxH;
+              w = h * aspect;
+            }
 
-          // Light card background with subtle border
-          this.doc.setFillColor(255, 255, 255);
-          this.doc.setDrawColor(226, 232, 240);
-          this.doc.setLineWidth(0.25);
-          this.doc.roundedRect(imgX - 1, this.currentY - 0.5, w + 2, h + 1, 1, 1, 'FD');
+            this.checkBreak(h + 12);
+            const imgX = this.marginX + (this.contentWidth - w) / 2;
 
-          // Embed diagram image
-          this.doc.addImage(imgData, 'JPEG', imgX, this.currentY, w, h);
-          this.currentY += h + 3;
+            // Light card background with subtle border
+            this.doc.setFillColor(255, 255, 255);
+            this.doc.setDrawColor(226, 232, 240);
+            this.doc.setLineWidth(0.25);
+            this.doc.roundedRect(imgX - 1, this.currentY - 0.5, w + 2, h + 1, 1, 1, 'FD');
 
-          // Caption centered below diagram
-          if (altText) {
-            this.doc.setFont(this.baseFont, 'normal');
+            // Embed diagram image
+            this.doc.addImage(imgData, 'JPEG', imgX, this.currentY, w, h);
+            this.currentY += h + 3;
+
+            // Caption centered below diagram (suppress redundant internal logo tags)
+            const cleanCap = this.cleanText(altText).replace(/\s+logo\b/gi, '').trim();
+            if (cleanCap && cleanCap.length > 2 && !cleanCap.toLowerCase().startsWith('logo')) {
+              this.doc.setFont(this.baseFont, 'normal');
+              this.doc.setFontSize(scale.caption);
+              this.doc.setTextColor(100, 116, 139);
+              const capLines = this.doc.splitTextToSize(cleanCap, this.contentWidth - 20);
+              this.doc.text(capLines, this.marginX + this.contentWidth / 2, this.currentY, {
+                align: 'center',
+              });
+              this.currentY += capLines.length * 3 + 2;
+            }
+            this.currentY += 2;
+          } catch {
+            // Graceful fallback to styled diagram box if image data fails to decode
+            this.checkBreak(10);
+            this.doc.setFillColor(248, 250, 252);
+            this.doc.setDrawColor(203, 213, 225);
+            this.doc.setLineWidth(0.2);
+            this.doc.roundedRect(this.marginX, this.currentY, this.contentWidth, 8, 1, 1, 'FD');
+            this.doc.setFont(this.baseFont, 'italic');
             this.doc.setFontSize(scale.caption);
             this.doc.setTextColor(100, 116, 139);
-            const cleanCap = this.cleanText(altText);
-            const capLines = this.doc.splitTextToSize(cleanCap, this.contentWidth - 20);
-            this.doc.text(capLines, this.marginX + this.contentWidth / 2, this.currentY, {
-              align: 'center',
-            });
-            this.currentY += capLines.length * 3 + 2;
+            this.doc.text(`[Diagram: ${this.cleanText(altText)}]`, this.marginX + 4, this.currentY + 5.5);
+            this.currentY += 11;
           }
-          this.currentY += 2;
-        } catch {
-          // Graceful fallback to styled diagram box if image data fails to decode
+        } else {
+          // If alt text exists but no valid data URL, render clean diagram placeholder
+          const altMatch = trimmed.match(/^!\[(.*?)\]/);
+          if (altMatch && altMatch[1]) {
+            altText = altMatch[1];
+          }
           this.checkBreak(10);
           this.doc.setFillColor(248, 250, 252);
           this.doc.setDrawColor(203, 213, 225);
@@ -537,6 +609,13 @@ export class NotesPdfGenerator {
 
       // 8. Standard Paragraph
       if (line.trim().length > 0) {
+        // Strictly skip any residual raw base64 data strings that might have leaked into text
+        const tLine = line.trim();
+        if (tLine.length > 35 && /^[A-Za-z0-9+/=_\s-]{35,}$/.test(tLine) && !tLine.includes(' ')) {
+          i++;
+          continue;
+        }
+
         this.doc.setFont(this.baseFont, 'normal');
         this.doc.setFontSize(scale.body);
         this.doc.setTextColor(30, 41, 59);
@@ -607,8 +686,8 @@ export class NotesPdfGenerator {
           this.doc.setFontSize(5.8);
           this.doc.setTextColor(15, 23, 42);
           this.doc.text('College Study', bX + 10.2, bY + 4.5);
-          this.doc.setFont('helvetica', 'normal');
-          this.doc.setFontSize(4.8);
+          this.doc.setFont('helvetica', 'bold');
+          this.doc.setFontSize(5.0);
           this.doc.setTextColor(2, 132, 199);
           this.doc.textWithLink('Your Study Hub', bX + 10.2, bY + 7.8, { url: APP_CONFIG.partner.url });
           if ((this.doc as any).link) {
@@ -753,22 +832,15 @@ export class NotesPdfGenerator {
         });
       }
 
-      // Right: Page X of Y & Site Domain (Clean slate font)
+      // Right: Only Page X of Y (clean bold slate font, no siteHost below it)
       if (this.options.includePageNumbers) {
         this.doc.setFont('helvetica', 'bold');
-        this.doc.setFontSize(7.5);
+        this.doc.setFontSize(8.0);
         this.doc.setTextColor(71, 85, 105); // slate-600
 
         const pageStr = `Page ${p} of ${totalPages}`;
         const pWidth = this.doc.getTextWidth(pageStr);
-        this.doc.text(pageStr, this.pageWidth - this.marginX - pWidth, 280.4);
-
-        this.doc.setFont('helvetica', 'normal');
-        this.doc.setFontSize(6.8);
-        this.doc.setTextColor(148, 163, 184); // slate-400
-        const siteHost = APP_CONFIG.appUrl.replace(/^https?:\/\//, '');
-        const sWidth = this.doc.getTextWidth(siteHost);
-        this.doc.text(siteHost, this.pageWidth - this.marginX - sWidth, 284.4);
+        this.doc.text(pageStr, this.pageWidth - this.marginX - pWidth, 282.2);
       }
     }
   }

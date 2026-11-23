@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,10 +34,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -48,7 +54,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import com.qwiksave.app.R
+import com.qwiksave.app.battery.BatteryStudioDialog
 import com.qwiksave.app.data.UserPreferences
+import com.qwiksave.app.sdk.AiChatMessage
+import com.qwiksave.app.sdk.AiConversationData
 import com.qwiksave.app.sdk.ExamQuestionItem
 import com.qwiksave.app.sdk.ExtractedMedia
 import com.qwiksave.app.sdk.QwikSaveClient
@@ -75,6 +84,15 @@ fun MainScreen(
     var selectedSocialPlatform by remember { mutableStateOf(0) } // 0=Instagram, 1=Facebook, 2=YouTube
     var selectedPdfSubTab by remember { mutableStateOf(0) } // 0=AI Notes, 1=Image to PDF, 2=Merge, 3=Compress, 4=PDF to Image
     var isMusicHubOpen by remember { mutableStateOf(false) }
+    var showBatteryStudio by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val act = context as? Activity
+        if (act?.intent?.getBooleanExtra("OPEN_BATTERY_STUDIO", false) == true) {
+            showBatteryStudio = true
+            act.intent.removeExtra("OPEN_BATTERY_STUDIO")
+        }
+    }
 
     val activeDialog = remember { mutableStateOf(ActiveDialog.NONE) }
     val client = remember { QwikSaveClient() }
@@ -157,6 +175,9 @@ fun MainScreen(
                         },
                         onNavigateToMusic = {
                             isMusicHubOpen = true
+                        },
+                        onOpenBatteryStudio = {
+                            showBatteryStudio = true
                         }
                     )
                     1 -> PdfToolsTabContent(
@@ -173,7 +194,11 @@ fun MainScreen(
                     3 -> UtilitiesTabContent(client = client)
                 }
 
-                OverflowDialogHost(activeDialog = activeDialog)
+                OverflowDialogHost(activeDialog = activeDialog, onSignOut = onSignOut)
+
+                if (showBatteryStudio) {
+                    BatteryStudioDialog(onDismiss = { showBatteryStudio = false })
+                }
             }
         }
     }
@@ -303,7 +328,8 @@ fun ExploreTabContent(
     onNavigateToSocial: (platform: Int) -> Unit,
     onNavigateToPdf: (subTab: Int) -> Unit,
     onNavigateToUtilities: () -> Unit,
-    onNavigateToMusic: () -> Unit = {}
+    onNavigateToMusic: () -> Unit = {},
+    onOpenBatteryStudio: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -314,151 +340,234 @@ fun ExploreTabContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Section Title: Explore All Features
+        // Section Title: Explore All Features (styled "Features!" with inverted arc underline)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Explore All Features",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF0F172A)
-            )
-            Text(
-                text = "Tap any tool to launch",
-                fontSize = 11.sp,
-                color = Color(0xFF64748B)
-            )
-        }
-
-        // Feature Cards Grid (Re-ordered: Popular Social Media at top, then Academic PDF & Tools)
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // 1. Instagram
-            FeatureCard(
-                title = "Instagram Reel & Post Downloader",
-                description = "Save public Reels, Videos, and Carousels in 1080p original HD without watermarks.",
-                badge = "Trending",
-                badgeColor = Color(0xFFEC4899),
-                logo = { InstagramLogo(size = 36.dp) },
-                onClick = { onNavigateToSocial(0) }
-            )
-
-            // 2. Facebook
-            FeatureCard(
-                title = "Facebook Video & Reel Downloader",
-                description = "Save public Facebook clips, Reels, and Watch videos in Full HD 1080p and SD.",
-                badge = "Fast",
-                badgeColor = Color(0xFF2563EB),
-                logo = { FacebookLogo(size = 36.dp) },
-                onClick = { onNavigateToSocial(1) }
-            )
-
-            // 3. YouTube
-            FeatureCard(
-                title = "YouTube Shorts & Video Downloader",
-                description = "Download YouTube Shorts, Dramas, and clips with direct stream access.",
-                badge = "Universal",
-                badgeColor = Color(0xFFEF4444),
-                logo = { YouTubeLogo(size = 36.dp) },
-                onClick = { onNavigateToSocial(2) }
-            )
-
-            // 4. Qwik Music Hub & Travel Beats
-            FeatureCard(
-                title = "Qwik Music & Travel Beats",
-                description = "Stream & download 1500+ 90s Bollywood Classics, Trending Hits & Punjabi Beats • 100% Ad-Free.",
-                badge = "Spotify Vibe 🎧",
-                badgeColor = Color(0xFF10B981),
-                logo = {
-                    Box(
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = "Explore All ",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF0F172A),
+                    letterSpacing = (-0.5).sp
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Features!",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black,
+                            style = androidx.compose.ui.text.TextStyle(
+                                brush = Brush.horizontalGradient(
+                                    listOf(Color(0xFF0284C7), Color(0xFF2563EB), Color(0xFFEA580C))
+                                )
+                            ),
+                            letterSpacing = (-0.5).sp
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(text = "🚀", fontSize = 18.sp)
+                    }
+                    // Inverted Curved Underline directly under "Features!" (Ulta curved arc)
+                    Canvas(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Brush.linearGradient(listOf(Color(0xFF0F172A), Color(0xFF064E3B)))),
-                        contentAlignment = Alignment.Center
+                            .width(108.dp)
+                            .height(6.dp)
+                            .padding(top = 1.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Headphones,
-                            contentDescription = null,
-                            tint = Color(0xFF10B981),
-                            modifier = Modifier.size(22.dp)
+                        val w = size.width
+                        val h = size.height
+                        val arcPath = Path().apply {
+                            moveTo(2f, h - 1.5f)
+                            quadraticTo(w * 0.5f, 1.5f, w - 2f, h - 1.5f)
+                        }
+                        drawPath(
+                            path = arcPath,
+                            brush = Brush.horizontalGradient(
+                                listOf(Color(0xFF0284C7), Color(0xFF2563EB), Color(0xFFEA580C))
+                            ),
+                            style = Stroke(
+                                width = 2.8.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
                         )
                     }
-                },
-                onClick = { onNavigateToMusic() }
-            )
+                }
+            }
+        }
 
-            // 4. AI Chat to PDF
-            FeatureCard(
-                title = "AI Chat to Academic PDF",
-                description = "Convert ChatGPT, Claude & Gemini chats into structured study PDFs with formulas & code formatting.",
-                badge = "Core",
-                badgeColor = Color(0xFF10B981),
-                logo = { AiNotesLogo(size = 36.dp) },
-                onClick = { onNavigateToPdf(0) }
-            )
+        // Feature Cards 2-per-Row Grid (Modern App UI matching 2-cards per line layout)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Row 1: Instagram + Facebook
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Instagram",
+                    subtitle = "Download Reels & Posts ∞",
+                    badge = "Trending",
+                    badgeColor = Color(0xFFEC4899),
+                    cardBgColor = Color(0xFFFFF1F2),
+                    logo = { InstagramLogo(size = 64.dp) },
+                    onClick = { onNavigateToSocial(0) }
+                )
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Facebook",
+                    subtitle = "Download Reels & Long Videos",
+                    badge = "Popular",
+                    badgeColor = Color(0xFF0284C7),
+                    cardBgColor = Color(0xFFEFF6FF),
+                    logo = { FacebookLogo(size = 64.dp) },
+                    onClick = { onNavigateToSocial(1) }
+                )
+            }
 
-            // 5. Image to PDF
-            FeatureCard(
-                title = "Image to PDF Document Converter",
-                description = "Combine phone gallery photos into a single clean A4 PDF file with rotation and preview.",
-                badge = "Free",
-                badgeColor = Color(0xFF059669),
-                logo = { PdfSuiteLogo(size = 36.dp) },
-                onClick = { onNavigateToPdf(1) }
-            )
+            // Row 2: YouTube + Music Hub
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "YouTube",
+                    subtitle = "Download Shorts, Movies & Dramas",
+                    badge = "Universal",
+                    badgeColor = Color(0xFFEF4444),
+                    cardBgColor = Color(0xFFFEF2F2),
+                    logo = { YouTubeLogo(size = 64.dp) },
+                    onClick = { onNavigateToSocial(2) }
+                )
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Qwik Music",
+                    subtitle = "Enjoy Online & Offline Songs",
+                    badge = "Song Vibe",
+                    badgeColor = Color(0xFF10B981),
+                    cardBgColor = Color(0xFFF0FDF4),
+                    logo = {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Brush.linearGradient(listOf(Color(0xFF0F172A), Color(0xFF064E3B)))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    },
+                    onClick = { onNavigateToMusic() }
+                )
+            }
 
-            // 6. Merge PDF
-            FeatureCard(
-                title = "Merge Multiple PDF Documents",
-                description = "Combine two or more PDF files into a single unified document offline with zero data loss.",
-                badge = "Popular",
-                badgeColor = Color(0xFF3B82F6),
-                logo = { Icon(Icons.Default.Layers, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(32.dp)) },
-                onClick = { onNavigateToPdf(2) }
-            )
+            // Row 3: AI Chat to PDF + Image to PDF
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "AI Chat to PDF",
+                    subtitle = "Convert AI Exam Notes in Seconds",
+                    badge = "Exam Time",
+                    badgeColor = Color(0xFF10B981),
+                    cardBgColor = Color(0xFFECFDF5),
+                    logo = { AiNotesLogo(size = 64.dp) },
+                    onClick = { onNavigateToPdf(0) }
+                )
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Image to PDF",
+                    subtitle = "Convert Photos to Clean PDF",
+                    badge = "Fast",
+                    badgeColor = Color(0xFFDC2626),
+                    cardBgColor = Color(0xFFFEF2F2),
+                    logo = { PdfSuiteLogo(size = 64.dp) },
+                    onClick = { onNavigateToPdf(1) }
+                )
+            }
 
-            // 7. Compress PDF
-            FeatureCard(
-                title = "Compress PDF File Size",
-                description = "Reduce PDF file sizes with customizable compression levels directly on device.",
-                badge = "Fast",
-                badgeColor = Color(0xFFF59E0B),
-                logo = { Icon(Icons.Default.Compress, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(32.dp)) },
-                onClick = { onNavigateToPdf(2) }
-            )
+            // Row 4: Merge & Compress PDF (combined card) + PDF to Image
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Merge & Compress",
+                    subtitle = "Combine & Shrink PDFs",
+                    badge = "Popular",
+                    badgeColor = Color(0xFF0284C7),
+                    cardBgColor = Color(0xFFF0F9FF),
+                    logo = {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF0284C7)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Layers, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                        }
+                    },
+                    onClick = { onNavigateToPdf(2) }
+                )
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "PDF to Image",
+                    subtitle = "Extract Pages to HD Images",
+                    badge = "Ultra HD",
+                    badgeColor = Color(0xFF0891B2),
+                    cardBgColor = Color(0xFFECFEFF),
+                    logo = {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFF06B6D4)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Image, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                        }
+                    },
+                    onClick = { onNavigateToPdf(1) }
+                )
+            }
 
-            // 8. PDF to Image
-            FeatureCard(
-                title = "PDF to Image Converter",
-                description = "Extract and convert PDF pages into high-resolution PNG or JPG pictures in your gallery.",
-                badge = "HD",
-                badgeColor = Color(0xFF06B6D4),
-                logo = { Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF0891B2), modifier = Modifier.size(32.dp)) },
-                onClick = { onNavigateToPdf(1) }
-            )
-
-            // 9. QR Code Studio
-            FeatureCard(
-                title = "QR Code Generator & Studio",
-                description = "Create customizable QR codes for Websites, WiFi, UPI, Phone, and text with country code selector.",
-                badge = "Utility",
-                badgeColor = Color(0xFF7C3AED),
-                logo = { QrCodeLogo(size = 36.dp) },
-                onClick = { onNavigateToUtilities() }
-            )
-
-            // 10. Video to MP3
-            FeatureCard(
-                title = "Video to Audio MP3 Extractor",
-                description = "Extract crystal-clear 320kbps MP3 audio tracks directly from videos or links.",
-                badge = "MP3",
-                badgeColor = Color(0xFF0284C7),
-                logo = { AudioExtractorLogo(size = 36.dp) },
-                onClick = { onNavigateToUtilities() }
-            )
+            // Row 5: QR Studio + Video to MP3
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "QR Studio",
+                    subtitle = "Generate & Scan Fast QR Codes",
+                    badge = "Utility",
+                    badgeColor = Color(0xFF0F172A),
+                    cardBgColor = Color(0xFFF8FAFC),
+                    logo = { QrCodeLogo(size = 64.dp) },
+                    onClick = { onNavigateToUtilities() }
+                )
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Video to MP3",
+                    subtitle = "Extract 320kbps Pure MP3",
+                    badge = "HQ Audio",
+                    badgeColor = Color(0xFF4F46E5),
+                    cardBgColor = Color(0xFFEEF2FF),
+                    logo = { AudioExtractorLogo(size = 64.dp) },
+                    onClick = { onNavigateToSocial(3) }
+                )
+            }
         }
 
         Box(
@@ -481,83 +590,337 @@ fun ExploreTabContent(
     }
 }
 
+/**
+ * Modern 2-Cards-Per-Row Grid Card with centered large 3D logo, bold title, tight subtitle,
+ * and a minimalistic highlighted border with zero tag distractions.
+ */
 @Composable
-fun FeatureCard(
+fun FeatureGridCard(
+    modifier: Modifier = Modifier,
     title: String,
-    description: String,
-    badge: String,
-    badgeColor: Color,
+    subtitle: String,
+    badge: String = "",
+    badgeColor: Color = Color.Transparent,
+    cardBgColor: Color = Color.White,
     logo: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
+            .height(156.dp)
             .clickable { onClick() },
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
+        border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFE2E8F0))
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            logo()
+            // Big Logo / Icon (Prominent and centered)
+            Box(
+                modifier = Modifier.size(70.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                logo()
+            }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            // Title in Bold
+            Text(
+                text = title,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF0F172A),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Subheading immediately adjacent to title with compact line spacing
+            Text(
+                text = subtitle,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF64748B),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 11.sp
+            )
+        }
+    }
+}
+
+/**
+ * Professional dropdown menu with dark solid boundary, square corners, and green checkmark indicator.
+ */
+@Composable
+fun <T> DropdownSelectorBox(
+    title: String,
+    selectedValue: T,
+    options: List<Pair<T, String>>,
+    onSelect: (T) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentLabel = options.find { it.first == selectedValue }?.second ?: ""
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedCard(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(4.dp),
+                colors = CardDefaults.outlinedCardColors(containerColor = Color.White),
+                border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF0F172A))
+            ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = title,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = currentLabel,
+                        fontSize = 11.5.sp,
                         color = Color(0xFF0F172A),
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-
-                    Box(
-                        modifier = Modifier
-                            .background(badgeColor.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = badge,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = badgeColor
-                        )
-                    }
+                    Icon(
+                        Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Color(0xFF0F172A),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = description,
-                    fontSize = 11.sp,
-                    color = Color(0xFF64748B),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 15.sp
-                )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .fillMaxWidth(0.88f)
+                    .background(Color.White)
+                    .border(1.2.dp, Color(0xFF0F172A), RoundedCornerShape(4.dp))
+            ) {
+                options.forEach { (key, label) ->
+                    val isSelected = key == selectedValue
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = label,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) Color(0xFF0F172A) else Color(0xFF475569)
+                            )
+                        },
+                        trailingIcon = {
+                            if (isSelected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        },
+                        onClick = {
+                            onSelect(key)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
 
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = Color(0xFF94A3B8),
-                modifier = Modifier.size(20.dp)
+/**
+ * Unified PDF formatting dropdowns, checkboxes and permanent branding footer preview.
+ */
+@Composable
+fun PdfCustomizationAccordion(
+    paperSizeChoice: String,
+    onPaperSizeChange: (String) -> Unit,
+    fontSizeScaleChoice: String,
+    onFontSizeScaleChange: (String) -> Unit,
+    fontFamilyChoice: String,
+    onFontFamilyChange: (String) -> Unit,
+    borderStyleChoice: String,
+    onBorderStyleChange: (String) -> Unit,
+    partnerBadgeScope: String,
+    onPartnerBadgeScopeChange: (String) -> Unit,
+    includeTitleToggle: Boolean,
+    onIncludeTitleChange: (Boolean) -> Unit,
+    includeDateToggle: Boolean,
+    onIncludeDateChange: (Boolean) -> Unit,
+    includePageNumbersToggle: Boolean,
+    onIncludePageNumbersChange: (Boolean) -> Unit
+) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            DropdownSelectorBox(
+                title = "Paper Size:",
+                selectedValue = paperSizeChoice,
+                options = listOf(
+                    Pair("A4", "A4 (Standard Academic - 210 x 297 mm)"),
+                    Pair("Letter", "US Letter (8.5 x 11 in)"),
+                    Pair("Legal", "Legal (8.5 x 14 in)")
+                ),
+                onSelect = onPaperSizeChange
             )
+
+            DropdownSelectorBox(
+                title = "Font Scale:",
+                selectedValue = fontSizeScaleChoice,
+                options = listOf(
+                    Pair("small", "Compact (8.5pt body - Max Content)"),
+                    Pair("medium", "Standard (10pt body - Balanced)"),
+                    Pair("large", "Readable (11.5pt body - Large & Clear)")
+                ),
+                onSelect = onFontSizeScaleChange
+            )
+
+            DropdownSelectorBox(
+                title = "Typography:",
+                selectedValue = fontFamilyChoice,
+                options = listOf(
+                    Pair("Helvetica", "Inter / Modern Clean (Sans-Serif)"),
+                    Pair("Times", "Times / Academic Serif"),
+                    Pair("Courier", "Courier / Monospace Code")
+                ),
+                onSelect = onFontFamilyChange
+            )
+
+            DropdownSelectorBox(
+                title = "Page Border Style:",
+                selectedValue = borderStyleChoice,
+                options = listOf(
+                    Pair("shadow", "MS Word Dark Shadow Border"),
+                    Pair("clean", "Thin Clean Line Border"),
+                    Pair("none", "No Border (Full Bleed)")
+                ),
+                onSelect = onBorderStyleChange
+            )
+
+            DropdownSelectorBox(
+                title = "College Study Header:",
+                selectedValue = partnerBadgeScope,
+                options = listOf(
+                    Pair("all-pages", "Every Page Header 🎓"),
+                    Pair("first-page", "First Page Only 🎓"),
+                    Pair("none", "No Partner Header")
+                ),
+                onSelect = onPartnerBadgeScopeChange
+            )
+
+            // Checkbox Toggles (tightly grouped, checked by default)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = includeTitleToggle,
+                        onCheckedChange = onIncludeTitleChange,
+                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFF10B981), checkmarkColor = Color.White)
+                    )
+                    Text("Include Document Title Banner", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = includeDateToggle,
+                        onCheckedChange = onIncludeDateChange,
+                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFF10B981), checkmarkColor = Color.White)
+                    )
+                    Text("Include Export Date & Time", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = includePageNumbersToggle,
+                        onCheckedChange = onIncludePageNumbersChange,
+                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFF10B981), checkmarkColor = Color.White)
+                    )
+                    Text("Include Page Numbers", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+
+            // Permanent PDF Footer Preview Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+            ) {
+                Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("PDF Footer Preview", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
+                        Text("Page 1 of ~12", fontSize = 9.sp, color = Color(0xFF94A3B8))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Qwik Save",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2563EB),
+                            modifier = Modifier.clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://qwiksave.vercel.app"))
+                                context.startActivity(intent)
+                            }
+                        )
+                        Text(
+                            text = "Developer: Priyal Kumar ↗",
+                            fontSize = 10.sp,
+                            color = Color(0xFF475569),
+                            modifier = Modifier.clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.linkedin.com/in/priyal-kumar-29b26529a/"))
+                                context.startActivity(intent)
+                            }
+                        )
+                    }
+                    Text(
+                        text = "Partnered with College Study ↗",
+                        fontSize = 9.5.sp,
+                        color = Color(0xFF0284C7),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://college-study.netlify.app/"))
+                            context.startActivity(intent)
+                        }
+                    )
+                    HorizontalDivider(color = Color(0xFFE2E8F0), modifier = Modifier.padding(vertical = 2.dp))
+                    Text(
+                        text = "🔒 Official watermark and footer are permanent.",
+                        fontSize = 9.5.sp,
+                        color = Color(0xFF64748B),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
     }
 }
@@ -608,34 +971,86 @@ fun PdfToolsTabContent(
         }
     }
 
-    // AI Notes to PDF states
-    var aiNotesMode by remember { mutableStateOf(0) } // 0 = URL Link, 1 = Direct Text, 2 = Structured Builder
+    // AI Notes to PDF states - 100% ISOLATED PER MODE (NO DUMMY PREFILLS!)
+    var aiNotesMode by remember { mutableStateOf(0) } // 0 = Shared Link, 1 = Direct Notes, 2 = Structured Builder
     var aiShareUrl by remember { mutableStateOf("") }
-    var notesTitle by remember { mutableStateOf("Computer Science Exam Revision Notes") }
-    var notesSubtitle by remember { mutableStateOf("Unit 1: Fundamentals & Theory") }
-    var notesStudentName by remember { mutableStateOf("") }
+
+    // Mode 0: Shared Link states
+    var sharedTitle by remember { mutableStateOf("") }
+    var sharedSubtitle by remember { mutableStateOf("") }
+    var sharedStudentName by remember { mutableStateOf("") }
+    var extractedConversation by remember { mutableStateOf<AiConversationData?>(null) }
+    val activeConversationMessages = remember { mutableStateListOf<AiChatMessage>() }
+    var isExtractingConversation by remember { mutableStateOf(false) }
+
+    // Mode 1: Direct Notes states (100% Isolated, Starts Empty)
+    var directTitle by remember { mutableStateOf("") }
+    var directSubtitle by remember { mutableStateOf("") }
+    var directFacultyName by remember { mutableStateOf("") }
+    var directNotesContent by remember { mutableStateOf("") }
+
+    // Mode 2: Structured Builder states (100% Isolated, Starts Empty)
+    var builderTitle by remember { mutableStateOf("") }
+    var builderSubtitle by remember { mutableStateOf("") }
+    var builderFacultyName by remember { mutableStateOf("") }
+    val structuredQuestions = remember { mutableStateListOf(ExamQuestionItem("", "")) }
+    var currentQuestionIndex by remember { mutableStateOf(0) }
+
+    // Shared Formatting Options (Dropdowns & Toggles)
     var borderStyleChoice by remember { mutableStateOf("shadow") } // "shadow", "clean", "none"
     var partnerBadgeScope by remember { mutableStateOf("first-page") } // "first-page", "all-pages", "none"
-    var paperSizeChoice by remember { mutableStateOf("A4") } // "A4", "Letter"
+    var paperSizeChoice by remember { mutableStateOf("A4") } // "A4", "Letter", "Legal"
     var fontSizeScaleChoice by remember { mutableStateOf("medium") } // "small", "medium", "large"
     var fontFamilyChoice by remember { mutableStateOf("Helvetica") } // "Helvetica", "Times", "Courier"
     var includeTitleToggle by remember { mutableStateOf(true) }
     var includeDateToggle by remember { mutableStateOf(true) }
     var includePageNumbersToggle by remember { mutableStateOf(true) }
-    var notesWatermarkText by remember { mutableStateOf("QWIK SAVE") }
-    var notesFooterText by remember { mutableStateOf("Qwik Save PDF") }
     var showCustomizationOptions by remember { mutableStateOf(false) }
-    var isExtractingConversation by remember { mutableStateOf(false) }
-    var currentQuestionIndex by remember { mutableStateOf(0) }
-    val structuredQuestions = remember {
-        mutableStateListOf(
-            ExamQuestionItem("Explain Preemptive vs Non-Preemptive Scheduling with examples.", "In preemptive scheduling, CPU can be allocated to higher priority processes, while in non-preemptive scheduling, once a process gets CPU it keeps it until termination or I/O."),
-            ExamQuestionItem("What is Round Robin (RR) Scheduling?", "Round Robin is preemptive scheduling with a fixed time quantum per process in circular FIFO queue.")
-        )
+    val clipboardManager = LocalClipboardManager.current
+    var editingTurnId by remember { mutableStateOf<String?>(null) }
+    var editingTurnText by remember { mutableStateOf("") }
+    val expandedTurnIds = remember { mutableStateListOf<String>() }
+
+    fun calculateEstimatedPages(msgs: List<AiChatMessage>): Int {
+        if (msgs.isEmpty()) return 1
+        var totalChars = 0
+        var tableCount = 0
+        var imgCount = 0
+        for (m in msgs) {
+            var text = m.content
+            while (true) {
+                val imgIdx = text.indexOf("![")
+                if (imgIdx == -1) break
+                val endP = text.indexOf(")", imgIdx)
+                if (endP == -1) break
+                text = text.substring(0, imgIdx) + text.substring(endP + 1)
+            }
+            while (true) {
+                val dIdx = text.indexOf("data:image/", ignoreCase = true)
+                if (dIdx == -1) break
+                var endIdx = dIdx + 11
+                while (endIdx < text.length && !text[endIdx].isWhitespace() && text[endIdx] != '"' && text[endIdx] != '\'') {
+                    endIdx++
+                }
+                text = text.substring(0, dIdx) + text.substring(endIdx)
+            }
+            val cleanLines = text.split("\n").filterNot { l ->
+                val t = l.trim()
+                t.length > 30 && t.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' || it == '=' || it == '-' || it == '_' }
+            }
+            val clean = cleanLines.joinToString("\n").trim()
+            totalChars += clean.length
+            if (clean.contains("|")) tableCount++
+            if (m.content.contains("![") || m.content.contains("data:image")) imgCount++
+        }
+        val basePages = Math.round(totalChars / 2200.0).toInt().coerceAtLeast(1)
+        val extraPages = Math.round(tableCount * 0.25 + imgCount * 0.35).toInt()
+        return (basePages + extraPages).coerceAtLeast(1)
     }
-    var notesContent by remember { mutableStateOf("### Question 1:\nExplain the difference between Preemptive and Non-Preemptive Scheduling with examples.\n\n### Answer:\nIn preemptive scheduling, CPU can be allocated to higher priority processes, while in non-preemptive scheduling, once a process gets CPU it keeps it until termination or I/O.\n\n### Question 2:\nWhat is Round Robin (RR) Scheduling?\n\n### Answer:\nRound Robin is preemptive scheduling with a fixed time quantum per process in circular FIFO queue.") }
+
     var isNotesGenerating by remember { mutableStateOf(false) }
     var notesPdfFile by remember { mutableStateOf<File?>(null) }
+    var showPdfCompletionDialog by remember { mutableStateOf(false) }
 
     // Compress PDF states
     var compressSourceUri by remember { mutableStateOf<Uri?>(null) }
@@ -725,107 +1140,770 @@ fun PdfToolsTabContent(
                         }
                         Text("Convert ChatGPT, Claude & Gemini chats into clean exam study PDFs", fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
 
-                        // Mode Selector: AI Link vs Direct Text vs Builder
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            listOf("Shared Link", "Direct Notes", "Structured Builder").forEachIndexed { idx, mLabel ->
-                                FilterChip(
-                                    selected = aiNotesMode == idx,
-                                    onClick = { aiNotesMode = idx },
-                                    label = { Text(mLabel, fontSize = 11.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFF0F172A),
-                                        selectedLabelColor = Color.White
-                                    )
-                                )
-                            }
-                        }
-
-                        if (aiNotesMode == 0) {
-                            // Shared AI Link
-                            OutlinedTextField(
-                                value = aiShareUrl,
-                                onValueChange = { aiShareUrl = it },
-                                label = { Text("ChatGPT / Claude / Gemini Shared Link", fontSize = 11.sp) },
-                                placeholder = { Text("https://chatgpt.com/share/...", fontSize = 12.sp, color = Color.Gray) },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-
-                            // Fetch & Preview Link Button
-                            OutlinedButton(
-                                onClick = {
-                                    if (aiShareUrl.isNotBlank()) {
-                                        isExtractingConversation = true
-                                        coroutineScope.launch {
-                                            val res = client.extractAiConversation(aiShareUrl)
-                                            res.onSuccess { (t, c) ->
-                                                notesTitle = t
-                                                notesContent = c
-                                                Toast.makeText(context, "Conversation fetched & previewed! ✅", Toast.LENGTH_SHORT).show()
-                                            }.onFailure { err ->
-                                                Toast.makeText(context, "Fetch error: ${err.message}", Toast.LENGTH_SHORT).show()
-                                            }
-                                            isExtractingConversation = false
-                                        }
-                                    } else {
-                                        Toast.makeText(context, "Please enter a valid AI shared link", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                if (isExtractingConversation) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color(0xFF0F172A))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Fetching Conversation Preview...", fontSize = 11.sp)
-                                } else {
-                                    Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(15.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Fetch & Preview Link Content", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        // Mode Selector: Professional Dropdown (Dark solid boundary, square corners)
+                        DropdownSelectorBox(
+                            title = "Select Notes Mode:",
+                            selectedValue = when (aiNotesMode) {
+                                0 -> "shared"
+                                1 -> "direct"
+                                else -> "builder"
+                            },
+                            options = listOf(
+                                Pair("shared", "Shared Link (ChatGPT / Claude / Gemini)"),
+                                Pair("direct", "Direct Notes (Custom Text / Lecture Markdown)"),
+                                Pair("builder", "Structured Builder (Course Q&A & Revision)")
+                            ),
+                            onSelect = { modeKey ->
+                                aiNotesMode = when (modeKey) {
+                                    "shared" -> 0
+                                    "direct" -> 1
+                                    else -> 2
                                 }
                             }
+                        )
 
-                            if (notesContent.isNotBlank() && notesTitle.isNotBlank()) {
+                        if (aiNotesMode == 0) {
+                            // Mode 0: Shared AI Link (ChatGPT / Claude / Gemini)
+                            if (extractedConversation == null) {
+                                OutlinedTextField(
+                                    value = aiShareUrl,
+                                    onValueChange = { aiShareUrl = it },
+                                    label = { Text("ChatGPT / Claude / Gemini Shared Link", fontSize = 11.sp) },
+                                    placeholder = {
+                                        Text(
+                                            text = "Paste your AI chat link (ChatGPT, Claude, Gemini...)",
+                                            fontSize = 12.sp,
+                                            color = Color.Gray,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    singleLine = true,
+                                    trailingIcon = {
+                                        IconButton(onClick = {
+                                            val clipText = clipboardManager.getText()?.text
+                                            if (!clipText.isNullOrBlank()) {
+                                                aiShareUrl = clipText.trim()
+                                                Toast.makeText(context, "Link pasted from clipboard! 📋", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }) {
+                                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = Color(0xFF0F172A), modifier = Modifier.size(18.dp))
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+
+                                // Percentage Progress Line when extracting AI conversation
+                                DownloadProgressBar(
+                                    isLoading = isExtractingConversation,
+                                    accentColor = Color(0xFF10B981)
+                                )
+
+                                // Convert to Academic PDF Button
+                                Button(
+                                    onClick = {
+                                        if (aiShareUrl.isNotBlank()) {
+                                            isExtractingConversation = true
+                                            coroutineScope.launch {
+                                                val res = client.extractAiConversationModel(aiShareUrl)
+                                                isExtractingConversation = false
+                                                res.onSuccess { model ->
+                                                    extractedConversation = model
+                                                    sharedTitle = model.title
+                                                    activeConversationMessages.clear()
+                                                    activeConversationMessages.addAll(model.messages)
+                                                    Toast.makeText(context, "Extracted ${model.messages.size} conversation messages! ✅", Toast.LENGTH_SHORT).show()
+                                                }.onFailure { err ->
+                                                    Toast.makeText(context, "Fetch error: ${err.message}", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        } else {
+                                            Toast.makeText(context, "Please paste or enter an AI share link", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !isExtractingConversation
+                                ) {
+                                    if (isExtractingConversation) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Extracting & Typesetting AI Chat...", fontSize = 11.sp, color = Color.White)
+                                    } else {
+                                        Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Convert to Academic PDF 🚀", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                // High-Quality Hero Graphic (Direct, clean borderless illustration)
+                                Image(
+                                    painter = painterResource(id = R.drawable.ai_study_hero_illustration),
+                                    contentDescription = "AI Study Notes Hero",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(145.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            } else {
+                                // Full Interactive Extracted Conversation Preview
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { extractedConversation = null }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color(0xFF059669), modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Convert another link", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669))
+                                }
+
+                                // Extracted Notes Title & Source URL Card
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9))
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("Preview: $notesTitle", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                        Text(notesContent.take(160) + if (notesContent.length > 160) "..." else "", fontSize = 10.5.sp, color = Color(0xFF475569))
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color(0xFF0F172A))
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text("EXTRACTED NOTES & EXAM GUIDE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+
+                                        OutlinedTextField(
+                                            value = sharedTitle,
+                                            onValueChange = { sharedTitle = it },
+                                            label = { Text("Document / Exam Subject Title", fontSize = 10.5.sp) },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(6.dp)
+                                        )
+
+                                        Text(
+                                            text = extractedConversation?.sourceUrl ?: "",
+                                            fontSize = 10.5.sp,
+                                            color = Color(0xFF059669),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                // 4-Stat Grid (Prompts, Answers, Total, Accurate Est. Pages) - Uniform 54.dp height
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    val statItems = listOf(
+                                        Pair("User Prompts", activeConversationMessages.count { it.role == "user" }.toString()),
+                                        Pair("AI Answers", activeConversationMessages.count { it.role == "assistant" }.toString()),
+                                        Pair("Total Messages", activeConversationMessages.size.toString()),
+                                        Pair("Est. PDF Pages", "~${calculateEstimatedPages(activeConversationMessages)} pgs")
+                                    )
+                                    statItems.forEach { (label, value) ->
+                                        Card(
+                                            modifier = Modifier.weight(1f).height(54.dp),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9))
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .padding(4.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Text(text = label, fontSize = 8.5.sp, color = Color(0xFF64748B), maxLines = 1, textAlign = TextAlign.Center)
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(text = value, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A), textAlign = TextAlign.Center)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Action Buttons Row: Formatting Options Accordion Toggle + Primary Download PDF
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { showCustomizationOptions = !showCustomizationOptions },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(
+                                            if (showCustomizationOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            if (showCustomizationOptions) "Hide Options" else "Formatting Options",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            isNotesGenerating = true
+                                            coroutineScope.launch {
+                                                val cleanFileName = (sharedTitle.ifBlank { "AI_Study_Notes" }).replace(Regex("[^a-zA-Z0-9_-]"), "_") + ".pdf"
+                                                val result = client.createAcademicNotesPdf(
+                                                    context = context,
+                                                    title = sharedTitle.ifBlank { "AI Academic Study Notes" },
+                                                    content = "",
+                                                    subtitle = sharedSubtitle.ifBlank { null },
+                                                    studentName = sharedStudentName.ifBlank { null },
+                                                    watermarkText = null,
+                                                    borderStyle = borderStyleChoice,
+                                                    includePartnerBadge = partnerBadgeScope != "none",
+                                                    partnerBadgeScope = partnerBadgeScope,
+                                                    paperSize = paperSizeChoice,
+                                                    fontSizeScale = fontSizeScaleChoice,
+                                                    fontFamily = fontFamilyChoice,
+                                                    includeTitle = includeTitleToggle,
+                                                    includeDate = includeDateToggle,
+                                                    includePageNumbers = includePageNumbersToggle,
+                                                    footerText = null,
+                                                    questions = emptyList(),
+                                                    messages = activeConversationMessages.toList(),
+                                                    outputFileName = cleanFileName
+                                                )
+                                                isNotesGenerating = false
+                                                result.onSuccess { file ->
+                                                    notesPdfFile = file
+                                                    showPdfCompletionDialog = true
+                                                    Toast.makeText(context, "Academic PDF created in Downloads/QwikSave!", Toast.LENGTH_SHORT).show()
+                                                }.onFailure { err ->
+                                                    Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        enabled = !isNotesGenerating
+                                    ) {
+                                        if (isNotesGenerating) {
+                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Generating...", fontSize = 11.sp)
+                                        } else {
+                                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Download PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                // Realistic Download Percentage Bar when generating PDF
+                                DownloadProgressBar(
+                                    isLoading = isNotesGenerating,
+                                    accentColor = Color(0xFF059669)
+                                )
+
+                                // Formatting Options Dropdowns Accordion (when opened)
+                                if (showCustomizationOptions) {
+                                    PdfCustomizationAccordion(
+                                        paperSizeChoice = paperSizeChoice,
+                                        onPaperSizeChange = { paperSizeChoice = it },
+                                        fontSizeScaleChoice = fontSizeScaleChoice,
+                                        onFontSizeScaleChange = { fontSizeScaleChoice = it },
+                                        fontFamilyChoice = fontFamilyChoice,
+                                        onFontFamilyChange = { fontFamilyChoice = it },
+                                        borderStyleChoice = borderStyleChoice,
+                                        onBorderStyleChange = { borderStyleChoice = it },
+                                        partnerBadgeScope = partnerBadgeScope,
+                                        onPartnerBadgeScopeChange = { partnerBadgeScope = it },
+                                        includeTitleToggle = includeTitleToggle,
+                                        onIncludeTitleChange = { includeTitleToggle = it },
+                                        includeDateToggle = includeDateToggle,
+                                        onIncludeDateChange = { includeDateToggle = it },
+                                        includePageNumbersToggle = includePageNumbersToggle,
+                                        onIncludePageNumbersChange = { includePageNumbersToggle = it }
+                                    )
+                                }
+
+                                // Conversation Turns Header + Single Plus 'Add Custom Note'
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Conversation Turns (${activeConversationMessages.size})",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A)
+                                    )
+
+                                    TextButton(
+                                        onClick = {
+                                            activeConversationMessages.add(
+                                                AiChatMessage(
+                                                    id = java.util.UUID.randomUUID().toString(),
+                                                    role = "assistant",
+                                                    content = "Write your custom exam summary, reminder or topic notes here...",
+                                                    authorName = "CUSTOM NOTE"
+                                                )
+                                            )
+                                            Toast.makeText(context, "Custom note turn added! 📝", Toast.LENGTH_SHORT).show()
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF059669))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Add Custom Note", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF059669))
+                                    }
+                                }
+
+                                // Conversation Turns Interactive List
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    activeConversationMessages.forEachIndexed { idx, msg ->
+                                        val isEditing = editingTurnId == msg.id
+                                        val isExpanded = expandedTurnIds.contains(msg.id)
+                                        val isUser = msg.role == "user"
+                                        val isNote = msg.authorName.contains("NOTE", ignoreCase = true) || msg.authorName.contains("CUSTOM", ignoreCase = true)
+
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = when {
+                                                    isUser -> Color(0xFFEFF6FF)
+                                                    isNote -> Color(0xFFFFFBEB)
+                                                    else -> Color(0xFFF8FAFC)
+                                                }
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                when {
+                                                    isUser -> Color(0xFFBFDBFE)
+                                                    isNote -> Color(0xFFFDE68A)
+                                                    else -> Color(0xFFE2E8F0)
+                                                }
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(
+                                                                when {
+                                                                    isUser -> Color(0xFF2563EB)
+                                                                    isNote -> Color(0xFFD97706)
+                                                                    else -> Color(0xFF059669)
+                                                                }
+                                                            )
+                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = when {
+                                                                isUser -> "Turn #${idx + 1} • USER"
+                                                                isNote -> "Turn #${idx + 1} • CUSTOM NOTE"
+                                                                else -> "Turn #${idx + 1} • AI ANSWER"
+                                                            },
+                                                            fontSize = 8.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color.White
+                                                        )
+                                                    }
+
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        if (!isUser && !isNote && !isEditing) {
+                                                            TextButton(
+                                                                onClick = {
+                                                                    val cleaned = msg.content
+                                                                        .replace(Regex("^(Certainly|Sure|Hello|Hi there)[^\\n]*\\n+", RegexOption.IGNORE_CASE), "")
+                                                                        .replace(Regex("\\n+(Hope this helps|Let me know if you need anything else|Feel free to ask)[^\\n]*$", RegexOption.IGNORE_CASE), "")
+                                                                        .trim()
+                                                                    activeConversationMessages[idx] = msg.copy(content = cleaned)
+                                                                    Toast.makeText(context, "Cleaned pleasantries!", Toast.LENGTH_SHORT).show()
+                                                                },
+                                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                                modifier = Modifier.height(24.dp)
+                                                            ) {
+                                                                Text("Clean Pleasantries", fontSize = 9.sp, color = Color(0xFF059669), fontWeight = FontWeight.Bold)
+                                                            }
+                                                        }
+
+                                                        if (!isEditing) {
+                                                            IconButton(
+                                                                onClick = {
+                                                                    editingTurnId = msg.id
+                                                                    editingTurnText = msg.content
+                                                                },
+                                                                modifier = Modifier.size(24.dp)
+                                                            ) {
+                                                                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color(0xFF64748B), modifier = Modifier.size(14.dp))
+                                                            }
+                                                        }
+
+                                                        IconButton(
+                                                            onClick = {
+                                                                activeConversationMessages.removeAt(idx)
+                                                                Toast.makeText(context, "Turn removed", Toast.LENGTH_SHORT).show()
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF4444), modifier = Modifier.size(14.dp))
+                                                        }
+                                                    }
+                                                }
+
+                                                if (isEditing) {
+                                                    OutlinedTextField(
+                                                        value = editingTurnText,
+                                                        onValueChange = { editingTurnText = it },
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        minLines = 3,
+                                                        maxLines = 8,
+                                                        shape = RoundedCornerShape(6.dp)
+                                                    )
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.End,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        TextButton(onClick = { editingTurnId = null }) {
+                                                            Text("Cancel", fontSize = 11.sp, color = Color(0xFF64748B))
+                                                        }
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Button(
+                                                            onClick = {
+                                                                activeConversationMessages[idx] = msg.copy(content = editingTurnText)
+                                                                editingTurnId = null
+                                                                Toast.makeText(context, "Turn updated! 💾", Toast.LENGTH_SHORT).show()
+                                                            },
+                                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                            modifier = Modifier.height(28.dp)
+                                                        ) {
+                                                            Text("Save", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                } else {
+                                                    val displayText = if (!isExpanded && msg.content.length > 350) {
+                                                        msg.content.take(350) + "..."
+                                                    } else {
+                                                        msg.content
+                                                    }
+
+                                                    Text(
+                                                        text = displayText,
+                                                        fontSize = 11.sp,
+                                                        color = Color(0xFF334155),
+                                                        lineHeight = 15.sp
+                                                    )
+
+                                                    if (msg.content.length > 350) {
+                                                        Text(
+                                                            text = if (isExpanded) "Read Less ▴" else "Read More... ▾",
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFF059669),
+                                                            modifier = Modifier
+                                                                .clickable {
+                                                                    if (isExpanded) expandedTurnIds.remove(msg.id)
+                                                                    else expandedTurnIds.add(msg.id)
+                                                                }
+                                                                .padding(vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         } else if (aiNotesMode == 1) {
-                            // Direct Text
+                            // Mode 1: Direct Notes (Custom Text / Lecture Notes) - 100% Isolated State
+                            // Top Action Row: Formatting Options Toggle + Solid Green Download PDF
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showCustomizationOptions = !showCustomizationOptions },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        if (showCustomizationOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        if (showCustomizationOptions) "Hide Options" else "Formatting Options",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        if (directNotesContent.isBlank()) {
+                                            Toast.makeText(context, "Please enter your study notes content", Toast.LENGTH_SHORT).show()
+                                            return@Button
+                                        }
+                                        isNotesGenerating = true
+                                        coroutineScope.launch {
+                                            val cleanFileName = (directTitle.ifBlank { "Direct_Study_Notes" }).replace(Regex("[^a-zA-Z0-9_-]"), "_") + ".pdf"
+                                            val result = client.createAcademicNotesPdf(
+                                                context = context,
+                                                title = directTitle.ifBlank { "Academic Study Notes" },
+                                                content = directNotesContent,
+                                                subtitle = directSubtitle.ifBlank { null },
+                                                studentName = directFacultyName.ifBlank { null },
+                                                watermarkText = null,
+                                                borderStyle = borderStyleChoice,
+                                                includePartnerBadge = partnerBadgeScope != "none",
+                                                partnerBadgeScope = partnerBadgeScope,
+                                                paperSize = paperSizeChoice,
+                                                fontSizeScale = fontSizeScaleChoice,
+                                                fontFamily = fontFamilyChoice,
+                                                includeTitle = includeTitleToggle,
+                                                includeDate = includeDateToggle,
+                                                includePageNumbers = includePageNumbersToggle,
+                                                footerText = null,
+                                                questions = emptyList(),
+                                                messages = emptyList(),
+                                                outputFileName = cleanFileName
+                                            )
+                                            isNotesGenerating = false
+                                            result.onSuccess { file ->
+                                                notesPdfFile = file
+                                                showPdfCompletionDialog = true
+                                                Toast.makeText(context, "Academic PDF created in Downloads/QwikSave!", Toast.LENGTH_SHORT).show()
+                                            }.onFailure { err ->
+                                                Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = !isNotesGenerating
+                                ) {
+                                    if (isNotesGenerating) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Generating...", fontSize = 11.sp)
+                                    } else {
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Download PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            // Realistic Download Percentage Bar when generating PDF
+                            DownloadProgressBar(
+                                isLoading = isNotesGenerating,
+                                accentColor = Color(0xFF059669)
+                            )
+
+                            // Formatting Options Accordion (when opened)
+                            if (showCustomizationOptions) {
+                                PdfCustomizationAccordion(
+                                    paperSizeChoice = paperSizeChoice,
+                                    onPaperSizeChange = { paperSizeChoice = it },
+                                    fontSizeScaleChoice = fontSizeScaleChoice,
+                                    onFontSizeScaleChange = { fontSizeScaleChoice = it },
+                                    fontFamilyChoice = fontFamilyChoice,
+                                    onFontFamilyChange = { fontFamilyChoice = it },
+                                    borderStyleChoice = borderStyleChoice,
+                                    onBorderStyleChange = { borderStyleChoice = it },
+                                    partnerBadgeScope = partnerBadgeScope,
+                                    onPartnerBadgeScopeChange = { partnerBadgeScope = it },
+                                    includeTitleToggle = includeTitleToggle,
+                                    onIncludeTitleChange = { includeTitleToggle = it },
+                                    includeDateToggle = includeDateToggle,
+                                    onIncludeDateChange = { includeDateToggle = it },
+                                    includePageNumbersToggle = includePageNumbersToggle,
+                                    onIncludePageNumbersChange = { includePageNumbersToggle = it }
+                                )
+                            }
+
                             OutlinedTextField(
-                                value = notesTitle,
-                                onValueChange = { notesTitle = it },
+                                value = directTitle,
+                                onValueChange = { directTitle = it },
                                 label = { Text("Subject / Document Title", fontSize = 11.sp) },
+                                placeholder = { Text("e.g. Operating Systems / Software Engineering", fontSize = 12.sp, color = Color.Gray) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             )
 
                             OutlinedTextField(
-                                value = notesContent,
-                                onValueChange = { notesContent = it },
+                                value = directSubtitle,
+                                onValueChange = { directSubtitle = it },
+                                label = { Text("Unit / Topic / Examination Code (Optional)", fontSize = 11.sp) },
+                                placeholder = { Text("e.g. Unit 3: Process Synchronization", fontSize = 12.sp, color = Color.Gray) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+
+                            OutlinedTextField(
+                                value = directFacultyName,
+                                onValueChange = { directFacultyName = it },
+                                label = { Text("Student / Faculty Name (Optional)", fontSize = 11.sp) },
+                                placeholder = { Text("e.g. Prof. Kumar / CS Department", fontSize = 12.sp, color = Color.Gray) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+
+                            OutlinedTextField(
+                                value = directNotesContent,
+                                onValueChange = { directNotesContent = it },
                                 label = { Text("Study Notes / Lecture Content (Markdown supported)", fontSize = 11.sp) },
-                                minLines = 5,
-                                maxLines = 8,
+                                placeholder = { Text("Paste or type your comprehensive lecture notes, pointers, or code snippets here...", fontSize = 12.sp, color = Color.Gray) },
+                                minLines = 8,
+                                maxLines = 14,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             )
                         } else {
-                            // Structured Builder (Subject, Subtitle, Student Name, Watermark, Border & Dynamic Questions)
+                            // Mode 2: Structured Builder (Course Q&A & Revision) - 100% Isolated State
+                            // Top Action Row: Formatting Options Toggle + Solid Green Download PDF
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showCustomizationOptions = !showCustomizationOptions },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        if (showCustomizationOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        if (showCustomizationOptions) "Hide Options" else "Formatting Options",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        val validQuestions = structuredQuestions.filter { it.question.isNotBlank() || it.answer.isNotBlank() }
+                                        if (validQuestions.isEmpty()) {
+                                            Toast.makeText(context, "Please enter at least one question and answer", Toast.LENGTH_SHORT).show()
+                                            return@Button
+                                        }
+                                        isNotesGenerating = true
+                                        coroutineScope.launch {
+                                            val cleanFileName = (builderTitle.ifBlank { "Exam_QA_Guide" }).replace(Regex("[^a-zA-Z0-9_-]"), "_") + ".pdf"
+                                            val result = client.createAcademicNotesPdf(
+                                                context = context,
+                                                title = builderTitle.ifBlank { "Exam Q&A Revision Guide" },
+                                                content = "",
+                                                subtitle = builderSubtitle.ifBlank { null },
+                                                studentName = builderFacultyName.ifBlank { null },
+                                                watermarkText = null,
+                                                borderStyle = borderStyleChoice,
+                                                includePartnerBadge = partnerBadgeScope != "none",
+                                                partnerBadgeScope = partnerBadgeScope,
+                                                paperSize = paperSizeChoice,
+                                                fontSizeScale = fontSizeScaleChoice,
+                                                fontFamily = fontFamilyChoice,
+                                                includeTitle = includeTitleToggle,
+                                                includeDate = includeDateToggle,
+                                                includePageNumbers = includePageNumbersToggle,
+                                                footerText = null,
+                                                questions = validQuestions,
+                                                messages = emptyList(),
+                                                outputFileName = cleanFileName
+                                            )
+                                            isNotesGenerating = false
+                                            result.onSuccess { file ->
+                                                notesPdfFile = file
+                                                showPdfCompletionDialog = true
+                                                Toast.makeText(context, "Academic PDF created in Downloads/QwikSave!", Toast.LENGTH_SHORT).show()
+                                            }.onFailure { err ->
+                                                Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    enabled = !isNotesGenerating
+                                ) {
+                                    if (isNotesGenerating) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Generating...", fontSize = 11.sp)
+                                    } else {
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Download PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            // Realistic Download Percentage Bar when generating PDF
+                            DownloadProgressBar(
+                                isLoading = isNotesGenerating,
+                                accentColor = Color(0xFF059669)
+                            )
+
+                            // Formatting Options Accordion (when opened)
+                            if (showCustomizationOptions) {
+                                PdfCustomizationAccordion(
+                                    paperSizeChoice = paperSizeChoice,
+                                    onPaperSizeChange = { paperSizeChoice = it },
+                                    fontSizeScaleChoice = fontSizeScaleChoice,
+                                    onFontSizeScaleChange = { fontSizeScaleChoice = it },
+                                    fontFamilyChoice = fontFamilyChoice,
+                                    onFontFamilyChange = { fontFamilyChoice = it },
+                                    borderStyleChoice = borderStyleChoice,
+                                    onBorderStyleChange = { borderStyleChoice = it },
+                                    partnerBadgeScope = partnerBadgeScope,
+                                    onPartnerBadgeScopeChange = { partnerBadgeScope = it },
+                                    includeTitleToggle = includeTitleToggle,
+                                    onIncludeTitleChange = { includeTitleToggle = it },
+                                    includeDateToggle = includeDateToggle,
+                                    onIncludeDateChange = { includeDateToggle = it },
+                                    includePageNumbersToggle = includePageNumbersToggle,
+                                    onIncludePageNumbersChange = { includePageNumbersToggle = it }
+                                )
+                            }
+
                             OutlinedTextField(
-                                value = notesTitle,
-                                onValueChange = { notesTitle = it },
+                                value = builderTitle,
+                                onValueChange = { builderTitle = it },
                                 label = { Text("Course / Subject Name", fontSize = 11.sp) },
                                 placeholder = { Text("e.g. Operating Systems / Data Structures", fontSize = 12.sp, color = Color.Gray) },
                                 singleLine = true,
@@ -834,8 +1912,8 @@ fun PdfToolsTabContent(
                             )
 
                             OutlinedTextField(
-                                value = notesSubtitle,
-                                onValueChange = { notesSubtitle = it },
+                                value = builderSubtitle,
+                                onValueChange = { builderSubtitle = it },
                                 label = { Text("Unit / Topic / Examination Code", fontSize = 11.sp) },
                                 placeholder = { Text("e.g. Unit 3: Memory Management & Paging", fontSize = 12.sp, color = Color.Gray) },
                                 singleLine = true,
@@ -844,59 +1922,14 @@ fun PdfToolsTabContent(
                             )
 
                             OutlinedTextField(
-                                value = notesStudentName,
-                                onValueChange = { notesStudentName = it },
+                                value = builderFacultyName,
+                                onValueChange = { builderFacultyName = it },
                                 label = { Text("Student / Professor / Faculty Name (Optional)", fontSize = 11.sp) },
                                 placeholder = { Text("e.g. Prof. R. Sharma / Sneha Verma", fontSize = 12.sp, color = Color.Gray) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp)
                             )
-
-                            // Border Selector
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Page Border Style:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf(
-                                        Pair("shadow", "MS Word Shadow"),
-                                        Pair("clean", "Clean Line"),
-                                        Pair("none", "None")
-                                    ).forEach { (key, lbl) ->
-                                        FilterChip(
-                                            selected = borderStyleChoice == key,
-                                            onClick = { borderStyleChoice = key },
-                                            label = { Text(lbl, fontSize = 11.sp) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = Color(0xFF0F172A),
-                                                selectedLabelColor = Color.White
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Partner Header Scope Selector (First Page vs All Pages)
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("College Study Partner Header:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf(
-                                        Pair("first-page", "First Page Only 🎓"),
-                                        Pair("all-pages", "All Pages 🎓")
-                                    ).forEach { (key, lbl) ->
-                                        FilterChip(
-                                            selected = partnerBadgeScope == key,
-                                            onClick = { partnerBadgeScope = key },
-                                            label = { Text(lbl, fontSize = 11.sp) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = Color(0xFF2563EB),
-                                                selectedLabelColor = Color.White
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-
-                            HorizontalDivider(color = Color(0xFFE2E8F0))
 
                             // Horizontal Question Card Carousel / Pager
                             val safeIdx = currentQuestionIndex.coerceIn(0, (structuredQuestions.size - 1).coerceAtLeast(0))
@@ -921,7 +1954,7 @@ fun PdfToolsTabContent(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0xFF2563EB))
+                                                .background(Color(0xFF0F172A))
                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             Text(
@@ -937,8 +1970,8 @@ fun PdfToolsTabContent(
                                                 onClick = {
                                                     structuredQuestions.add(
                                                         ExamQuestionItem(
-                                                            "Question ${structuredQuestions.size + 1}",
-                                                            "Write the answer details here..."
+                                                            "",
+                                                            ""
                                                         )
                                                     )
                                                     currentQuestionIndex = structuredQuestions.size - 1
@@ -949,7 +1982,7 @@ fun PdfToolsTabContent(
                                             ) {
                                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF0F172A))
                                                 Spacer(modifier = Modifier.width(3.dp))
-                                                Text("+ Add", fontSize = 11.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
+                                                Text("Add Question", fontSize = 11.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
                                             }
 
                                             if (structuredQuestions.size > 1) {
@@ -975,7 +2008,7 @@ fun PdfToolsTabContent(
                                             structuredQuestions[safeIdx] = currentItem.copy(question = newQ)
                                         },
                                         label = { Text("Question / Topic Title", fontSize = 11.sp) },
-                                        placeholder = { Text("e.g. What is Round Robin Scheduling?", fontSize = 11.sp, color = Color.Gray) },
+                                        placeholder = { Text("e.g. Explain Round Robin Scheduling Algorithm", fontSize = 11.sp, color = Color.Gray) },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(6.dp),
                                         minLines = 2,
@@ -1116,231 +2149,57 @@ fun PdfToolsTabContent(
                             }
                         }
 
-                        // Expandable 100% Website Style & Customization Options Accordion
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showCustomizationOptions = !showCustomizationOptions },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
+                        // PDF Completion Dialog with 1-Click Open & Share
+                        if (showPdfCompletionDialog && notesPdfFile != null) {
+                            AlertDialog(
+                                onDismissRequest = { showPdfCompletionDialog = false },
+                                title = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Settings, contentDescription = null, tint = Color(0xFF0F172A), modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("⚙️ PDF Style & Customization Options", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                        Text("🎓 Academic PDF Ready!", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0F172A))
                                     }
-                                    Icon(
-                                        if (showCustomizationOptions) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        contentDescription = null,
-                                        tint = Color.Gray,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-
-                                if (showCustomizationOptions) {
-                                    HorizontalDivider(color = Color(0xFFE2E8F0))
-
-                                    // Paper Size
-                                    Text("Paper Format:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf(Pair("A4", "A4 (Academic Std)"), Pair("Letter", "US Letter")).forEach { (key, lbl) ->
-                                            FilterChip(
-                                                selected = paperSizeChoice == key,
-                                                onClick = { paperSizeChoice = key },
-                                                label = { Text(lbl, fontSize = 10.5.sp) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = Color(0xFF0F172A),
-                                                    selectedLabelColor = Color.White
-                                                )
-                                            )
-                                        }
+                                },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = "Your formatted academic study PDF has been generated and saved to your Downloads/QwikSave folder.",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF334155)
+                                        )
+                                        Text(
+                                            text = "📄 ${notesPdfFile?.name}",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF059669)
+                                        )
                                     }
-
-                                    // Typography
-                                    Text("Typography & Font:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf(
-                                            Pair("Helvetica", "Modern Clean"),
-                                            Pair("Times", "Academic Serif"),
-                                            Pair("Courier", "Monospace Code")
-                                        ).forEach { (key, lbl) ->
-                                            FilterChip(
-                                                selected = fontFamilyChoice == key,
-                                                onClick = { fontFamilyChoice = key },
-                                                label = { Text(lbl, fontSize = 10.5.sp) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = Color(0xFF0F172A),
-                                                    selectedLabelColor = Color.White
-                                                )
-                                            )
-                                        }
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            client.openPdfFile(context, notesPdfFile!!)
+                                            showPdfCompletionDialog = false
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Open PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     }
-
-                                    // Font Scale
-                                    Text("Font Scale / Sizing:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf(
-                                            Pair("small", "Compact (9pt)"),
-                                            Pair("medium", "Standard (10pt)"),
-                                            Pair("large", "Readable (11.5pt)")
-                                        ).forEach { (key, lbl) ->
-                                            FilterChip(
-                                                selected = fontSizeScaleChoice == key,
-                                                onClick = { fontSizeScaleChoice = key },
-                                                label = { Text(lbl, fontSize = 10.5.sp) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = Color(0xFF0F172A),
-                                                    selectedLabelColor = Color.White
-                                                )
-                                            )
-                                        }
-                                    }
-
-                                    // Page Border Style
-                                    Text("Page Border Style:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf(
-                                            Pair("shadow", "MS Word Shadow"),
-                                            Pair("clean", "Thin Clean Line"),
-                                            Pair("none", "No Border")
-                                        ).forEach { (key, lbl) ->
-                                            FilterChip(
-                                                selected = borderStyleChoice == key,
-                                                onClick = { borderStyleChoice = key },
-                                                label = { Text(lbl, fontSize = 10.5.sp) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = Color(0xFF0F172A),
-                                                    selectedLabelColor = Color.White
-                                                )
-                                            )
-                                        }
-                                    }
-
-                                    // College Study Partner Scope
-                                    Text("College Study Partner Header:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        listOf(
-                                            Pair("all-pages", "All Pages 🎓"),
-                                            Pair("first-page", "First Page Only"),
-                                            Pair("none", "None")
-                                        ).forEach { (key, lbl) ->
-                                            FilterChip(
-                                                selected = partnerBadgeScope == key,
-                                                onClick = { partnerBadgeScope = key },
-                                                label = { Text(lbl, fontSize = 10.5.sp) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = Color(0xFF2563EB),
-                                                    selectedLabelColor = Color.White
-                                                )
-                                            )
-                                        }
-                                    }
-
-                                    // Watermark and Footer Text
-                                    OutlinedTextField(
-                                        value = notesWatermarkText,
-                                        onValueChange = { notesWatermarkText = it },
-                                        label = { Text("Center Watermark (leave blank for none)", fontSize = 10.5.sp) },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(6.dp)
-                                    )
-
-                                    OutlinedTextField(
-                                        value = notesFooterText,
-                                        onValueChange = { notesFooterText = it },
-                                        label = { Text("Custom Footer Brand", fontSize = 10.5.sp) },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(6.dp)
-                                    )
-
-                                    // Checkbox Toggles
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Checkbox(checked = includeTitleToggle, onCheckedChange = { includeTitleToggle = it })
-                                        Text("Include Document Title Banner", fontSize = 11.sp)
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Checkbox(checked = includeDateToggle, onCheckedChange = { includeDateToggle = it })
-                                        Text("Include Export Date & Time", fontSize = 11.sp)
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Checkbox(checked = includePageNumbersToggle, onCheckedChange = { includePageNumbersToggle = it })
-                                        Text("Include Page Numbers", fontSize = 11.sp)
+                                },
+                                dismissButton = {
+                                    OutlinedButton(
+                                        onClick = {
+                                            client.sharePdfFile(context, notesPdfFile!!)
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF059669))
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF059669))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Share PDF", fontSize = 11.5.sp, color = Color(0xFF059669))
                                     }
                                 }
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                isNotesGenerating = true
-                                coroutineScope.launch {
-                                    if (aiNotesMode == 0 && aiShareUrl.isNotBlank()) {
-                                        val extractRes = client.extractAiConversation(aiShareUrl)
-                                        extractRes.onSuccess { (extTitle, extContent) ->
-                                            notesTitle = extTitle
-                                            notesContent = extContent
-                                        }
-                                    }
-
-                                    val cleanFileName = notesTitle.replace(Regex("[^a-zA-Z0-9_-]"), "_") + ".pdf"
-                                    val result = client.createAcademicNotesPdf(
-                                        context = context,
-                                        title = notesTitle,
-                                        content = if (aiNotesMode == 2) "" else notesContent,
-                                        subtitle = notesSubtitle.ifBlank { null },
-                                        studentName = notesStudentName.ifBlank { null },
-                                        watermarkText = notesWatermarkText.ifBlank { null },
-                                        borderStyle = borderStyleChoice,
-                                        includePartnerBadge = partnerBadgeScope != "none",
-                                        partnerBadgeScope = partnerBadgeScope,
-                                        paperSize = paperSizeChoice,
-                                        fontSizeScale = fontSizeScaleChoice,
-                                        fontFamily = fontFamilyChoice,
-                                        includeTitle = includeTitleToggle,
-                                        includeDate = includeDateToggle,
-                                        includePageNumbers = includePageNumbersToggle,
-                                        footerText = notesFooterText.ifBlank { null },
-                                        questions = if (aiNotesMode == 2) structuredQuestions.toList() else emptyList(),
-                                        outputFileName = cleanFileName
-                                    )
-                                    isNotesGenerating = false
-                                    result.onSuccess { file ->
-                                        notesPdfFile = file
-                                        Toast.makeText(context, "Academic PDF created in Downloads/QwikSave!", Toast.LENGTH_LONG).show()
-                                    }.onFailure { err ->
-                                        Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !isNotesGenerating
-                        ) {
-                            if (isNotesGenerating) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Generating Academic PDF...", fontSize = 12.sp)
-                            } else {
-                                Text("Generate Academic Study PDF 📚", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        // Generated PDF Success Box with Open & Share PDF buttons
-                        notesPdfFile?.let { file ->
-                            PdfResultCard(
-                                file = file,
-                                onOpen = { openFileWithIntent(context, file, "application/pdf") },
-                                onShare = { client.shareFile(context, file, "application/pdf") }
                             )
                         }
                     }
@@ -1854,7 +2713,7 @@ fun PdfToolsTabContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Compress PDF Section
                 Card(
@@ -1955,6 +2814,18 @@ fun PdfToolsTabContent(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // High-Resolution PDF Tools Illustration Graphic (Borderless, clean integration)
+                Image(
+                    painter = painterResource(id = R.drawable.pdf_merge_compress_banner),
+                    contentDescription = "PDF Productivity Tools",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp),
+                    contentScale = ContentScale.Fit
+                )
             }
         }
     }
@@ -3397,59 +4268,19 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                 }
                 Text("Create & export QR codes for Websites, WiFi, UPI & Contacts", fontSize = 11.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
 
-                // Type Switcher: Balanced 2-Row Format (Reduced Gap as Requested)
-                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    // Row 1: Website/URL, WiFi, UPI Pay
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            Pair(0, "Website / URL"),
-                            Pair(2, "WiFi Network"),
-                            Pair(3, "UPI Payment")
-                        ).forEach { (idx, label) ->
-                            FilterChip(
-                                selected = selectedQrType == idx,
-                                onClick = { selectedQrType = idx },
-                                label = { Text(label, fontSize = 10.5.sp, maxLines = 1) },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f).height(32.dp),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF0F172A),
-                                    selectedLabelColor = Color.White,
-                                    containerColor = Color(0xFFF1F5F9),
-                                    labelColor = Color(0xFF334155)
-                                )
-                            )
-                        }
-                    }
-
-                    // Row 2: Phone / Contact, Plain Text
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            Pair(4, "Phone / Contact"),
-                            Pair(1, "Plain Text Note")
-                        ).forEach { (idx, label) ->
-                            FilterChip(
-                                selected = selectedQrType == idx,
-                                onClick = { selectedQrType = idx },
-                                label = { Text(label, fontSize = 10.5.sp, maxLines = 1) },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f).height(32.dp),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Color(0xFF0F172A),
-                                    selectedLabelColor = Color.White,
-                                    containerColor = Color(0xFFF1F5F9),
-                                    labelColor = Color(0xFF334155)
-                                )
-                            )
-                        }
-                    }
-                }
+                // Type Switcher: Professional Dropdown (Dark solid boundary, square corners)
+                DropdownSelectorBox(
+                    title = "Select QR Content Type:",
+                    selectedValue = selectedQrType,
+                    options = listOf(
+                        Pair(0, "Website / URL 🌐"),
+                        Pair(2, "WiFi Network 📶"),
+                        Pair(3, "UPI Payment 💳"),
+                        Pair(4, "Phone / Contact 📞"),
+                        Pair(1, "Plain Text Note 📝")
+                    ),
+                    onSelect = { selectedQrType = it }
+                )
 
                 // Dynamic Input Form per Selected QR Type (With helpful placeholders)
                 when (selectedQrType) {
@@ -3574,7 +4405,7 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                     }
                 }
 
-                // QR Code Render Canvas
+                // QR Code Render Canvas (Expanded matching width of Save & Share buttons below)
                 if (qrBitmap != null) {
                     Box(
                         modifier = Modifier
@@ -3583,18 +4414,26 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                         contentAlignment = Alignment.Center
                     ) {
                         Card(
-                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFE2E8F0)),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
-                            Image(
-                                bitmap = qrBitmap.asImageBitmap(),
-                                contentDescription = "Generated QR Code",
+                            Box(
                                 modifier = Modifier
-                                    .size(190.dp)
-                                    .padding(8.dp)
-                            )
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "Generated QR Code",
+                                    modifier = Modifier
+                                        .size(260.dp)
+                                        .padding(6.dp)
+                                )
+                            }
                         }
                     }
 
@@ -3614,7 +4453,9 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -3624,7 +4465,9 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
                         OutlinedButton(
                             onClick = { client.shareQrBitmap(context, qrBitmap) },
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0F172A)),
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0F172A))
                         ) {

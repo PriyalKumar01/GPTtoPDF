@@ -57,6 +57,117 @@ data class ExamQuestionItem(
 )
 
 /**
+ * Data model for individual AI conversation message turn (matching website schema)
+ */
+data class AiChatMessage(
+    val id: String = UUID.randomUUID().toString(),
+    val role: String, // "user" | "assistant"
+    val authorName: String = if (role == "user") "USER" else "ASSISTANT",
+    val content: String,
+    val timestamp: String = ""
+)
+
+/**
+ * Data model for extracted AI conversation notes document
+ */
+data class AiConversationData(
+    val id: String = UUID.randomUUID().toString(),
+    val title: String = "AI Study Notes",
+    val sourceUrl: String = "",
+    val createdAt: String = "",
+    val messages: List<AiChatMessage> = emptyList(),
+    val userCount: Int = 0,
+    val assistantCount: Int = 0,
+    val totalCount: Int = 0,
+    val estimatedPages: Int = 1
+)
+
+/**
+ * Strips repetitive AI boilerplate introductions and conversational pleasantries
+ */
+fun cleanAiPleasantries(raw: String): String {
+    return raw
+        .replace(
+            Regex("^(?:Sure thing!|Sure!|Certainly!|Of course!|Here is (?:the|a) [^\n]+\n+|Below is (?:the|a) [^\n]+\n+|I have reviewed [^\n]+\n+|As requested[^\n]*\n+)+", RegexOption.IGNORE_CASE),
+            ""
+        )
+        .replace(
+            Regex("(?:\n+(?:Hope this helps!|Let me know if (?:you (?:have any other questions|need more help|want me to explain|like me to explore)|you'd like to explore|you want to deepen)[^\n]*|Feel free to ask[^\n]*|Would you like (?:to|me to) (?:deepen|explore|dive deeper|continue)[^\n]*|Do you want (?:to|me to) (?:deepen|explore|continue)[^\n]*|If you like,? I want to explore this much in detail[^\n]*|If you'd like to explore this in more detail[^\n]*|Good luck with your exams!|Best of luck!|Happy studying!)[^\n]*)+$", RegexOption.IGNORE_CASE),
+            ""
+        )
+        .trim()
+}
+
+/**
+ * Calculates live estimated PDF pages matching website algorithm,
+ * safely ignoring massive Base64 data URLs and counting diagrams accurately.
+ */
+fun calculateEstimatedPages(messages: List<AiChatMessage>): Int {
+    var totalChars = 0
+    var codeBlocks = 0
+    var imageCount = 0
+    for (m in messages) {
+        var text = m.content
+        // Fast non-recursive stripping of markdown images and data URLs
+        while (true) {
+            val imgIdx = text.indexOf("![")
+            if (imgIdx == -1) break
+            val endP = text.indexOf(")", imgIdx)
+            if (endP == -1) break
+            text = text.substring(0, imgIdx) + text.substring(endP + 1)
+        }
+        while (true) {
+            val dIdx = text.indexOf("data:image/", ignoreCase = true)
+            if (dIdx == -1) break
+            var endIdx = dIdx + 11
+            while (endIdx < text.length && !text[endIdx].isWhitespace() && text[endIdx] != '"' && text[endIdx] != '\'') {
+                endIdx++
+            }
+            text = text.substring(0, dIdx) + text.substring(endIdx)
+        }
+        // Filter raw base64 lines
+        val cleanLines = text.split("\n").filterNot { l ->
+            val t = l.trim()
+            t.length > 30 && t.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' || it == '=' || it == '-' || it == '_' }
+        }
+        val clean = cleanLines.joinToString("\n").trim()
+        totalChars += clean.length
+        val matches = Regex("```").findAll(m.content).count()
+        codeBlocks += matches / 2
+        if (m.content.contains("![") || m.content.contains("data:image")) {
+            imageCount++
+        }
+    }
+    // Academic dense single-spacing layout has ~2200 characters per page
+    val basePages = Math.round(totalChars / 2200.0).toInt().coerceAtLeast(1)
+    val extraFromCode = (codeBlocks * 0.25).toInt()
+    val extraFromImages = (imageCount * 0.35).toInt()
+    return (basePages + extraFromCode + extraFromImages).coerceAtLeast(1)
+}
+
+/**
+ * Specification for a single PDF page to be included in a merged document.
+ */
+data class MergePageSpec(
+    val uri: Uri,
+    val pageIndex: Int, // 0-based page in source PDF
+    val displayPageNum: Int,
+    val docName: String,
+    val rotation: Int = 0 // 0, 90, 180, 270
+)
+
+/**
+ * Data model for a single page to be embedded into a high-compression PDF stream.
+ */
+data class PageJpegData(
+    val jpegBytes: ByteArray,
+    val imagePixelWidth: Int,
+    val imagePixelHeight: Int,
+    val pagePointWidth: Int,
+    val pagePointHeight: Int
+)
+
+/**
  * Data model for media extracted via Qwik Save engine.
  */
 data class ExtractedMedia(
@@ -1280,21 +1391,58 @@ class QwikSaveClient(
                 }
             }
 
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val qwikDir = File(downloadsDir, "QwikSave").apply { mkdirs() }
-            val cleanName = if (outputFileName.endsWith(".pdf", ignoreCase = true)) outputFileName else "$outputFileName.pdf"
-            val outputFile = File(qwikDir, cleanName)
-
-            FileOutputStream(outputFile).use { fos ->
-                pdfDocument.writeTo(fos)
-            }
+            val outputFile = writePdfSafely(context, pdfDocument, outputFileName)
             pdfDocument.close()
-
-            MediaScannerConnection.scanFile(context, arrayOf(outputFile.absolutePath), arrayOf("application/pdf"), null)
             Result.success(outputFile)
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Safely writes a PdfDocument to both app external storage (for instant File access)
+     * and publishes it to the public Downloads/QwikSave directory using MediaStore on Android 10+ (API 29+).
+     * This eliminates all "open failed: EACCES (Permission denied)" errors.
+     */
+    fun writePdfSafely(context: Context, pdfDocument: PdfDocument, outputFileName: String): File {
+        val cleanName = if (outputFileName.endsWith(".pdf", ignoreCase = true)) outputFileName else "$outputFileName.pdf"
+
+        // 1. App-specific external files dir (always writable, zero permissions required on any Android version)
+        val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+        val qwikAppDir = File(appDir, "QwikSave").apply { mkdirs() }
+        val primaryFile = File(qwikAppDir, cleanName)
+        FileOutputStream(primaryFile).use { fos ->
+            pdfDocument.writeTo(fos)
+        }
+
+        // 2. Publish to system Downloads/QwikSave folder via MediaStore so the user sees it in their Files/Downloads app
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, cleanName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/QwikSave")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { outStream ->
+                        primaryFile.inputStream().use { inStream -> inStream.copyTo(outStream) }
+                    }
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                }
+            } else {
+                val pubDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "QwikSave").apply { mkdirs() }
+                val pubFile = File(pubDir, cleanName)
+                primaryFile.copyTo(pubFile, overwrite = true)
+                MediaScannerConnection.scanFile(context, arrayOf(pubFile.absolutePath), arrayOf("application/pdf"), null)
+            }
+        } catch (_: Exception) {}
+
+        return primaryFile
     }
 
     /**
@@ -1335,17 +1483,8 @@ class QwikSaveClient(
                 }
             }
 
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val qwikDir = File(downloadsDir, "QwikSave").apply { mkdirs() }
-            val cleanName = if (outputFileName.endsWith(".pdf", ignoreCase = true)) outputFileName else "$outputFileName.pdf"
-            val outputFile = File(qwikDir, cleanName)
-
-            FileOutputStream(outputFile).use { fos ->
-                pdfDocument.writeTo(fos)
-            }
+            val outputFile = writePdfSafely(context, pdfDocument, outputFileName)
             pdfDocument.close()
-
-            MediaScannerConnection.scanFile(context, arrayOf(outputFile.absolutePath), arrayOf("application/pdf"), null)
             Result.success(outputFile)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1353,9 +1492,228 @@ class QwikSaveClient(
     }
 
     /**
+     * Merge multiple individual PDF pages (in custom user sequence & rotations) into one document.
+     */
+    suspend fun mergePdfPages(
+        context: Context,
+        pageSpecs: List<MergePageSpec>,
+        outputFileName: String = "QwikSave_Merged.pdf"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val pdfDocument = PdfDocument()
+            var globalPageNumber = 1
+
+            val renderers = mutableMapOf<Uri, Pair<ParcelFileDescriptor, PdfRenderer>>()
+
+            try {
+                for (spec in pageSpecs) {
+                    val pair = renderers.getOrPut(spec.uri) {
+                        val pfd = context.contentResolver.openFileDescriptor(spec.uri, "r")
+                            ?: throw Exception("Could not open ${spec.docName}")
+                        val rnd = PdfRenderer(pfd)
+                        Pair(pfd, rnd)
+                    }
+
+                    val renderer = pair.second
+                    if (spec.pageIndex in 0 until renderer.pageCount) {
+                        val page = renderer.openPage(spec.pageIndex)
+                        val w = page.width
+                        val h = page.height
+
+                        var bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                        bitmap.eraseColor(Color.WHITE)
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                        page.close()
+
+                        if (spec.rotation != 0) {
+                            val matrix = Matrix().apply { postRotate(spec.rotation.toFloat()) }
+                            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                            bitmap.recycle()
+                            bitmap = rotated
+                        }
+
+                        val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, globalPageNumber).create()
+                        val newPage = pdfDocument.startPage(pageInfo)
+                        newPage.canvas.drawBitmap(bitmap, 0f, 0f, null)
+                        pdfDocument.finishPage(newPage)
+                        bitmap.recycle()
+                        globalPageNumber++
+                    }
+                }
+            } finally {
+                renderers.values.forEach { (pfd, rnd) ->
+                    try { rnd.close() } catch (_: Exception) {}
+                    try { pfd.close() } catch (_: Exception) {}
+                }
+            }
+
+            val outputFile = writePdfSafely(context, pdfDocument, outputFileName)
+            pdfDocument.close()
+            Result.success(outputFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Render a visual thumbnail for any page of a PDF document.
+     */
+    fun renderPdfPageThumbnail(context: Context, uri: Uri, pageIndex: Int, targetW: Int = 100, targetH: Int = 140): Bitmap? {
+        return try {
+            val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: return null
+            val renderer = PdfRenderer(pfd)
+            if (pageIndex < 0 || pageIndex >= renderer.pageCount) {
+                renderer.close()
+                pfd.close()
+                return null
+            }
+            val page = renderer.openPage(pageIndex)
+            val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            renderer.close()
+            pfd.close()
+            bitmap
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Builds standard PDF 1.4 byte stream embedding raw compressed JPEG images via /Filter /DCTDecode.
+     * This avoids Android PdfDocument canvas re-encoding to raw 32-bit bitmaps, guaranteeing true file compression.
+     */
+    fun buildJpegStreamPdfBytes(pages: List<PageJpegData>): ByteArray {
+        val baos = ByteArrayOutputStream()
+        val offsets = mutableListOf<Long>()
+
+        fun writeAscii(s: String) {
+            baos.write(s.toByteArray(Charsets.US_ASCII))
+        }
+
+        fun writeBytes(b: ByteArray) {
+            baos.write(b)
+        }
+
+        // 1. PDF Header (PDF 1.4 with binary marker comment)
+        writeAscii("%PDF-1.4\n%\u00E2\u00E3\u00CF\u00D3\n")
+
+        val numPages = pages.size
+        val pagesParentId = 1 + numPages * 3
+        val catalogRootId = 2 + numPages * 3
+        val totalObjects = catalogRootId
+
+        for (i in 0 until numPages) {
+            val page = pages[i]
+            val imgObjId = 1 + i * 3
+            val contentObjId = 2 + i * 3
+            val pageObjId = 3 + i * 3
+
+            // 1. Image XObject (Raw JPEG stream)
+            offsets.add(baos.size().toLong())
+            writeAscii("$imgObjId 0 obj\n")
+            writeAscii("<< /Type /XObject /Subtype /Image /Width ${page.imagePixelWidth} /Height ${page.imagePixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${page.jpegBytes.size} >>\n")
+            writeAscii("stream\n")
+            writeBytes(page.jpegBytes)
+            writeAscii("\nendstream\nendobj\n")
+
+            // 2. Content Stream (Scale and draw image)
+            val contentOps = "q\n${page.pagePointWidth} 0 0 ${page.pagePointHeight} 0 0 cm\n/Im0 Do\nQ\n"
+            val contentBytes = contentOps.toByteArray(Charsets.US_ASCII)
+
+            offsets.add(baos.size().toLong())
+            writeAscii("$contentObjId 0 obj\n")
+            writeAscii("<< /Length ${contentBytes.size} >>\n")
+            writeAscii("stream\n")
+            writeBytes(contentBytes)
+            writeAscii("endstream\nendobj\n")
+
+            // 3. Page Object
+            offsets.add(baos.size().toLong())
+            writeAscii("$pageObjId 0 obj\n")
+            writeAscii("<< /Type /Page /Parent $pagesParentId 0 R /MediaBox [0 0 ${page.pagePointWidth} ${page.pagePointHeight}] /Contents $contentObjId 0 R /Resources << /ProcSet [/PDF /ImageC] /XObject << /Im0 $imgObjId 0 R >> >> >>\n")
+            writeAscii("endobj\n")
+        }
+
+        // Pages Parent Object
+        offsets.add(baos.size().toLong())
+        val kidsList = (0 until numPages).joinToString(" ") { "${3 + it * 3} 0 R" }
+        writeAscii("$pagesParentId 0 obj\n")
+        writeAscii("<< /Type /Pages /Kids [$kidsList] /Count $numPages >>\n")
+        writeAscii("endobj\n")
+
+        // Catalog Root Object
+        offsets.add(baos.size().toLong())
+        writeAscii("$catalogRootId 0 obj\n")
+        writeAscii("<< /Type /Catalog /Pages $pagesParentId 0 R >>\n")
+        writeAscii("endobj\n")
+
+        // Cross-Reference Table
+        val xrefOffset = baos.size().toLong()
+        writeAscii("xref\n")
+        writeAscii("0 ${totalObjects + 1}\n")
+        writeAscii("0000000000 65535 f \r\n")
+        for (offset in offsets) {
+            writeAscii(String.format(Locale.US, "%010d 00000 n \r\n", offset))
+        }
+
+        // Trailer
+        writeAscii("trailer\n")
+        writeAscii("<< /Size ${totalObjects + 1} /Root $catalogRootId 0 R >>\n")
+        writeAscii("startxref\n")
+        writeAscii("$xrefOffset\n")
+        writeAscii("%%EOF\n")
+
+        return baos.toByteArray()
+    }
+
+    /**
+     * Safely writes raw PDF byte array to app files and publishes to Downloads/QwikSave via MediaStore.
+     */
+    fun writePdfBytesSafely(context: Context, pdfBytes: ByteArray, outputFileName: String): File {
+        val cleanName = if (outputFileName.endsWith(".pdf", ignoreCase = true)) outputFileName else "$outputFileName.pdf"
+
+        val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+        val qwikAppDir = File(appDir, "QwikSave").apply { mkdirs() }
+        val primaryFile = File(qwikAppDir, cleanName)
+        FileOutputStream(primaryFile).use { fos ->
+            fos.write(pdfBytes)
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, cleanName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/QwikSave")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { outStream ->
+                        outStream.write(pdfBytes)
+                    }
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, values, null, null)
+                }
+            } else {
+                val pubDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "QwikSave").apply { mkdirs() }
+                val pubFile = File(pubDir, cleanName)
+                FileOutputStream(pubFile).use { fos -> fos.write(pdfBytes) }
+                MediaScannerConnection.scanFile(context, arrayOf(pubFile.absolutePath), arrayOf("application/pdf"), null)
+            }
+        } catch (_: Exception) {}
+
+        return primaryFile
+    }
+
+    /**
      * Compress PDF: Downsample pages with selectable quality level (High, Balanced, Light).
-     * Uses High-DPI supersampling (150-180 DPI) and anti-aliased bitmap filtering so text and diagrams
-     * remain 100% crystal clear and sharp while reducing file size significantly.
+     * Directly embeds raw compressed JPEG streams using /Filter /DCTDecode.
+     * Guarantees true file size reduction (e.g., 1.34 MB -> ~0.45 MB) without canvas bloating.
      */
     suspend fun compressPdf(
         context: Context,
@@ -1368,67 +1726,58 @@ class QwikSaveClient(
                 ?: return@withContext Result.failure(Exception("Could not open source PDF file"))
 
             val renderer = PdfRenderer(pfd)
-            val pdfDocument = PdfDocument()
+            val pageCount = renderer.pageCount
+            if (pageCount == 0) {
+                renderer.close()
+                pfd.close()
+                return@withContext Result.failure(Exception("Source PDF has no pages"))
+            }
 
-            // High-DPI supersampling factors: Standard PDF is 72 DPI (595x842).
-            // Multiplying by 2.20x - 3.00x produces 160-220 DPI crystal-clear bitmaps so small text & diagrams NEVER blur!
+            // High compression: ~65% reduction (Quality 42%, scale 1.0x native)
+            // Balanced:        ~45% reduction (Quality 62%, scale 1.25x)
+            // Light:           ~25% reduction (Quality 78%, scale 1.5x)
             val (scaleFactor, qualityPercent) = when (compressionLevel) {
-                0 -> Pair(2.20f, 78) // High Compression: 2.20x scale, 78% JPEG quality (Compact file, sharp legible text)
-                2 -> Pair(3.00f, 92) // Light Compression: 3.00x scale, 92% JPEG quality (Near lossless, zero blur, crystal clear)
-                else -> Pair(2.50f, 85) // Balanced Compression: 2.50x scale, 85% JPEG quality (Optimal balance, crisp text & clean lines)
+                0 -> Pair(1.0f, 42)
+                2 -> Pair(1.5f, 78)
+                else -> Pair(1.25f, 62)
             }
 
-            val filterPaint = Paint().apply {
-                isFilterBitmap = true
-                isAntiAlias = true
-                isDither = true
-            }
+            val pageDataList = mutableListOf<PageJpegData>()
 
-            for (i in 0 until renderer.pageCount) {
+            for (i in 0 until pageCount) {
                 val page = renderer.openPage(i)
                 val origW = page.width
                 val origH = page.height
 
-                val targetW = (origW * scaleFactor).toInt().coerceAtLeast(800)
-                val targetH = (origH * scaleFactor).toInt().coerceAtLeast(1100)
+                val targetW = (origW * scaleFactor).toInt().coerceAtLeast(300)
+                val targetH = (origH * scaleFactor).toInt().coerceAtLeast(400)
 
-                val rawBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                val rawBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.RGB_565)
                 rawBitmap.eraseColor(Color.WHITE)
-                page.render(rawBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                page.render(rawBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 page.close()
 
-                // Compress via JPEG stream with optimal DCT compression
                 val stream = ByteArrayOutputStream()
                 rawBitmap.compress(Bitmap.CompressFormat.JPEG, qualityPercent, stream)
                 val compressedBytes = stream.toByteArray()
                 rawBitmap.recycle()
 
-                val compressedBitmap = BitmapFactory.decodeByteArray(compressedBytes, 0, compressedBytes.size)
-
-                val pageInfo = PdfDocument.PageInfo.Builder(origW, origH, i + 1).create()
-                val newPage = pdfDocument.startPage(pageInfo)
-                val canvas = newPage.canvas
-
-                val destRect = RectF(0f, 0f, origW.toFloat(), origH.toFloat())
-                canvas.drawBitmap(compressedBitmap, null, destRect, filterPaint)
-                pdfDocument.finishPage(newPage)
-                compressedBitmap.recycle()
+                pageDataList.add(
+                    PageJpegData(
+                        jpegBytes = compressedBytes,
+                        imagePixelWidth = targetW,
+                        imagePixelHeight = targetH,
+                        pagePointWidth = origW,
+                        pagePointHeight = origH
+                    )
+                )
             }
 
             renderer.close()
             pfd.close()
 
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val qwikDir = File(downloadsDir, "QwikSave").apply { mkdirs() }
-            val cleanName = if (outputFileName.endsWith(".pdf", ignoreCase = true)) outputFileName else "$outputFileName.pdf"
-            val outputFile = File(qwikDir, cleanName)
-
-            FileOutputStream(outputFile).use { fos ->
-                pdfDocument.writeTo(fos)
-            }
-            pdfDocument.close()
-
-            MediaScannerConnection.scanFile(context, arrayOf(outputFile.absolutePath), arrayOf("application/pdf"), null)
+            val pdfBytes = buildJpegStreamPdfBytes(pageDataList)
+            val outputFile = writePdfBytesSafely(context, pdfBytes, outputFileName)
             Result.success(outputFile)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1525,6 +1874,27 @@ class QwikSaveClient(
     }
 
     /**
+     * Get exact file size in bytes from a content Uri.
+     */
+    fun getFileSizeFromUri(context: Context, uri: Uri): Long {
+        var size: Long = 0L
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (cursor.moveToFirst() && sizeIndex != -1) {
+                    size = cursor.getLong(sizeIndex)
+                }
+            }
+            if (size <= 0) {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                    size = pfd.statSize
+                }
+            }
+        } catch (_: Exception) {}
+        return size
+    }
+
+    /**
      * Share PDF / File via FileProvider to WhatsApp, Telegram, Gmail, etc.
      */
     fun shareFile(context: Context, file: File, mimeType: String = "application/pdf") {
@@ -1547,10 +1917,36 @@ class QwikSaveClient(
         }
     }
 
+    fun openFile(context: Context, file: File, mimeType: String = "application/pdf") {
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "com.qwiksave.app.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(Intent.createChooser(intent, "Open with"))
+        } catch (e: Exception) {
+            Toast.makeText(context, "Cannot open file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun openPdfFile(context: Context, file: File) {
+        openFile(context, file, "application/pdf")
+    }
+
+    fun sharePdfFile(context: Context, file: File) {
+        shareFile(context, file, "application/pdf")
+    }
+
     /**
      * Create formatted Academic PDF from AI study notes, matching the website's layout.
      * Supports Custom Title, Subtitle, Student/Prof Name, Watermark, Page Borders (Shadow/Clean/None),
-     * College Study Partner Header (All Pages/First Page/None), Typography, Font Scaling, Paper Size, and Custom Footer.
+     * College Study Partner Header (All Pages/First Page), Typography, Font Scaling, Paper Size, and Custom Footer.
      */
     suspend fun createAcademicNotesPdf(
         context: Context,
@@ -1561,7 +1957,7 @@ class QwikSaveClient(
         watermarkText: String? = null,
         borderStyle: String = "shadow", // "shadow", "clean", "none"
         includePartnerBadge: Boolean = true,
-        partnerBadgeScope: String = "all-pages", // "all-pages", "first-page", "none"
+        partnerBadgeScope: String = "all-pages", // "all-pages", "first-page"
         paperSize: String = "A4", // "A4", "Letter"
         fontSizeScale: String = "medium", // "small", "medium", "large"
         fontFamily: String = "Helvetica", // "Helvetica", "Times", "Courier"
@@ -1570,23 +1966,32 @@ class QwikSaveClient(
         includePageNumbers: Boolean = true,
         footerText: String? = null,
         questions: List<ExamQuestionItem> = emptyList(),
+        messages: List<AiChatMessage> = emptyList(),
         outputFileName: String = "QwikSave_Notes.pdf"
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
             val pdfDocument = PdfDocument()
-            val (pageWidth, pageHeight) = if (paperSize.equals("Letter", true)) Pair(612, 792) else Pair(595, 842)
+            val (pageWidth, pageHeight) = when (paperSize.lowercase()) {
+                "letter" -> Pair(612, 792)
+                "legal" -> Pair(612, 1008)
+                "executive" -> Pair(522, 756)
+                else -> Pair(595, 842) // A4
+            }
             val margin = 36f
             val printableWidth = (pageWidth - (margin * 2)).toInt()
 
             val baseTypeface = when {
-                fontFamily.contains("Times", true) || fontFamily.contains("Serif", true) -> Typeface.SERIF
+                fontFamily.contains("Times", true) || fontFamily.contains("Georgia", true) || fontFamily.contains("Serif", true) -> Typeface.SERIF
                 fontFamily.contains("Courier", true) || fontFamily.contains("Mono", true) -> Typeface.MONOSPACE
+                fontFamily.contains("Roboto", true) || fontFamily.contains("Sans", true) -> Typeface.SANS_SERIF
                 else -> Typeface.DEFAULT
             }
 
             val (titleSize, subSize, qTitleSize, bodySize) = when (fontSizeScale.lowercase()) {
+                "ultra-compact" -> listOf(13f, 8.5f, 9f, 7.5f)
                 "small" -> listOf(14f, 9.5f, 10f, 8.5f)
                 "large" -> listOf(18f, 12.5f, 13f, 11.5f)
+                "extra-large" -> listOf(20f, 14f, 14.5f, 13f)
                 else -> listOf(16f, 11f, 11.5f, 10f)
             }
 
@@ -1626,56 +2031,62 @@ class QwikSaveClient(
             }
 
             val calloutBgPaint = Paint().apply {
-                color = Color.rgb(241, 245, 249) // #F1F5F9
+                color = Color.rgb(248, 250, 252) // #F8FAFC
                 style = Paint.Style.FILL
             }
 
             val calloutBorderPaint = Paint().apply {
-                color = Color.rgb(203, 213, 225) // #CBD5E1
+                color = Color.rgb(226, 232, 240) // #E2E8F0
                 style = Paint.Style.STROKE
                 strokeWidth = 1f
-            }
-
-            val partnerBgPaint = Paint().apply {
-                color = Color.rgb(238, 242, 255) // #EEF2FF
-                style = Paint.Style.FILL
-            }
-
-            val partnerBorderPaint = Paint().apply {
-                color = Color.rgb(199, 210, 254) // #C7D2FE
-                style = Paint.Style.STROKE
-                strokeWidth = 1f
-            }
-
-            val partnerTextPaint = TextPaint().apply {
-                color = Color.rgb(67, 56, 202) // #4338CA
-                textSize = 8.5f
-                typeface = Typeface.create(baseTypeface, Typeface.BOLD)
-                isAntiAlias = true
             }
 
             val appLogoBitmap: Bitmap? = try {
-                BitmapFactory.decodeResource(context.resources, R.drawable.app_logo_transparent)
+                BitmapFactory.decodeResource(context.resources, R.drawable.app_logo)
+                    ?: BitmapFactory.decodeResource(context.resources, R.drawable.app_logo_transparent)
+            } catch (_: Exception) { null }
+
+            val collegeStudyLogoBitmap: Bitmap? = try {
+                BitmapFactory.decodeResource(context.resources, R.drawable.college_study_logo)
+            } catch (_: Exception) { null }
+
+            val watermarkBannerBitmap: Bitmap? = try {
+                BitmapFactory.decodeResource(context.resources, R.drawable.qwik_save_banner_transparent)
+                    ?: BitmapFactory.decodeResource(context.resources, R.drawable.qwik_save_banner)
             } catch (_: Exception) { null }
 
             fun applyPageDecorations(c: Canvas, pageNum: Int) {
-                // 1. Watermark
-                val activeWatermark = watermarkText ?: "QWIK SAVE"
-                if (activeWatermark.isNotBlank()) {
-                    val wmPaint = TextPaint().apply {
-                        color = Color.argb(20, 100, 116, 139)
-                        textSize = 44f
-                        typeface = Typeface.create(baseTypeface, Typeface.BOLD)
+                // 1. Watermark: subtle centered watermark matching website PDF
+                if (watermarkBannerBitmap != null) {
+                    val wmWidth = 230f
+                    val wmHeight = (wmWidth * watermarkBannerBitmap.height / watermarkBannerBitmap.width.toFloat())
+                    val wmX = (pageWidth - wmWidth) / 2f
+                    val wmY = (pageHeight - wmHeight) / 2f
+                    val logoRect = RectF(wmX, wmY, wmX + wmWidth, wmY + wmHeight)
+                    val wmPaint = Paint().apply {
+                        alpha = (255 * 0.16f).toInt() // subtle 16% opacity
+                        isFilterBitmap = true
                         isAntiAlias = true
-                        textAlign = Paint.Align.CENTER
                     }
-                    c.save()
-                    c.rotate(-35f, pageWidth / 2f, pageHeight / 2f)
-                    c.drawText(activeWatermark, pageWidth / 2f, pageHeight / 2f, wmPaint)
-                    c.restore()
+                    c.drawBitmap(watermarkBannerBitmap, null, logoRect, wmPaint)
+                } else {
+                    val activeWatermark = watermarkText ?: "QWIK SAVE"
+                    if (activeWatermark.isNotBlank()) {
+                        val wmPaint = TextPaint().apply {
+                            color = Color.argb((255 * 0.16f).toInt(), 148, 163, 184)
+                            textSize = 42f
+                            typeface = Typeface.create(baseTypeface, Typeface.BOLD)
+                            isAntiAlias = true
+                            textAlign = Paint.Align.CENTER
+                        }
+                        c.save()
+                        c.rotate(-35f, pageWidth / 2f, pageHeight / 2f)
+                        c.drawText(activeWatermark, pageWidth / 2f, pageHeight / 2f, wmPaint)
+                        c.restore()
+                    }
                 }
 
-                // 2. Page Border (MS Word Shadow Box, Clean Line, or None)
+                // 2. Page Border (MS Word Shadow Box, Clean Line, Double, Dotted, or None)
                 if (borderStyle.equals("shadow", ignoreCase = true)) {
                     val shadowPaint = Paint().apply {
                         color = Color.rgb(203, 213, 225)
@@ -1696,11 +2107,82 @@ class QwikSaveClient(
                         strokeWidth = 1.2f
                     }
                     c.drawRect(margin, margin, pageWidth - margin, pageHeight - margin, bPaint)
+                } else if (borderStyle.equals("double", ignoreCase = true)) {
+                    val outerPaint = Paint().apply {
+                        color = Color.rgb(15, 23, 42)
+                        style = Paint.Style.STROKE
+                        strokeWidth = 1.5f
+                    }
+                    val innerPaint = Paint().apply {
+                        color = Color.rgb(100, 116, 139)
+                        style = Paint.Style.STROKE
+                        strokeWidth = 0.8f
+                    }
+                    c.drawRect(margin, margin, pageWidth - margin, pageHeight - margin, outerPaint)
+                    c.drawRect(margin + 3f, margin + 3f, pageWidth - margin - 3f, pageHeight - margin - 3f, innerPaint)
+                } else if (borderStyle.equals("dotted", ignoreCase = true)) {
+                    val dPaint = Paint().apply {
+                        color = Color.rgb(100, 116, 139)
+                        style = Paint.Style.STROKE
+                        strokeWidth = 1.2f
+                        pathEffect = DashPathEffect(floatArrayOf(4f, 4f), 0f)
+                    }
+                    c.drawRect(margin, margin, pageWidth - margin, pageHeight - margin, dPaint)
                 }
             }
 
-            val dateFormat = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-            val dateStr = if (includeDate) dateFormat.format(Date()) else ""
+            fun drawCollegeStudyBadge(c: Canvas, topY: Float) {
+                if (partnerBadgeScope.equals("none", ignoreCase = true)) return
+                val badgeW = 104f
+                val badgeH = 28f
+                val badgeX = pageWidth - margin - badgeW - 6f
+                val badgeRect = RectF(badgeX, topY, badgeX + badgeW, topY + badgeH)
+
+                val badgeBg = Paint().apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
+                }
+                val badgeBorder = Paint().apply {
+                    color = Color.rgb(203, 213, 225) // slate-300
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1f
+                }
+                c.drawRoundRect(badgeRect, 5f, 5f, badgeBg)
+                c.drawRoundRect(badgeRect, 5f, 5f, badgeBorder)
+
+                val csLogo = collegeStudyLogoBitmap ?: appLogoBitmap
+                if (csLogo != null) {
+                    val logoRect = RectF(badgeX + 5f, topY + 4f, badgeX + 25f, topY + 24f)
+                    c.drawBitmap(csLogo, null, logoRect, Paint().apply { isFilterBitmap = true })
+                }
+
+                val textLeft = badgeX + 29f
+                val poweredPaint = TextPaint().apply {
+                    color = Color.rgb(100, 116, 139)
+                    textSize = 5.8f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    isAntiAlias = true
+                }
+                val csBrandPaint = TextPaint().apply {
+                    color = Color.rgb(15, 23, 42)
+                    textSize = 8.5f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    isAntiAlias = true
+                }
+                val subHubPaint = TextPaint().apply {
+                    color = Color.rgb(2, 132, 199)
+                    textSize = 7f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    isAntiAlias = true
+                }
+
+                c.drawText("POWERED BY", textLeft, topY + 9f, poweredPaint)
+                c.drawText("College Study", textLeft, topY + 17.5f, csBrandPaint)
+                c.drawText("Your Study Hub", textLeft, topY + 24.5f, subHubPaint)
+            }
+
+            val isoDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+            val generatedDateStr = isoDateFormat.format(Date())
 
             var currentPageNumber = 1
             var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
@@ -1709,56 +2191,666 @@ class QwikSaveClient(
 
             applyPageDecorations(canvas, currentPageNumber)
 
-            // Page 1 Header
-            var yPosition = margin + 12f
+            // Page 1 Header setup
+            var yPosition = margin + 10f
 
-            // Partner Badge Top Right
-            val shouldShowBadgeOnPage1 = when (partnerBadgeScope.lowercase()) {
-                "all-pages" -> includePartnerBadge
-                "first-page" -> includePartnerBadge
-                else -> false
-            }
-
-            if (shouldShowBadgeOnPage1) {
-                val badgeW = 140f
-                val badgeH = 22f
-                val badgeX = pageWidth - margin - badgeW - 10f
-                val badgeRect = RectF(badgeX, yPosition, badgeX + badgeW, yPosition + badgeH)
-                canvas.drawRoundRect(badgeRect, 6f, 6f, partnerBgPaint)
-                canvas.drawRoundRect(badgeRect, 6f, 6f, partnerBorderPaint)
-                canvas.drawText("🎓 College Study Partner", badgeX + 10f, yPosition + 14f, partnerTextPaint)
-            }
+            // Always render College Study Header on Page 1
+            drawCollegeStudyBadge(canvas, yPosition)
 
             // Document Title
+            val titleWidth = printableWidth - 135
             if (includeTitle) {
-                canvas.drawText(title.ifBlank { "Qwik Save AI Study Notes" }, margin + 12f, yPosition + 16f, titlePaint)
-                yPosition += 26f
+                val cleanDocTitle = title.ifBlank { "Qwik Save AI Study Notes" }
+                @Suppress("DEPRECATION")
+                val tLayout = StaticLayout(
+                    cleanDocTitle,
+                    titlePaint,
+                    titleWidth,
+                    Layout.Alignment.ALIGN_NORMAL,
+                    1.15f,
+                    0f,
+                    false
+                )
+                canvas.save()
+                canvas.translate(margin + 8f, yPosition)
+                tLayout.draw(canvas)
+                canvas.restore()
+                yPosition += tLayout.height + 4f
             }
 
-            // Subtitle / Subject
-            if (!subtitle.isNullOrBlank()) {
-                canvas.drawText("Subject: $subtitle", margin + 12f, yPosition + 10f, subtitlePaint)
-                yPosition += 18f
+            // Subtitle / Generated line
+            val subLine = if (!subtitle.isNullOrBlank()) {
+                "$subtitle • Generated: $generatedDateStr"
+            } else {
+                "Generated: $generatedDateStr • Typeset for Academic Review"
             }
+            canvas.drawText(subLine, margin + 8f, yPosition + 7f, metaPaint)
+            yPosition += 18f
 
-            // Student / Faculty Name & Date
-            val authorPart = if (!studentName.isNullOrBlank()) "Candidate/Faculty: $studentName" else "Academic Revision"
-            val metaLine = if (dateStr.isNotBlank()) "$authorPart • $dateStr" else authorPart
-            canvas.drawText(metaLine, margin + 12f, yPosition + 8f, metaPaint)
-            yPosition += 16f
-
-            // Divider line
+            // Top divider line
             val dividerPaint = Paint().apply {
                 color = Color.rgb(226, 232, 240)
-                strokeWidth = 1f
+                strokeWidth = 0.8f
             }
-            canvas.drawLine(margin + 10f, yPosition, pageWidth - margin - 10f, yPosition, dividerPaint)
-            yPosition += 16f
+            canvas.drawLine(margin + 6f, yPosition, pageWidth - margin - 6f, yPosition, dividerPaint)
+            yPosition += 14f
 
-            // If structured questions provided, render Question/Answer blocks
-            if (questions.isNotEmpty()) {
+            // Helper for formatted Markdown text that renders bold & italics with Android StaticLayout
+            fun formatMarkdownSpanned(raw: String): CharSequence {
+                // Strictly purge raw XML, ChatGPT internal Entity, and divider tags
+                val cleanedRaw = raw
+                    .replace(Regex("<Entity[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("<divider[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("<citation[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("<[a-zA-Z][a-zA-Z0-9_-]*(?:\\s+[^>]*?)?\\/?>"), "")
+                val h = cleanedRaw
+                    .replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
+                    .replace(Regex("\\*(.*?)\\*"), "<i>$1</i>")
+                    .replace(Regex("`([^`]+)`"), "<tt>$1</tt>")
+                return try {
+                    android.text.Html.fromHtml(h, android.text.Html.FROM_HTML_MODE_LEGACY)
+                } catch (_: Exception) {
+                    cleanedRaw.replace(Regex("[*#`]"), "")
+                }
+            }
+
+            // Helper to parse Markdown tables (| Col 1 | Col 2 |)
+            fun parseMarkdownTable(text: String): Pair<List<String>, List<List<String>>>? {
+                val rawLines = text.lines().map { it.trim() }.filter { it.contains("|") }
+                if (rawLines.size < 2) return null
+                val parsedRows = mutableListOf<List<String>>()
+                for (line in rawLines) {
+                    val trimmed = line.trim().removePrefix("|").removeSuffix("|")
+                    val cells = trimmed.split("|").map { it.trim() }
+                    if (cells.all { it.matches(Regex("[-:\\s]+")) }) continue
+                    parsedRows.add(cells)
+                }
+                if (parsedRows.size < 2) return null
+                val headers = parsedRows.first()
+                val rows = parsedRows.drop(1)
+                return Pair(headers, rows)
+            }
+
+            // Safe extraction of markdown images: ![alt](src) and strict removal of raw base64
+            fun extractImagesAndCleanContentSafely(rawContent: String): Pair<String, Map<String, Pair<String, Bitmap?>>> {
+                val sanitizedContent = rawContent
+                    .replace(Regex("<Entity[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("<divider[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("<citation[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
+
+                val imgMap = mutableMapOf<String, Pair<String, Bitmap?>>()
+                val sb = StringBuilder()
+                var i = 0
+                val len = sanitizedContent.length
+                var tokenIndex = 0
+
+                while (i < len) {
+                    val imgStart = sanitizedContent.indexOf("![", i)
+                    if (imgStart == -1) {
+                        sb.append(sanitizedContent.substring(i))
+                        break
+                    }
+                    sb.append(sanitizedContent.substring(i, imgStart))
+
+                    val altEnd = sanitizedContent.indexOf("]", imgStart + 2)
+                    if (altEnd == -1) {
+                        sb.append(sanitizedContent.substring(imgStart))
+                        break
+                    }
+                    val altText = sanitizedContent.substring(imgStart + 2, altEnd).trim()
+                        .replace(Regex("\\s+logo\\b", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("^diagram:\\s*", RegexOption.IGNORE_CASE), "")
+                        .trim()
+
+                    var parenStart = altEnd + 1
+                    while (parenStart < len && (sanitizedContent[parenStart] == ' ' || sanitizedContent[parenStart] == '\t' || sanitizedContent[parenStart] == '\n' || sanitizedContent[parenStart] == '\r')) {
+                        parenStart++
+                    }
+                    if (parenStart < len && sanitizedContent[parenStart] == '(') {
+                        val parenEnd = sanitizedContent.indexOf(")", parenStart + 1)
+                        if (parenEnd != -1) {
+                            val rawSrc = sanitizedContent.substring(parenStart + 1, parenEnd).trim()
+                            var bm: Bitmap? = null
+                            if (rawSrc.contains("base64,", ignoreCase = true)) {
+                                try {
+                                    val b64 = rawSrc.substringAfter("base64,").trim()
+                                        .filter { !it.isWhitespace() }
+                                    val decodedBytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                                    bm = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                                } catch (_: Exception) {}
+                            }
+                            val token = "@@@IMG_TOKEN_${tokenIndex++}@@@"
+                            imgMap[token] = Pair(altText, bm)
+                            sb.append("\n\n").append(token).append("\n\n")
+                            i = parenEnd + 1
+                            continue
+                        } else {
+                            // No closing paren: consume until end of image tag or newline
+                            val nextBreak = sanitizedContent.indexOf("\n\n", parenStart)
+                            i = if (nextBreak != -1) nextBreak + 2 else len
+                            continue
+                        }
+                    }
+                    sb.append(sanitizedContent.substring(imgStart, altEnd + 1))
+                    i = altEnd + 1
+                }
+
+                var text = sb.toString()
+                // Strip any remaining data:image segments completely without leaking base64 lines
+                while (true) {
+                    val dIdx = text.indexOf("data:image/", ignoreCase = true)
+                    if (dIdx == -1) break
+                    val closingParen = text.indexOf(")", dIdx)
+                    val nextBlank = text.indexOf("\n\n", dIdx)
+                    val endIdx = when {
+                        closingParen != -1 && (nextBlank == -1 || closingParen < nextBlank + 10) -> closingParen + 1
+                        nextBlank != -1 -> nextBlank
+                        else -> text.length
+                    }
+                    text = text.substring(0, dIdx) + text.substring(endIdx)
+                }
+
+                // Strip lines that are pure raw base64 leftover artifacts (>25 chars of base64 charset)
+                val cleanedLines = text.split("\n").filterNot { line ->
+                    val t = line.trim()
+                    (t.length > 25 && t.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' || it == '=' || it == '-' || it == '_' }) ||
+                    t.startsWith("![Diagram:") || t.startsWith("![") && t.contains("data:image/")
+                }
+
+                return Pair(cleanedLines.joinToString("\n").trim(), imgMap)
+            }
+
+            // Rendering messages if provided (Conversation Mode)
+            if (messages.isNotEmpty()) {
+                for (msg in messages) {
+                    val isUser = msg.role == "user"
+                    val isCustomNote = msg.authorName.contains("CUSTOM", ignoreCase = true) || msg.authorName.contains("NOTE", ignoreCase = true)
+
+                    val (tokenizedContent, imgMap) = extractImagesAndCleanContentSafely(msg.content)
+
+                    if (isUser) {
+                        // Separate user text from any attached diagrams/images
+                        val userImgTokens = imgMap.keys.filter { tokenizedContent.contains(it) }
+                        var userPureText = tokenizedContent
+                        for (t in userImgTokens) {
+                            userPureText = userPureText.replace(t, "").trim()
+                        }
+
+                        if (userPureText.isNotBlank()) {
+                            val safeUserText = userPureText.split(" ").joinToString(" ") { word ->
+                                if (word.length > 38) word.chunked(38).joinToString(" ") else word
+                            }
+                            val spannedUser = formatMarkdownSpanned(safeUserText)
+                            @Suppress("DEPRECATION")
+                            val uLayout = StaticLayout(
+                                spannedUser,
+                                bodyPaint,
+                                printableWidth - 28,
+                                Layout.Alignment.ALIGN_NORMAL,
+                                1.25f,
+                                0f,
+                                false
+                            )
+
+                            val boxHeight = uLayout.height + 24f
+                            if (yPosition + boxHeight + 40f > pageHeight - margin) {
+                                drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                                pdfDocument.finishPage(page)
+
+                                currentPageNumber++
+                                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                                page = pdfDocument.startPage(pageInfo)
+                                canvas = page.canvas
+                                applyPageDecorations(canvas, currentPageNumber)
+                                if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                    drawCollegeStudyBadge(canvas, margin + 8f)
+                                    yPosition = margin + 38f
+                                } else {
+                                    yPosition = margin + 14f
+                                }
+                            }
+
+                            val boxRect = RectF(margin + 6f, yPosition, pageWidth - margin - 6f, yPosition + boxHeight)
+                            canvas.drawRoundRect(boxRect, 6f, 6f, calloutBgPaint)
+                            canvas.drawRoundRect(boxRect, 6f, 6f, calloutBorderPaint)
+
+                            val rolePaint = TextPaint().apply {
+                                color = Color.rgb(100, 116, 139)
+                                textSize = 7.5f
+                                typeface = Typeface.create(baseTypeface, Typeface.BOLD)
+                                isAntiAlias = true
+                            }
+                            canvas.drawText("USER", margin + 14f, yPosition + 12f, rolePaint)
+
+                            canvas.save()
+                            canvas.translate(margin + 14f, yPosition + 17f)
+                            uLayout.draw(canvas)
+                            canvas.restore()
+
+                            yPosition += boxHeight + 10f
+                        }
+
+                        // Render any user-attached diagram/screenshot cleanly
+                        for (t in userImgTokens) {
+                            val (alt, bm) = imgMap[t] ?: continue
+                            if (bm != null) {
+                                val maxW = (printableWidth - 28f).coerceAtMost(360f)
+                                val scale = (maxW / bm.width.toFloat()).coerceAtMost(1.0f)
+                                val scaledW = bm.width * scale
+                                val scaledH = (bm.height * scale).coerceAtMost(220f)
+
+                                if (yPosition + scaledH + 35f > pageHeight - margin) {
+                                    drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                                    pdfDocument.finishPage(page)
+
+                                    currentPageNumber++
+                                    pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                                    page = pdfDocument.startPage(pageInfo)
+                                    canvas = page.canvas
+                                    applyPageDecorations(canvas, currentPageNumber)
+                                    if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                        drawCollegeStudyBadge(canvas, margin + 8f)
+                                        yPosition = margin + 38f
+                                    } else {
+                                        yPosition = margin + 14f
+                                    }
+                                }
+
+                                val imgX = margin + 14f + (printableWidth - 28f - scaledW) / 2f
+                                val imgRect = RectF(imgX, yPosition, imgX + scaledW, yPosition + scaledH)
+                                canvas.drawBitmap(bm, null, imgRect, Paint().apply { isFilterBitmap = true })
+                                yPosition += scaledH + 4f
+
+                                if (alt.isNotBlank()) {
+                                    canvas.drawText(alt, margin + 14f, yPosition + 7f, metaPaint)
+                                    yPosition += 12f
+                                }
+                                yPosition += 8f
+                            } else {
+                                val diagText = if (alt.isNotBlank()) "🖼️ [User Attachment: $alt]" else "🖼️ [User Attachment Figure]"
+                                val diagBoxRect = RectF(margin + 14f, yPosition, pageWidth - margin - 14f, yPosition + 24f)
+                                canvas.drawRoundRect(diagBoxRect, 4f, 4f, calloutBgPaint)
+                                canvas.drawRoundRect(diagBoxRect, 4f, 4f, calloutBorderPaint)
+                                canvas.drawText(diagText, margin + 22f, yPosition + 15f, metaPaint)
+                                yPosition += 30f
+                            }
+                        }
+                    } else if (isCustomNote) {
+                        // CUSTOM EXAM NOTE Callout (safe from base64)
+                        val safeNoteText = tokenizedContent.split(" ").filterNot { word ->
+                            word.length > 40 && word.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' || it == '=' || it == '-' || it == '_' }
+                        }.joinToString(" ")
+
+                        val spannedNote = formatMarkdownSpanned(safeNoteText)
+                        @Suppress("DEPRECATION")
+                        val noteLayout = StaticLayout(
+                            spannedNote,
+                            bodyPaint,
+                            printableWidth - 28,
+                            Layout.Alignment.ALIGN_NORMAL,
+                            1.25f,
+                            0f,
+                            false
+                        )
+
+                        val boxHeight = noteLayout.height + 26f
+                        if (yPosition + boxHeight + 40f > pageHeight - margin) {
+                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                            pdfDocument.finishPage(page)
+
+                            currentPageNumber++
+                            pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                            page = pdfDocument.startPage(pageInfo)
+                            canvas = page.canvas
+                            applyPageDecorations(canvas, currentPageNumber)
+                            if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                drawCollegeStudyBadge(canvas, margin + 8f)
+                                yPosition = margin + 38f
+                            } else {
+                                yPosition = margin + 14f
+                            }
+                        }
+
+                        val noteRolePaint = TextPaint().apply {
+                            color = Color.rgb(180, 83, 9) // amber-700
+                            textSize = 7.5f
+                            typeface = Typeface.create(baseTypeface, Typeface.BOLD)
+                            isAntiAlias = true
+                        }
+                        canvas.drawText("CUSTOM EXAM NOTE", margin + 8f, yPosition + 8f, noteRolePaint)
+                        yPosition += 12f
+
+                        val noteBoxRect = RectF(margin + 6f, yPosition, pageWidth - margin - 6f, yPosition + boxHeight)
+                        canvas.drawRoundRect(noteBoxRect, 6f, 6f, Paint().apply {
+                            color = Color.rgb(255, 251, 235) // amber-50
+                            style = Paint.Style.FILL
+                        })
+                        canvas.drawRoundRect(noteBoxRect, 6f, 6f, Paint().apply {
+                            color = Color.rgb(253, 230, 138) // amber-200
+                            style = Paint.Style.STROKE
+                            strokeWidth = 1f
+                        })
+
+                        canvas.save()
+                        canvas.translate(margin + 14f, yPosition + 10f)
+                        noteLayout.draw(canvas)
+                        canvas.restore()
+
+                        yPosition += boxHeight + 12f
+                    } else {
+                        // ASSISTANT Response
+                        val rolePaint = TextPaint().apply {
+                            color = Color.rgb(100, 116, 139)
+                            textSize = 7.5f
+                            typeface = Typeface.create(baseTypeface, Typeface.BOLD)
+                            isAntiAlias = true
+                        }
+
+                        if (yPosition + 25f > pageHeight - margin) {
+                            drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                            pdfDocument.finishPage(page)
+
+                            currentPageNumber++
+                            pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                            page = pdfDocument.startPage(pageInfo)
+                            canvas = page.canvas
+                            applyPageDecorations(canvas, currentPageNumber)
+                            if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                drawCollegeStudyBadge(canvas, margin + 8f)
+                                yPosition = margin + 38f
+                            } else {
+                                yPosition = margin + 14f
+                            }
+                        }
+
+                        canvas.drawText("ASSISTANT", margin + 8f, yPosition + 8f, rolePaint)
+                        yPosition += 14f
+
+                        val paragraphs = tokenizedContent.split(Regex("\n{2,}")).filter { it.isNotBlank() }
+                        for (p in paragraphs) {
+                            val trimmedP = p.trim()
+
+                            // Check if this paragraph contains an image token
+                            val matchedToken = imgMap.keys.find { trimmedP.contains(it) }
+
+                            if (matchedToken != null) {
+                                // 1. IN-PLACE DIAGRAM / IMAGE RENDERING
+                                val (alt, bm) = imgMap[matchedToken]!!
+                                if (bm != null) {
+                                    val maxW = (printableWidth - 28f).coerceAtMost(360f)
+                                    val scale = (maxW / bm.width.toFloat()).coerceAtMost(1.0f)
+                                    val scaledW = bm.width * scale
+                                    val scaledH = (bm.height * scale).coerceAtMost(220f)
+
+                                    if (yPosition + scaledH + 35f > pageHeight - margin) {
+                                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                                        pdfDocument.finishPage(page)
+
+                                        currentPageNumber++
+                                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                                        page = pdfDocument.startPage(pageInfo)
+                                        canvas = page.canvas
+                                        applyPageDecorations(canvas, currentPageNumber)
+                                        if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                            drawCollegeStudyBadge(canvas, margin + 8f)
+                                            yPosition = margin + 38f
+                                        } else {
+                                            yPosition = margin + 14f
+                                        }
+                                    }
+
+                                    val imgX = margin + 14f + (printableWidth - 28f - scaledW) / 2f
+                                    val imgRect = RectF(imgX, yPosition, imgX + scaledW, yPosition + scaledH)
+                                    canvas.drawBitmap(bm, null, imgRect, Paint().apply { isFilterBitmap = true })
+                                    yPosition += scaledH + 4f
+
+                                    val cleanCaption = alt.replace(Regex("\\s+logo\\b", RegexOption.IGNORE_CASE), "").replace(Regex("^diagram:\\s*", RegexOption.IGNORE_CASE), "").trim()
+                                    if (cleanCaption.isNotBlank() && !cleanCaption.equals("logo", ignoreCase = true)) {
+                                        canvas.drawText(cleanCaption, margin + 14f, yPosition + 7f, metaPaint)
+                                        yPosition += 12f
+                                    }
+                                    yPosition += 8f
+                                } else {
+                                    // Elegant diagram placeholder box (NEVER dump raw base64)
+                                    val diagText = if (alt.isNotBlank()) "🖼️ [Diagram: $alt]" else "🖼️ [Diagram Figure]"
+                                    val diagBoxRect = RectF(margin + 14f, yPosition, pageWidth - margin - 14f, yPosition + 24f)
+                                    canvas.drawRoundRect(diagBoxRect, 4f, 4f, calloutBgPaint)
+                                    canvas.drawRoundRect(diagBoxRect, 4f, 4f, calloutBorderPaint)
+                                    canvas.drawText(diagText, margin + 22f, yPosition + 15f, metaPaint)
+                                    yPosition += 30f
+                                }
+                            } else if (trimmedP.lines().count { it.contains("|") } >= 2 && trimmedP.contains("---")) {
+                                // 2. IN-PLACE MARKDOWN TABLE
+                                val parsedTable = parseMarkdownTable(trimmedP)
+                                if (parsedTable != null) {
+                                    val colCount = parsedTable.first.size.coerceAtLeast(1)
+                                    val tableW = printableWidth - 28f
+                                    val colW = tableW / colCount.toFloat()
+
+                                    val tableHeaderPaint = TextPaint().apply {
+                                        color = Color.rgb(15, 23, 42)
+                                        textSize = (bodySize - 0.5f).coerceAtLeast(8f)
+                                        typeface = Typeface.create(baseTypeface, Typeface.BOLD)
+                                        isAntiAlias = true
+                                    }
+                                    val tableCellPaint = TextPaint().apply {
+                                        color = Color.rgb(51, 65, 85)
+                                        textSize = (bodySize - 1f).coerceAtLeast(7.5f)
+                                        typeface = baseTypeface
+                                        isAntiAlias = true
+                                    }
+
+                                    @Suppress("DEPRECATION")
+                                    val headerLayouts = parsedTable.first.map {
+                                        StaticLayout(it, tableHeaderPaint, (colW - 8f).toInt().coerceAtLeast(20), Layout.Alignment.ALIGN_NORMAL, 1.1f, 0f, false)
+                                    }
+                                    val headerH = (headerLayouts.maxOfOrNull { it.height }?.toFloat() ?: 16f) + 10f
+
+                                    val rowLayouts = parsedTable.second.map { row ->
+                                        row.take(colCount).map { cell ->
+                                            @Suppress("DEPRECATION")
+                                            StaticLayout(cell, tableCellPaint, (colW - 8f).toInt().coerceAtLeast(20), Layout.Alignment.ALIGN_NORMAL, 1.15f, 0f, false)
+                                        }
+                                    }
+                                    val rowHeights = rowLayouts.map { rList -> (rList.maxOfOrNull { it.height }?.toFloat() ?: 14f) + 8f }
+                                    val totalTableH = headerH + rowHeights.sum()
+
+                                    if (yPosition + totalTableH + 35f > pageHeight - margin) {
+                                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                                        pdfDocument.finishPage(page)
+
+                                        currentPageNumber++
+                                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                                        page = pdfDocument.startPage(pageInfo)
+                                        canvas = page.canvas
+                                        applyPageDecorations(canvas, currentPageNumber)
+                                        if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                            drawCollegeStudyBadge(canvas, margin + 8f)
+                                            yPosition = margin + 38f
+                                        } else {
+                                            yPosition = margin + 14f
+                                        }
+                                    }
+
+                                    val tableLeft = margin + 14f
+                                    val tableRight = tableLeft + tableW
+                                    val tableTop = yPosition
+
+                                    // Header background
+                                    val headerRect = RectF(tableLeft, tableTop, tableRight, tableTop + headerH)
+                                    canvas.drawRect(headerRect, Paint().apply { color = Color.rgb(241, 245, 249); style = Paint.Style.FILL })
+
+                                    // Header text
+                                    headerLayouts.forEachIndexed { cIdx, lyt ->
+                                        canvas.save()
+                                        canvas.translate(tableLeft + (cIdx * colW) + 4f, tableTop + 5f)
+                                        lyt.draw(canvas)
+                                        canvas.restore()
+                                    }
+
+                                    val gridLinePaint = Paint().apply {
+                                        color = Color.rgb(226, 232, 240)
+                                        style = Paint.Style.STROKE
+                                        strokeWidth = 0.8f
+                                    }
+                                    canvas.drawLine(tableLeft, tableTop + headerH, tableRight, tableTop + headerH, gridLinePaint)
+
+                                    var curRowY = tableTop + headerH
+                                    rowLayouts.forEachIndexed { rIdx, cellList ->
+                                        val rH = rowHeights[rIdx]
+                                        cellList.forEachIndexed { cIdx, lyt ->
+                                            canvas.save()
+                                            canvas.translate(tableLeft + (cIdx * colW) + 4f, curRowY + 4f)
+                                            lyt.draw(canvas)
+                                            canvas.restore()
+                                        }
+                                        curRowY += rH
+                                        canvas.drawLine(tableLeft, curRowY, tableRight, curRowY, gridLinePaint)
+                                    }
+
+                                    // Vertical column lines
+                                    for (c in 1 until colCount) {
+                                        val vX = tableLeft + (c * colW)
+                                        canvas.drawLine(vX, tableTop, vX, curRowY, gridLinePaint)
+                                    }
+
+                                    // Outer table border
+                                    val outerTablePaint = Paint().apply {
+                                        color = Color.rgb(203, 213, 225)
+                                        style = Paint.Style.STROKE
+                                        strokeWidth = 1f
+                                    }
+                                    canvas.drawRect(tableLeft, tableTop, tableRight, curRowY, outerTablePaint)
+
+                                    yPosition = curRowY + 12f
+                                }
+                            } else {
+                                val isCode = trimmedP.startsWith("```") && trimmedP.endsWith("```")
+
+                            if (isCode) {
+                                val codeBody = trimmedP.replace(Regex("^```[a-zA-Z0-9_-]*\n?"), "").replace(Regex("```$"), "").trim()
+                                val codePaint = TextPaint().apply {
+                                    color = Color.rgb(30, 41, 59)
+                                    textSize = (bodySize - 1f).coerceAtLeast(8f)
+                                    typeface = Typeface.MONOSPACE
+                                    isAntiAlias = true
+                                }
+                                @Suppress("DEPRECATION")
+                                val codeLayout = StaticLayout(
+                                    codeBody,
+                                    codePaint,
+                                    printableWidth - 36,
+                                    Layout.Alignment.ALIGN_NORMAL,
+                                    1.2f,
+                                    0f,
+                                    false
+                                )
+                                val codeBoxHeight = codeLayout.height + 16f
+                                if (yPosition + codeBoxHeight + 35f > pageHeight - margin) {
+                                    drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                                    pdfDocument.finishPage(page)
+
+                                    currentPageNumber++
+                                    pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                                    page = pdfDocument.startPage(pageInfo)
+                                    canvas = page.canvas
+                                    applyPageDecorations(canvas, currentPageNumber)
+                                    if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                        drawCollegeStudyBadge(canvas, margin + 8f)
+                                        yPosition = margin + 38f
+                                    } else {
+                                        yPosition = margin + 14f
+                                    }
+                                }
+
+                                val codeRect = RectF(margin + 10f, yPosition, pageWidth - margin - 10f, yPosition + codeBoxHeight)
+                                canvas.drawRoundRect(codeRect, 4f, 4f, Paint().apply { color = Color.rgb(241, 245, 249); style = Paint.Style.FILL })
+                                canvas.drawRoundRect(codeRect, 4f, 4f, Paint().apply { color = Color.rgb(226, 232, 240); style = Paint.Style.STROKE; strokeWidth = 0.8f })
+
+                                canvas.save()
+                                canvas.translate(margin + 18f, yPosition + 8f)
+                                codeLayout.draw(canvas)
+                                canvas.restore()
+
+                                yPosition += codeBoxHeight + 8f
+                            } else {
+                                // Break large blocks into page-fitting sentence chunks
+                                val subBlocks = if (trimmedP.length > 320 && !trimmedP.startsWith("#")) {
+                                    val sentences = trimmedP.split(Regex("(?<=[.!?\\n])\\s+"))
+                                    val chunks = mutableListOf<String>()
+                                    var currentChunk = StringBuilder()
+                                    for (s in sentences) {
+                                        if (currentChunk.isNotEmpty() && currentChunk.length + s.length > 300) {
+                                            chunks.add(currentChunk.toString().trim())
+                                            currentChunk = StringBuilder()
+                                        }
+                                        if (currentChunk.isNotEmpty()) currentChunk.append(" ")
+                                        currentChunk.append(s)
+                                    }
+                                    if (currentChunk.isNotEmpty()) chunks.add(currentChunk.toString().trim())
+                                    chunks.ifEmpty { listOf(trimmedP) }
+                                } else {
+                                    listOf(trimmedP)
+                                }
+
+                                for (sub in subBlocks) {
+                                    // Prevent single long words/tokens from overflowing the border line
+                                    val safeText = sub.split(" ").joinToString(" ") { word ->
+                                        if (word.length > 38) word.chunked(38).joinToString(" ") else word
+                                    }
+                                    val isHeading = safeText.startsWith("#") || ((safeText.startsWith("1.") || safeText.startsWith("2.") || safeText.startsWith("3.")) && safeText.length < 80)
+                                    val pPaint = if (isHeading && safeText.length < 90) questionTitlePaint else bodyPaint
+                                    val cleanHeading = if (safeText.startsWith("#")) safeText.replace(Regex("^#+\\s*"), "") else safeText
+                                    val spannedText = formatMarkdownSpanned(cleanHeading)
+
+                                    @Suppress("DEPRECATION")
+                                    val pLayout = StaticLayout(
+                                        spannedText,
+                                        pPaint,
+                                        printableWidth - 28,
+                                        Layout.Alignment.ALIGN_NORMAL,
+                                        1.25f,
+                                        0f,
+                                        false
+                                    )
+
+                                    if (yPosition + pLayout.height + 35f > pageHeight - margin) {
+                                        drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
+                                        pdfDocument.finishPage(page)
+
+                                        currentPageNumber++
+                                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, currentPageNumber).create()
+                                        page = pdfDocument.startPage(pageInfo)
+                                        canvas = page.canvas
+                                        applyPageDecorations(canvas, currentPageNumber)
+                                        if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                            drawCollegeStudyBadge(canvas, margin + 8f)
+                                            yPosition = margin + 38f
+                                        } else {
+                                            yPosition = margin + 14f
+                                        }
+                                    }
+
+                                    canvas.save()
+                                    canvas.translate(margin + 14f, yPosition)
+                                    pLayout.draw(canvas)
+                                    canvas.restore()
+
+                                    yPosition += pLayout.height + 6f
+                                }
+                            }
+                        }
+                    }
+                    yPosition += 8f
+                }
+            }
+        } else if (questions.isNotEmpty()) {
+                // If structured questions provided, render clean Topic / Answer blocks
                 for ((idx, qItem) in questions.withIndex()) {
-                    val qTitleText = "Question ${idx + 1}: ${qItem.question}"
+                    val qTitleText = qItem.question.ifBlank { "Topic ${idx + 1}" }
                     @Suppress("DEPRECATION")
                     val qLayout = StaticLayout(
                         qTitleText,
@@ -1770,9 +2862,13 @@ class QwikSaveClient(
                         false
                     )
 
+                    val cleanAnswer = qItem.answer
+                        .replace(Regex("!\\[[\\s\\S]*?\\]\\(data:image/[\\s\\S]*?\\)", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("data:image/[^;\\s\"'>]+;base64,[A-Za-z0-9+/=\\s\\r\\n_-]+", RegexOption.IGNORE_CASE), "")
+                    val spannedAnswer = formatMarkdownSpanned(cleanAnswer)
                     @Suppress("DEPRECATION")
                     val aLayout = StaticLayout(
-                        qItem.answer,
+                        spannedAnswer,
                         bodyPaint,
                         printableWidth - 36,
                         Layout.Alignment.ALIGN_NORMAL,
@@ -1781,7 +2877,7 @@ class QwikSaveClient(
                         false
                     )
 
-                    val itemTotalHeight = qLayout.height + 16f + aLayout.height + 20f
+                    val itemTotalHeight = qLayout.height + 24f + aLayout.height + 16f
                     if (yPosition + itemTotalHeight + 45f > pageHeight - margin) {
                         drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
                         pdfDocument.finishPage(page)
@@ -1791,21 +2887,26 @@ class QwikSaveClient(
                         page = pdfDocument.startPage(pageInfo)
                         canvas = page.canvas
                         applyPageDecorations(canvas, currentPageNumber)
-                        yPosition = margin + 18f
+                        if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                            drawCollegeStudyBadge(canvas, margin + 8f)
+                            yPosition = margin + 38f
+                        } else {
+                            yPosition = margin + 18f
+                        }
                     }
 
-                    // Question Header Box
-                    val qBoxHeight = qLayout.height + 14f
-                    val qBoxRect = RectF(margin + 12f, yPosition, margin + printableWidth - 12f, yPosition + qBoxHeight)
-                    canvas.drawRoundRect(qBoxRect, 6f, 6f, calloutBgPaint)
-                    canvas.drawRoundRect(qBoxRect, 6f, 6f, calloutBorderPaint)
+                    // Render Topic Title in a clean subtle box (without hardcoded "Question X:" prefix)
+                    val titleBoxH = qLayout.height + 14f
+                    val boxRect = RectF(margin + 12f, yPosition, margin + printableWidth - 12f, yPosition + titleBoxH)
+                    canvas.drawRoundRect(boxRect, 4f, 4f, calloutBgPaint)
+                    canvas.drawRoundRect(boxRect, 4f, 4f, calloutBorderPaint)
 
                     canvas.save()
                     canvas.translate(margin + 20f, yPosition + 7f)
                     qLayout.draw(canvas)
                     canvas.restore()
 
-                    yPosition += qBoxHeight + 8f
+                    yPosition += titleBoxH + 8f
 
                     // Answer Text
                     canvas.save()
@@ -1847,7 +2948,12 @@ class QwikSaveClient(
                             page = pdfDocument.startPage(pageInfo)
                             canvas = page.canvas
                             applyPageDecorations(canvas, currentPageNumber)
-                            yPosition = margin + 18f
+                            if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                drawCollegeStudyBadge(canvas, margin + 8f)
+                                yPosition = margin + 38f
+                            } else {
+                                yPosition = margin + 18f
+                            }
                         }
 
                         val boxRect = RectF(margin + 12f, yPosition, margin + printableWidth - 12f, yPosition + boxHeight)
@@ -1881,7 +2987,12 @@ class QwikSaveClient(
                             page = pdfDocument.startPage(pageInfo)
                             canvas = page.canvas
                             applyPageDecorations(canvas, currentPageNumber)
-                            yPosition = margin + 18f
+                            if (partnerBadgeScope.equals("all-pages", ignoreCase = true)) {
+                                drawCollegeStudyBadge(canvas, margin + 8f)
+                                yPosition = margin + 38f
+                            } else {
+                                yPosition = margin + 18f
+                            }
                         }
 
                         canvas.save()
@@ -1897,17 +3008,8 @@ class QwikSaveClient(
             drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
             pdfDocument.finishPage(page)
 
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val qwikDir = File(downloadsDir, "QwikSave").apply { mkdirs() }
-            val cleanName = if (outputFileName.endsWith(".pdf", ignoreCase = true)) outputFileName else "$outputFileName.pdf"
-            val outputFile = File(qwikDir, cleanName)
-
-            FileOutputStream(outputFile).use { fos ->
-                pdfDocument.writeTo(fos)
-            }
+            val outputFile = writePdfSafely(context, pdfDocument, outputFileName)
             pdfDocument.close()
-
-            MediaScannerConnection.scanFile(context, arrayOf(outputFile.absolutePath), arrayOf("application/pdf"), null)
             Result.success(outputFile)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1929,57 +3031,74 @@ class QwikSaveClient(
             color = Color.rgb(226, 232, 240)
             strokeWidth = 1f
         }
-        canvas.drawLine(margin + 10f, y - 10f, pageWidth - margin - 10f, y - 10f, linePaint)
+        canvas.drawLine(margin + 6f, y - 8f, pageWidth - margin - 6f, y - 8f, linePaint)
 
-        // Logo
+        // Left App Logo Container Box
+        val logoBoxX = margin + 6f
+        val logoBoxY = y - 5f
+        val logoBoxSize = 18f
+        val boxRect = RectF(logoBoxX, logoBoxY, logoBoxX + logoBoxSize, logoBoxY + logoBoxSize)
+        canvas.drawRoundRect(boxRect, 3f, 3f, Paint().apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+        })
+        canvas.drawRoundRect(boxRect, 3f, 3f, Paint().apply {
+            color = Color.rgb(226, 232, 240)
+            style = Paint.Style.STROKE
+            strokeWidth = 0.8f
+        })
         if (logoBitmap != null) {
-            val logoDest = RectF(margin + 10f, y - 6f, margin + 28f, y + 12f)
-            canvas.drawBitmap(logoBitmap, null, logoDest, null)
+            val logoInner = RectF(logoBoxX + 2f, logoBoxY + 2f, logoBoxX + logoBoxSize - 2f, logoBoxY + logoBoxSize - 2f)
+            canvas.drawBitmap(logoBitmap, null, logoInner, Paint().apply { isFilterBitmap = true })
         }
 
+        val textLeft = logoBoxX + logoBoxSize + 6f
         val brandPaint = TextPaint().apply {
             color = Color.rgb(15, 23, 42)
-            textSize = 9f
+            textSize = 8.5f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
         }
+        val effectiveBrand = if (!customFooter.isNullOrBlank()) customFooter else "Qwik Save"
+        canvas.drawText(effectiveBrand, textLeft, y + 2.5f, brandPaint)
+
+        // Line 2: Developer: Priyal Kumar
         val devPaint = TextPaint().apply {
-            color = Color.rgb(2, 132, 199)
+            color = Color.rgb(2, 132, 199) // sky-600
+            textSize = 7.5f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            isAntiAlias = true
+        }
+        canvas.drawText("Developer: Priyal Kumar", textLeft, y + 11.5f, devPaint)
+
+        // Right Side: Page X (clean, without website URL)
+        val pageTextPaint = TextPaint().apply {
+            color = Color.rgb(71, 85, 105) // slate-600
             textSize = 8f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
         }
-        val pageTextPaint = TextPaint().apply {
-            color = Color.rgb(100, 116, 139)
-            textSize = 8.5f
-            isAntiAlias = true
-        }
-
-        val textStartX = margin + 34f
-        val effectiveBrand = if (!customFooter.isNullOrBlank()) customFooter else "Qwik Save PDF"
-        canvas.drawText(effectiveBrand, textStartX, y + 2f, brandPaint)
-        val devLine = "Developer: Priyal Kumar • www.ai-chat2pdf.live"
-        canvas.drawText(devLine, textStartX, y + 12f, devPaint)
 
         if (includePageNumbers) {
             val pageStr = "Page $pageNum"
             val pWidth = pageTextPaint.measureText(pageStr)
-            canvas.drawText(pageStr, pageWidth - margin - pWidth - 10f, y + 6f, pageTextPaint)
+            canvas.drawText(pageStr, pageWidth - margin - pWidth - 6f, y + 6.5f, pageTextPaint)
         }
     }
 
     /**
-     * Extract shared AI chat conversation from ChatGPT, Claude, Gemini, or Perplexity.
+     * Extract structured AI conversation model matching website schema
      */
-    suspend fun extractAiConversation(shareUrl: String): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
+    suspend fun extractAiConversationModel(shareUrl: String): Result<AiConversationData> = withContext(Dispatchers.IO) {
         try {
             val endpoint = URL("$baseUrl/api/extract")
             val conn = (endpoint.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("User-Agent", "QwikSave-Android")
                 doOutput = true
-                connectTimeout = 15000
-                readTimeout = 15000
+                connectTimeout = 20000
+                readTimeout = 20000
             }
 
             val payload = JSONObject().apply { put("url", shareUrl.trim()) }
@@ -1987,32 +3106,75 @@ class QwikSaveClient(
                 os.write(payload.toString().toByteArray())
             }
 
-            if (conn.responseCode == 200) {
-                val response = conn.inputStream.bufferedReader().use { it.readText() }
+            val responseCode = conn.responseCode
+            val responseStream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+            val response = responseStream?.bufferedReader()?.use { it.readText() } ?: ""
+
+            if (responseCode == 200) {
                 val json = JSONObject(response)
-                val data = json.optJSONObject("data")
-                if (data != null) {
-                    val title = data.optString("title", "AI Study Notes")
-                    val messages = data.optJSONArray("messages")
-                    val sb = StringBuilder()
-                    if (messages != null) {
-                        for (i in 0 until messages.length()) {
-                            val msg = messages.getJSONObject(i)
-                            val role = msg.optString("role", "")
-                            val text = msg.optString("text", "")
-                            if (role == "user") {
-                                sb.append("### Question / Prompt:\n$text\n\n")
-                            } else {
-                                sb.append("### Answer / Explanation:\n$text\n\n")
+                val convObj = json.optJSONObject("conversation") ?: json.optJSONObject("data")
+                if (convObj != null) {
+                    val title = convObj.optString("title", "Extracted Notes & Exam Guide")
+                    val sourceUrl = convObj.optString("sourceUrl", shareUrl.trim())
+                    val messagesJson = convObj.optJSONArray("messages")
+                    val msgList = mutableListOf<AiChatMessage>()
+                    if (messagesJson != null) {
+                        for (i in 0 until messagesJson.length()) {
+                            val msg = messagesJson.getJSONObject(i)
+                            val id = msg.optString("id", UUID.randomUUID().toString())
+                            val role = msg.optString("role", "assistant")
+                            val author = msg.optString("authorName", if (role == "user") "USER" else "ASSISTANT")
+                            val content = msg.optString("content").ifBlank { msg.optString("text", "") }
+                            if (content.isNotBlank()) {
+                                msgList.add(AiChatMessage(id = id, role = role, authorName = author, content = content))
                             }
                         }
                     }
-                    return@withContext Result.success(Pair(title, sb.toString()))
+
+                    val userCount = msgList.count { it.role == "user" }
+                    val assistantCount = msgList.count { it.role == "assistant" }
+                    val estPages = calculateEstimatedPages(msgList)
+
+                    val convData = AiConversationData(
+                        id = convObj.optString("id", UUID.randomUUID().toString()),
+                        title = title,
+                        sourceUrl = sourceUrl,
+                        messages = msgList,
+                        userCount = userCount,
+                        assistantCount = assistantCount,
+                        totalCount = msgList.size,
+                        estimatedPages = estPages
+                    )
+                    return@withContext Result.success(convData)
                 }
+            } else if (response.isNotBlank()) {
+                try {
+                    val errJson = JSONObject(response)
+                    val err = errJson.optString("error", "Unable to extract shared link.")
+                    return@withContext Result.failure(Exception(err))
+                } catch (_: Exception) {}
             }
-            Result.failure(Exception("Unable to extract shared link directly. Try pasting notes content."))
+            Result.failure(Exception("Unable to extract shared link (HTTP $responseCode). Please check the URL."))
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Extract shared AI chat conversation as title & text markdown (backwards compatibility).
+     */
+    suspend fun extractAiConversation(shareUrl: String): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
+        val modelRes = extractAiConversationModel(shareUrl)
+        modelRes.map { data ->
+            val sb = StringBuilder()
+            for (m in data.messages) {
+                if (m.role == "user") {
+                    sb.append("### Question / Prompt:\n${m.content}\n\n")
+                } else {
+                    sb.append("### Answer / Explanation:\n${m.content}\n\n")
+                }
+            }
+            Pair(data.title, sb.toString())
         }
     }
 

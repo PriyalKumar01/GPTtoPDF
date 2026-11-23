@@ -22,8 +22,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiExtractRes
     }
 
     const trimmedUrl = url.trim();
+    const normalizedUrl = trimmedUrl.match(/^https?:\/\//i) ? trimmedUrl : `https://${trimmedUrl}`;
 
-    if (!isValidAiShareUrl(trimmedUrl)) {
+    if (!isValidAiShareUrl(normalizedUrl)) {
       return NextResponse.json(
         {
           success: false,
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiExtractRes
       );
     }
 
-    const result = await extractAiConversation(trimmedUrl);
+    const result = await extractAiConversation(normalizedUrl);
 
     if (!result.success) {
       const statusCode =

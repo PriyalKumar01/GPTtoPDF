@@ -27,10 +27,16 @@ const OAUTH_CONFIG = {
     tokenUrl: 'https://graph.facebook.com/v18.0/oauth/access_token',
     userInfoUrl: 'https://graph.facebook.com/me?fields=id,name,email,picture.type(large)',
     scope: 'email,public_profile',
-    clientId:
-      process.env.FACEBOOK_CLIENT_ID ||
-      process.env.FACEBOOK_APP_ID || '',
+    clientId: process.env.FACEBOOK_CLIENT_ID || process.env.FACEBOOK_APP_ID || '',
     clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
+  },
+  twitter: {
+    authUrl: 'https://twitter.com/i/oauth2/authorize',
+    tokenUrl: 'https://api.twitter.com/2/oauth2/token',
+    userInfoUrl: 'https://api.twitter.com/2/users/me?user.fields=id,name,username,profile_image_url',
+    scope: 'users.read tweet.read',
+    clientId: process.env.X_CLIENT_ID || '',
+    clientSecret: process.env.X_CLIENT_SECRET || '',
   },
 };
 
@@ -185,6 +191,35 @@ export async function POST(request: NextRequest) {
       const userData = await userRes.json();
       userName = userData.name || 'Facebook User';
       userEmail = userData.email || `${userData.id || 'meta'}@facebook.user`;
+    } else if (prov === 'twitter') {
+      const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
+      const tokenRes = await fetch(config.tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${basicAuth}`,
+        },
+        body: new URLSearchParams({
+          code,
+          grant_type: 'authorization_code',
+          redirect_uri: redirectUri,
+          code_verifier: 'challenge',
+        }),
+      });
+
+      const tokenData = await tokenRes.json();
+      if (!tokenData.access_token) {
+        throw new Error(tokenData.error_description || tokenData.error || 'Failed to exchange X (Twitter) token');
+      }
+
+      const userRes = await fetch(config.userInfoUrl, {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const userData = await userRes.json();
+      const userObj = userData.data || userData;
+      userName = userObj.name || userObj.username || 'X User';
+      const providedEmail = (body.email || '').trim();
+      userEmail = providedEmail || (userObj.email || '');
     }
 
     if (!userEmail) {

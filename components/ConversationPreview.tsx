@@ -57,6 +57,11 @@ export function ConversationPreview({
   const [messages, setMessages] = useState<ChatMessage[]>(conversation.messages);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>('');
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Accurately calculated live page count
   const liveEstimatedPages = useMemo(() => {
@@ -352,7 +357,7 @@ export function ConversationPreview({
                   type="checkbox"
                   checked={options.includeUserMessages}
                   onChange={(e) => updateOption('includeUserMessages', e.target.checked)}
-                  className="rounded-[2px] border-slate-300 dark:border-[#263448] text-[#3B82F6]"
+                  className="rounded-[2px] border-slate-300 dark:border-[#263448] text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
                 />
                 <span>Include User Prompts</span>
               </label>
@@ -362,7 +367,7 @@ export function ConversationPreview({
                   type="checkbox"
                   checked={options.includeCodeBlocks}
                   onChange={(e) => updateOption('includeCodeBlocks', e.target.checked)}
-                  className="rounded-[2px] border-slate-300 dark:border-[#263448] text-[#3B82F6]"
+                  className="rounded-[2px] border-slate-300 dark:border-[#263448] text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
                 />
                 <span>Include Code Blocks</span>
               </label>
@@ -372,7 +377,7 @@ export function ConversationPreview({
                   type="checkbox"
                   checked={options.includeAssistantMessages}
                   onChange={(e) => updateOption('includeAssistantMessages', e.target.checked)}
-                  className="rounded-[2px] border-slate-300 dark:border-[#263448] text-[#3B82F6]"
+                  className="rounded-[2px] border-slate-300 dark:border-[#263448] text-emerald-600 focus:ring-emerald-500 accent-emerald-600"
                 />
                 <span>Include AI Notes</span>
               </label>
@@ -382,11 +387,16 @@ export function ConversationPreview({
             <div className="p-3 bg-slate-50 dark:bg-[#0B121E] border border-slate-200 dark:border-[#1E2C42] rounded-[2px] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-slate-700 dark:text-[#94A3B8] font-medium">Permanent PDF Footer:</span>
-                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-white dark:bg-[#141D2B] border border-slate-300 dark:border-[#263448] shadow-xs">
+                <a
+                  href="https://qwiksave.vercel.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-white dark:bg-[#141D2B] border border-slate-300 dark:border-[#263448] shadow-xs hover:border-slate-400 transition-colors"
+                >
                   <img src="/images/app-logo.jpg" alt="Logo" className="w-4 h-4 rounded-xs object-contain" />
-                  <span className="font-bold text-slate-900 dark:text-[#E8EDF5] text-[11px]">AI Chat to PDF</span>
+                  <span className="font-bold text-slate-900 dark:text-[#E8EDF5] text-[11px]">Qwik Save</span>
                   <span className="text-[8px] font-bold px-1 py-0.2 bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 rounded-xs">PDF</span>
-                </div>
+                </a>
                 <a
                   href="https://www.linkedin.com/in/priyal-kumar-singh/"
                   target="_blank"
@@ -552,8 +562,21 @@ export function ConversationPreview({
                     </div>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap font-sans text-slate-800 dark:text-[#E2E8F0] space-y-2">
-                    {msg.content}
+                  <div className="space-y-2">
+                    <div className="whitespace-pre-wrap font-sans text-slate-800 dark:text-[#E2E8F0]">
+                      {msg.content.length > 500 && !expandedIds[msg.id]
+                        ? `${msg.content.slice(0, 450)}...`
+                        : msg.content}
+                    </div>
+                    {msg.content.length > 500 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(msg.id)}
+                        className="text-xs font-semibold text-blue-600 dark:text-[#38BDF8] hover:underline inline-flex items-center gap-1 pt-1"
+                      >
+                        {expandedIds[msg.id] ? 'Read Less ▴' : 'Read More... ▾'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

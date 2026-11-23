@@ -2,6 +2,9 @@ package com.qwiksave.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object UserPreferences {
     private const val PREF_NAME = "qwiksave_user_prefs"
@@ -10,8 +13,20 @@ object UserPreferences {
     private const val KEY_USER_NAME = "user_name"
     private const val KEY_USER_EMAIL = "user_email"
     private const val KEY_USER_AGE = "user_age"
+    private const val KEY_USER_GENDER = "user_gender"
     private const val KEY_AUTH_PROVIDER = "auth_provider"
     private const val KEY_IS_VERIFIED = "is_verified"
+
+    // Battery Overlay & Charging Animation Preferences
+    private const val KEY_BATTERY_OVERLAY_ENABLED = "battery_overlay_enabled"
+    private const val KEY_CHARGING_ANIM_ENABLED = "charging_anim_enabled"
+    private const val KEY_BATTERY_TEMPLATE = "battery_template"
+    private const val KEY_BATTERY_POSITION = "battery_position"
+    private const val KEY_BATTERY_SCALE = "battery_scale"
+
+    // In-memory reactive state flow to immediately notify navigation of auth verification
+    private val _isAuthVerifiedFlow = MutableStateFlow<Boolean?>(null)
+    val isAuthVerifiedFlow: StateFlow<Boolean?> = _isAuthVerifiedFlow.asStateFlow()
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -27,12 +42,12 @@ object UserPreferences {
 
     fun getUserName(context: Context): String {
         val name = getPrefs(context).getString(KEY_USER_NAME, "")?.trim() ?: ""
-        return if (name.isNotBlank()) name else "Guy's"
+        return if (name.isNotBlank()) name else "User"
     }
 
     fun setUserName(context: Context, name: String) {
         val trimmed = name.trim()
-        val finalName = if (trimmed.isNotBlank()) trimmed else "Guy's"
+        val finalName = if (trimmed.isNotBlank()) trimmed else "User"
         getPrefs(context).edit().putString(KEY_USER_NAME, finalName).apply()
     }
 
@@ -42,6 +57,14 @@ object UserPreferences {
 
     fun setUserAge(context: Context, age: Int) {
         getPrefs(context).edit().putInt(KEY_USER_AGE, age.coerceIn(1, 100)).apply()
+    }
+
+    fun getUserGender(context: Context): String {
+        return getPrefs(context).getString(KEY_USER_GENDER, "") ?: ""
+    }
+
+    fun setUserGender(context: Context, gender: String) {
+        getPrefs(context).edit().putString(KEY_USER_GENDER, gender.trim()).apply()
     }
 
     fun getUserEmail(context: Context): String {
@@ -56,7 +79,14 @@ object UserPreferences {
         return getPrefs(context).getBoolean(KEY_IS_VERIFIED, false)
     }
 
-    fun saveVerifiedAuth(context: Context, name: String, email: String, provider: String, age: Int = 0) {
+    fun saveVerifiedAuth(
+        context: Context,
+        name: String,
+        email: String,
+        provider: String,
+        age: Int = 0,
+        gender: String = ""
+    ) {
         val trimmedName = name.trim().ifBlank { 
             email.substringBefore("@").replace(".", " ")
                 .split(" ")
@@ -71,7 +101,11 @@ object UserPreferences {
         if (age in 1..100) {
             editor.putInt(KEY_USER_AGE, age)
         }
+        if (gender.isNotBlank()) {
+            editor.putString(KEY_USER_GENDER, gender.trim())
+        }
         editor.apply()
+        _isAuthVerifiedFlow.value = true
     }
 
     fun clearAuth(context: Context) {
@@ -79,9 +113,30 @@ object UserPreferences {
             .remove(KEY_USER_NAME)
             .remove(KEY_USER_EMAIL)
             .remove(KEY_USER_AGE)
+            .remove(KEY_USER_GENDER)
             .remove(KEY_AUTH_PROVIDER)
             .putBoolean(KEY_IS_VERIFIED, false)
             .putBoolean(KEY_ONBOARDING_DONE, false)
+            .apply()
+        _isAuthVerifiedFlow.value = false
+    }
+
+    // App User Rating Persistence (once submitted, it is locked)
+    private const val KEY_USER_RATING = "user_app_rating_value"
+    private const val KEY_RATING_SUBMITTED = "user_app_rating_is_submitted"
+
+    fun hasUserRated(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_RATING_SUBMITTED, false)
+    }
+
+    fun getUserRating(context: Context): Float {
+        return getPrefs(context).getFloat(KEY_USER_RATING, 0f)
+    }
+
+    fun setUserRating(context: Context, rating: Float) {
+        getPrefs(context).edit()
+            .putFloat(KEY_USER_RATING, rating)
+            .putBoolean(KEY_RATING_SUBMITTED, true)
             .apply()
     }
 
@@ -136,5 +191,46 @@ object UserPreferences {
 
     fun saveDownloadedSongPath(context: Context, songId: String, localPath: String) {
         saveDownloadedSong(context, songId, localPath)
+    }
+
+    // Battery Overlay Preferences
+    fun isBatteryOverlayEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_BATTERY_OVERLAY_ENABLED, false)
+    }
+
+    fun setBatteryOverlayEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_BATTERY_OVERLAY_ENABLED, enabled).apply()
+    }
+
+    fun isChargingAnimationEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_CHARGING_ANIM_ENABLED, true)
+    }
+
+    fun setChargingAnimationEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_CHARGING_ANIM_ENABLED, enabled).apply()
+    }
+
+    fun getBatteryTemplate(context: Context): String {
+        return getPrefs(context).getString(KEY_BATTERY_TEMPLATE, "gear5_luffy") ?: "gear5_luffy"
+    }
+
+    fun setBatteryTemplate(context: Context, templateId: String) {
+        getPrefs(context).edit().putString(KEY_BATTERY_TEMPLATE, templateId.trim()).apply()
+    }
+
+    fun getBatteryPosition(context: Context): String {
+        return getPrefs(context).getString(KEY_BATTERY_POSITION, "top_right") ?: "top_right"
+    }
+
+    fun setBatteryPosition(context: Context, position: String) {
+        getPrefs(context).edit().putString(KEY_BATTERY_POSITION, position.trim()).apply()
+    }
+
+    fun getBatteryScale(context: Context): Float {
+        return getPrefs(context).getFloat(KEY_BATTERY_SCALE, 1.0f)
+    }
+
+    fun setBatteryScale(context: Context, scale: Float) {
+        getPrefs(context).edit().putFloat(KEY_BATTERY_SCALE, scale.coerceIn(0.7f, 1.5f)).apply()
     }
 }

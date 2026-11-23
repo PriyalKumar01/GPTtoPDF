@@ -1,14 +1,14 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <!-- Facebook official Blue circle -->
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Official Facebook Squircle with balanced rounded corners -->
     <path
         android:fillColor="#FF1877F2"
-        android:pathData="M12,2 C6.48,2 2,6.48 2,12 C2,16.99 5.66,21.13 10.44,21.88 L10.44,14.89 L7.9,14.89 L7.9,12 L10.44,12 L10.44,9.79 C10.44,7.28 11.93,5.9 14.22,5.9 C15.31,5.9 16.45,6.1 16.45,6.1 L16.45,8.56 L15.19,8.56 C13.95,8.56 13.56,9.33 13.56,10.12 L13.56,12 L16.33,12 L15.89,14.89 L13.56,14.89 L13.56,21.88 C18.34,21.13 22,16.99 22,12 C22,6.48 17.52,2 12,2 Z" />
-    <!-- White official F glyph -->
+        android:pathData="M13,0 L35,0 C42.18,0 48,5.82 48,13 L48,35 C48,42.18 42.18,48 35,48 L13,48 C5.82,48 0,42.18 0,35 L0,13 C0,5.82 5.82,0 13,0 Z" />
+    <!-- Perfectly centered Facebook White 'f' glyph (exact Meta geometry) -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M15.89,14.89 L16.33,12 L13.56,12 L13.56,10.12 C13.56,9.33 13.95,8.56 15.19,8.56 L16.45,8.56 L16.45,6.1 C16.45,6.1 15.31,5.9 14.22,5.9 C11.93,5.9 10.44,7.28 10.44,9.79 L10.44,12 L7.9,12 L7.9,14.89 L10.44,14.89 L10.44,21.88 C10.95,21.96 11.47,22 12,22 C12.53,22 13.05,21.96 13.56,21.88 L13.56,14.89 L15.89,14.89 Z" />
+        android:pathData="M27.75,48 V31.23 H33.41 L34.47,24.29 H27.75 V19.79 C27.75,17.89 28.68,16.04 31.66,16.04 H34.74 V10.13 C34.74,10.13 32.11,9.66 29.49,9.66 C24.01,9.66 20.43,12.99 20.43,19.01 V24.29 H14.33 V31.23 H20.43 V48 H27.75 Z" />
 </vector>

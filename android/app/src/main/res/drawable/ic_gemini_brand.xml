@@ -1,0 +1,27 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Google Gemini Squircle Background -->
+    <path
+        android:fillColor="#FF0F172A"
+        android:pathData="M11,0 L37,0 C43.075,0 48,4.925 48,11 L48,37 C48,43.075 43.075,48 37,48 L11,48 C4.925,48 0,43.075 0,37 L0,11 C0,4.925 4.925,0 11,0 Z" />
+    <!-- Official Google Gemini 4-Point Star Sparkle with authentic multi-stop gradient -->
+    <path
+        android:pathData="M24,6 C24,15.94 15.94,24 6,24 C15.94,24 24,32.06 24,42 C24,32.06 32.06,24 42,24 C32.06,24 24,15.94 24,6 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="6"
+                android:startY="6"
+                android:endX="42"
+                android:endY="42"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF1A73E8" />
+                <item android:offset="0.5" android:color="#FF9333EA" />
+                <item android:offset="1.0" android:color="#FFF43F5E" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

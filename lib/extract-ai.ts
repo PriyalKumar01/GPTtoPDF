@@ -1,5 +1,10 @@
 import * as cheerio from 'cheerio';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { APP_CONFIG } from './config';
+
+const undiciAgent = new Agent({
+  maxHeaderSize: 262144, // 256KB to prevent HeadersOverflowError on Google Gemini / Cloudflare
+});
 import { SAMPLE_CONVERSATIONS } from './sample-data';
 import {
   ChatMessage,
@@ -20,16 +25,23 @@ export type SupportedPlatform =
  */
 export function identifyPlatform(url: string): SupportedPlatform {
   const lower = url.toLowerCase();
-  if (lower.includes('chatgpt.com') || lower.includes('chat.openai.com')) {
+  if (lower.includes('chatgpt.com') || lower.includes('chat.openai.com') || lower.includes('openai.com')) {
     return 'chatgpt';
   }
-  if (lower.includes('claude.ai')) {
+  if (lower.includes('claude.ai') || lower.includes('anthropic.com')) {
     return 'claude';
   }
-  if (lower.includes('gemini.google.com')) {
+  if (
+    lower.includes('gemini.google.com') ||
+    lower.includes('share.gemini.google') ||
+    lower.includes('gemini.google') ||
+    lower.includes('g.co/gemini') ||
+    lower.includes('gemini') ||
+    lower.includes('bard.google.com')
+  ) {
     return 'gemini';
   }
-  if (lower.includes('perplexity.ai')) {
+  if (lower.includes('perplexity.ai') || lower.includes('perplexity')) {
     return 'perplexity';
   }
   return 'generic';
@@ -40,11 +52,16 @@ export function identifyPlatform(url: string): SupportedPlatform {
  */
 export function isValidAiShareUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;
-  const trimmed = url.trim();
+  let trimmed = url.trim();
 
   // Allow sample conversation aliases
   if (trimmed.includes('os-exam-notes') || trimmed.includes('ml-exam-notes')) {
     return true;
+  }
+
+  // Auto-prefix https:// if protocol was omitted
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
   }
 
   try {
@@ -54,42 +71,58 @@ export function isValidAiShareUrl(url: string): boolean {
 
     // ChatGPT
     if (
-      (host === 'chatgpt.com' || host === 'chat.openai.com' || host.endsWith('.chatgpt.com')) &&
-      path.includes('/share/')
+      host === 'chatgpt.com' ||
+      host === 'chat.openai.com' ||
+      host.endsWith('.chatgpt.com') ||
+      host.endsWith('.openai.com') ||
+      host.includes('chatgpt')
     ) {
       return true;
     }
 
     // Claude
     if (
-      (host === 'claude.ai' || host.endsWith('.claude.ai')) &&
-      path.includes('/share/')
+      host === 'claude.ai' ||
+      host.endsWith('.claude.ai') ||
+      host.includes('claude') ||
+      host.includes('anthropic.com')
     ) {
       return true;
     }
 
-    // Google Gemini
+    // Google Gemini (including g.co/gemini, share.gemini.google, gemini.google.com)
     if (
-      (host === 'gemini.google.com' || host.endsWith('.google.com')) &&
-      path.includes('/share/')
+      host === 'gemini.google.com' ||
+      host === 'share.gemini.google' ||
+      host === 'g.co' ||
+      host.endsWith('.g.co') ||
+      host.includes('gemini') ||
+      host.includes('bard.google.com') ||
+      host.endsWith('.google.com') ||
+      host.endsWith('.gemini.google') ||
+      host.includes('gemini.google')
     ) {
       return true;
     }
 
     // Perplexity
+    if (host.includes('perplexity.ai') || host.includes('perplexity')) {
+      return true;
+    }
+
+    // Generic public shareable URL or general web article
     if (
-      (host === 'perplexity.ai' || host === 'www.perplexity.ai') &&
-      (path.includes('/search/') || path.includes('/page/'))
+      path.includes('/share') ||
+      path.includes('/c/') ||
+      path.includes('/chat') ||
+      path.includes('/p/') ||
+      path.includes('/s/') ||
+      path.length > 1
     ) {
       return true;
     }
 
-    // Generic public shareable URL
-    if (path.includes('/share/') || path.includes('/c/') || path.includes('/chat/')) {
-      return true;
-    }
-
-    return false;
+    return true;
   } catch {
     return false;
   }
@@ -120,9 +153,9 @@ export function validateUrlSafety(rawUrl: string): {
   urlObj?: URL;
 } {
   try {
-    const trimmed = rawUrl.trim();
+    let trimmed = rawUrl.trim();
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      return { safe: false, error: 'URL must begin with https:// or http://' };
+      trimmed = `https://${trimmed}`;
     }
 
     const parsed = new URL(trimmed);
@@ -155,25 +188,50 @@ export function calculateAccurateEstimatedPages(messages: ChatMessage[]): number
   if (!messages || messages.length === 0) return 1;
   let textLength = 0;
   let imageCount = 0;
+  let codeBlocks = 0;
 
   for (const m of messages) {
-    // Strip large data URLs so they don't falsely inflate character count
-    const stripped = m.content.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '');
+    // Strip large data URLs completely (including multiline and any characters inside parentheses or base64 data)
+    const stripped = m.content
+      .replace(/!\[[\s\S]*?\]\(data:image\/[\s\S]*?\)/gi, '')
+      .replace(/!\[[\s\S]*?\]\([^)]+\)/gi, '')
+      .replace(/data:image\/[^;\s"'>]+;base64,[A-Za-z0-9+/=\s\r\n_-]+/gi, '')
+      .trim();
     textLength += stripped.length;
 
     // Count embedded diagrams
-    const imgMatches = m.content.match(/!\[.*?\]\(.*?\)/g);
+    const imgMatches = m.content.match(/!\[[\s\S]*?\]\([\s\S]*?\)/g);
     if (imgMatches) {
       imageCount += imgMatches.length;
     }
+
+    const codeMatches = (m.content.match(/```/g) || []).length;
+    codeBlocks += Math.floor(codeMatches / 2);
   }
 
-  // Academic formatting density:
-  // ~2,200 text characters per page
-  // ~0.45 page per embedded diagram
-  const textPages = textLength / 2200;
-  const imagePages = imageCount * 0.45;
-  return Math.max(1, Math.round(textPages + imagePages));
+  // Academic dense single-spacing layout has ~2850 characters per page
+  const basePages = Math.ceil(textLength / 2850);
+  const extraFromCode = Math.floor(codeBlocks * 0.25);
+  const extraFromImages = Math.floor(imageCount * 0.4);
+  return Math.max(1, basePages + extraFromCode + extraFromImages);
+}
+
+/**
+ * Strictly identifies and purges internal script artifacts, telemetry JSON blobs,
+ * or statsig auth configuration strings.
+ */
+export function isGarbageScriptOrTelemetry(text: string): boolean {
+  if (!text) return true;
+  const t = text.trim();
+  if (t.startsWith('{"') || t.startsWith('{ "') || t.startsWith('[{"') || t.startsWith('{\\"')) return true;
+  if (t.includes('dangerousOriginBypassScriptNonce')) return true;
+  if (t.includes('statsig::') || t.includes('layer_exposure')) return true;
+  if (t.includes('emailFieldPresentation') || t.includes('auth_login_signup_opt')) return true;
+  if (t.includes('holdout-stable-id')) return true;
+  if (t.includes('AF_initDataCallback') || t.includes('WLS_state')) return true;
+  const jsonChars = (t.match(/[{}\\"\":]/g) || []).length;
+  if (t.length > 80 && jsonChars / t.length > 0.12) return true;
+  return false;
 }
 
 /**
@@ -182,7 +240,16 @@ export function calculateAccurateEstimatedPages(messages: ChatMessage[]): number
  */
 export function sanitizeMarkdownContent(raw: string): string {
   if (!raw) return '';
+  if (isGarbageScriptOrTelemetry(raw)) return '';
   return raw
+    .replace(/<Entity[^>]*\/?>/gi, '') // strip ChatGPT internal Entity tags (e.g. <Entity value="Selenium".../>)
+    .replace(/<divider[^>]*\/?>/gi, '') // strip internal divider tags (e.g. <divider color="subtle"/>)
+    .replace(/<citation[^>]*\/?>/gi, '') // strip citation tags
+    .replace(/<[A-Za-z][A-Za-z0-9_-]*(?:\s+[^>]*?)?\/?>/gi, (tag) => {
+      // allow standard safe markdown formatting HTML tags, strip all XML/component tags
+      if (/^<\/?(?:b|i|u|strong|em|p|br|code|pre)\b/i.test(tag)) return tag;
+      return '';
+    })
     .replace(/<badge[^>]*>(.*?)<\/badge>/gi, '($1) ')
     .replace(/<text[^>]*>(.*?)<\/text>/gi, '$1') // clean XML text tags completely
     .replace(/\{@body[\s\S]*?\}/g, '')
@@ -301,10 +368,11 @@ async function extractChatGPT(url: string, shareId: string): Promise<ApiExtractR
               const assignedUrl = openAiImgs[asyncImgCounter] || '';
               asyncImgCounter++;
               const dataUrl = imageMap.get(assignedUrl) || assignedUrl;
+              const cleanQuery = query.replace(/\s+logo\b/gi, '').replace(/^diagram:\s*/i, '').trim();
               if (dataUrl) {
-                return `\n\n![Diagram: ${query}](${dataUrl})\n\n`;
+                return `\n\n![Diagram: ${cleanQuery}](${dataUrl})\n\n`;
               }
-              return `\n\n**[Diagram: ${query}]**\n\n`;
+              return `\n\n**[Diagram: ${cleanQuery}]**\n\n`;
             }
           );
 
@@ -354,10 +422,11 @@ async function extractChatGPT(url: string, shareId: string): Promise<ApiExtractR
               const assignedUrl = openAiImgs[asyncImgCounter] || '';
               asyncImgCounter++;
               const dataUrl = imageMap.get(assignedUrl) || assignedUrl;
+              const cleanQuery = query.replace(/\s+logo\b/gi, '').replace(/^diagram:\s*/i, '').trim();
               if (dataUrl) {
-                return `\n\n![Diagram: ${query}](${dataUrl})\n\n`;
+                return `\n\n![Diagram: ${cleanQuery}](${dataUrl})\n\n`;
               }
-              return `\n\n**[Diagram: ${query}]**\n\n`;
+              return `\n\n**[Diagram: ${cleanQuery}]**\n\n`;
             }
           );
 
@@ -528,51 +597,120 @@ async function extractClaude(url: string, shareId: string): Promise<ApiExtractRe
  * Extracts conversation from Google Gemini public share links
  */
 async function extractGemini(url: string): Promise<ApiExtractResponse> {
+  const normalizedUrl = url.trim().match(/^https?:\/\//i) ? url.trim() : `https://${url.trim()}`;
   const headers = {
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
   };
 
   try {
-    const res = await fetch(url, { headers });
+    const res = await undiciFetch(normalizedUrl, {
+      dispatcher: undiciAgent,
+      headers,
+      redirect: 'follow',
+    });
     if (!res.ok) {
-      return {
-        success: false,
-        error: `Could not fetch Gemini shared chat (HTTP ${res.status}).`,
-        errorCode: 'NOT_FOUND',
-      };
+      return extractHtmlFallback(normalizedUrl);
     }
 
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    let title = $('title').text().replace('- Gemini', '').replace('Google Gemini -', '').trim() || 'Gemini Conversation';
+    let title =
+      $('title').text().replace('- Gemini', '').replace('Google Gemini -', '').replace(/\|.*$/, '').trim() ||
+      $('meta[property="og:title"]').attr('content')?.replace('- Gemini', '').trim() ||
+      'Gemini Conversation Notes';
+
     const messages: ChatMessage[] = [];
 
-    $('.query-content, [data-test-id="user-query"]').each((i, el) => {
+    // 1. Check standard & modern Gemini selectors
+    const userQueries: string[] = [];
+    $('.query-content, [data-test-id="user-query"], .user-query, message-content.user-message, div[data-message-author-role="user"]').each((_, el) => {
       const text = $(el).text().trim();
-      if (text) {
-        messages.push({
-          id: `gemini-u-${i}`,
-          role: 'user',
-          authorName: 'USER',
-          content: sanitizeMarkdownContent(text),
-        });
-      }
+      if (text) userQueries.push(sanitizeMarkdownContent(text));
     });
 
-    $('.model-response, [data-test-id="model-response"]').each((i, el) => {
+    const modelResponses: string[] = [];
+    $('.model-response, [data-test-id="model-response"], .model-response-text, .response-content, message-content.model-message, div[data-message-author-role="model"], div[data-message-author-role="assistant"], .markdown').each((_, el) => {
       const text = $(el).text().trim();
-      if (text) {
+      if (text) modelResponses.push(sanitizeMarkdownContent(text));
+    });
+
+    const maxTurns = Math.max(userQueries.length, modelResponses.length);
+    for (let i = 0; i < maxTurns; i++) {
+      if (userQueries[i]) {
         messages.push({
-          id: `gemini-a-${i}`,
-          role: 'assistant',
-          authorName: 'ASSISTANT',
-          content: sanitizeMarkdownContent(text),
+          id: `gemini-u-${i + 1}`,
+          role: 'user',
+          authorName: 'USER',
+          content: userQueries[i],
         });
       }
-    });
+      if (modelResponses[i]) {
+        messages.push({
+          id: `gemini-a-${i + 1}`,
+          role: 'assistant',
+          authorName: 'ASSISTANT',
+          content: modelResponses[i],
+        });
+      }
+    }
+
+    // 2. Check embedded script tags / JSON payloads if DOM elements were not rendered
+    if (messages.length === 0) {
+      $('script').each((_, el) => {
+        const scriptText = $(el).html() || '';
+        if (scriptText.includes('WLS_state') || scriptText.includes('AF_initDataCallback') || scriptText.includes('ds:')) {
+          try {
+            const textMatches = scriptText.match(/"([^"\\]{40,3000})"/g);
+            if (textMatches && textMatches.length > 0) {
+              const cleanedStrings = textMatches
+                .map((s) => {
+                  try {
+                    return JSON.parse(s);
+                  } catch {
+                    return s.replace(/^"|"$/g, '');
+                  }
+                })
+                .filter((s) => s.length > 35 && !s.startsWith('http') && !s.includes('{') && !s.includes('<script'));
+
+              const distinct = Array.from(new Set(cleanedStrings));
+              if (distinct.length > 0) {
+                distinct.slice(0, 16).forEach((str, idx) => {
+                  messages.push({
+                    id: `gemini-parsed-${idx + 1}`,
+                    role: idx % 2 === 0 ? 'user' : 'assistant',
+                    authorName: idx % 2 === 0 ? 'USER' : 'ASSISTANT',
+                    content: sanitizeMarkdownContent(str),
+                  });
+                });
+              }
+            }
+          } catch {}
+        }
+      });
+    }
+
+    // 3. Check meta tags description if only summary is available
+    if (messages.length === 0) {
+      const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content');
+      if (metaDesc && metaDesc.length > 20) {
+        messages.push({
+          id: `gemini-u-1`,
+          role: 'user',
+          authorName: 'USER',
+          content: title,
+        });
+        messages.push({
+          id: `gemini-a-1`,
+          role: 'assistant',
+          authorName: 'ASSISTANT',
+          content: sanitizeMarkdownContent(metaDesc),
+        });
+      }
+    }
 
     if (messages.length > 0) {
       return {
@@ -580,7 +718,7 @@ async function extractGemini(url: string): Promise<ApiExtractResponse> {
         conversation: {
           id: `gemini-${Date.now()}`,
           title,
-          sourceUrl: url,
+          sourceUrl: normalizedUrl,
           createdAt: new Date().toISOString(),
           messages,
           stats: {
@@ -596,20 +734,25 @@ async function extractGemini(url: string): Promise<ApiExtractResponse> {
     console.warn('Gemini extraction error:', err);
   }
 
-  return extractHtmlFallback(url);
+  return extractHtmlFallback(normalizedUrl);
 }
 
 /**
  * Universal HTML fallback extractor for any public AI share link
  */
 async function extractHtmlFallback(url: string): Promise<ApiExtractResponse> {
+  const normalizedUrl = url.trim().match(/^https?:\/\//i) ? url.trim() : `https://${url.trim()}`;
+
   try {
-    const res = await fetch(url, {
+    const res = await undiciFetch(normalizedUrl, {
+      dispatcher: undiciAgent,
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
+      redirect: 'follow',
     });
 
     const html = await res.text();
@@ -622,7 +765,8 @@ async function extractHtmlFallback(url: string): Promise<ApiExtractResponse> {
 
     const messages: ChatMessage[] = [];
 
-    $('article, [data-message-author-role], .prose, .markdown').each((i, el) => {
+    // Check common article and message blocks
+    $('article, [data-message-author-role], .prose, .markdown, div[class*="message"], div[class*="turn"]').each((i, el) => {
       const text = $(el).text().trim();
       if (text.length > 30) {
         messages.push({
@@ -634,13 +778,39 @@ async function extractHtmlFallback(url: string): Promise<ApiExtractResponse> {
       }
     });
 
+    // Fallback: extract from paragraphs and headings
+    if (messages.length === 0) {
+      const paras: string[] = [];
+      $('p, h2, h3, blockquote, li').each((_, el) => {
+        const text = $(el).text().trim();
+        if (text.length > 30) {
+          paras.push(sanitizeMarkdownContent(text));
+        }
+      });
+
+      if (paras.length > 0) {
+        messages.push({
+          id: 'gen-u-1',
+          role: 'user',
+          authorName: 'USER',
+          content: title,
+        });
+        messages.push({
+          id: 'gen-a-1',
+          role: 'assistant',
+          authorName: 'ASSISTANT',
+          content: paras.join('\n\n'),
+        });
+      }
+    }
+
     if (messages.length > 0) {
       return {
         success: true,
         conversation: {
           id: `shared-${Date.now()}`,
           title,
-          sourceUrl: url,
+          sourceUrl: normalizedUrl,
           createdAt: new Date().toISOString(),
           messages,
           stats: {
@@ -672,7 +842,8 @@ async function extractHtmlFallback(url: string): Promise<ApiExtractResponse> {
  * Master public function to extract any AI shared conversation link
  */
 export async function extractAiConversation(url: string): Promise<ApiExtractResponse> {
-  const safety = validateUrlSafety(url);
+  const normalizedUrl = url.trim().match(/^https?:\/\//i) ? url.trim() : `https://${url.trim()}`;
+  const safety = validateUrlSafety(normalizedUrl);
   if (!safety.safe || !safety.urlObj) {
     return {
       success: false,
@@ -683,7 +854,7 @@ export async function extractAiConversation(url: string): Promise<ApiExtractResp
 
   // Pre-loaded sample notes
   for (const sample of Object.values(SAMPLE_CONVERSATIONS)) {
-    if (url.includes(sample.id) || sample.sourceUrl === url) {
+    if (normalizedUrl.includes(sample.id) || sample.sourceUrl === normalizedUrl) {
       return {
         success: true,
         conversation: sample,
@@ -691,29 +862,33 @@ export async function extractAiConversation(url: string): Promise<ApiExtractResp
     }
   }
 
-  const platform = identifyPlatform(url);
+  const platform = identifyPlatform(normalizedUrl);
 
   if (platform === 'chatgpt') {
-    const shareId = extractChatGPTShareId(url);
+    const shareId = extractChatGPTShareId(normalizedUrl);
     if (!shareId) {
-      return {
-        success: false,
-        error: 'Invalid ChatGPT share link. Expected format: https://chatgpt.com/share/[id]',
-        errorCode: 'INVALID_URL',
-      };
+      return extractHtmlFallback(normalizedUrl);
     }
-    return extractChatGPT(url, shareId);
+    const res = await extractChatGPT(normalizedUrl, shareId);
+    if (!res.success) {
+      return extractHtmlFallback(normalizedUrl);
+    }
+    return res;
   }
 
   if (platform === 'claude') {
-    const shareId = extractClaudeShareId(url);
-    return extractClaude(url, shareId || 'claude-share');
+    const shareId = extractClaudeShareId(normalizedUrl);
+    const res = await extractClaude(normalizedUrl, shareId || 'claude-share');
+    if (!res.success) {
+      return extractHtmlFallback(normalizedUrl);
+    }
+    return res;
   }
 
   if (platform === 'gemini') {
-    return extractGemini(url);
+    return extractGemini(normalizedUrl);
   }
 
   // Generic or Perplexity
-  return extractHtmlFallback(url);
+  return extractHtmlFallback(normalizedUrl);
 }

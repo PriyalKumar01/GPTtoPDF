@@ -32,7 +32,7 @@ export const APP_CONFIG = {
     title: 'Founder & Lead Developer',
     education: "CSE'27 @ HBTU Kanpur",
     portfolioUrl: 'https://priyalkumar01.github.io/priyalkumar.github.io/',
-    linkedinUrl: 'https://www.linkedin.com/in/priyal-kumar-singh/',
+    linkedinUrl: 'https://www.linkedin.com/in/priyal-kumar-29b26529a/',
     collegeStudyUrl: 'https://college-study.netlify.app/',
     collegeStudyStudents: '5,000+',
     avatar: '/images/priyal-kumar.png',

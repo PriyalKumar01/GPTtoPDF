@@ -41,7 +41,17 @@ fun MainNavigation() {
     var currentStage by remember { mutableStateOf(AppStage.SPLASH) }
     var banReason by remember { mutableStateOf<String?>(null) }
 
-    // Real-time Ban Check loop when user is inside the app
+    // Reactive listener to auth changes (OAuth deep links / sign outs)
+    val isAuthVerified by UserPreferences.isAuthVerifiedFlow.collectAsState()
+    LaunchedEffect(isAuthVerified) {
+        if (isAuthVerified == true && currentStage == AppStage.ONBOARDING) {
+            currentStage = AppStage.MAIN
+        } else if (isAuthVerified == false && currentStage == AppStage.MAIN) {
+            currentStage = AppStage.ONBOARDING
+        }
+    }
+
+    // Real-time Ban Check loop when user is inside the app: checks direct Supabase REST & API
     LaunchedEffect(currentStage) {
         if (currentStage == AppStage.MAIN) {
             while (isActive) {
@@ -50,24 +60,57 @@ fun MainNavigation() {
                     try {
                         withContext(Dispatchers.IO) {
                             val encodedEmail = URLEncoder.encode(email, "UTF-8")
-                            val endpoint = URL("https://qwiksave.vercel.app/api/auth/check-ban?email=$encodedEmail")
-                            val conn = endpoint.openConnection() as HttpURLConnection
-                            conn.connectTimeout = 4000
-                            conn.readTimeout = 4000
-                            conn.requestMethod = "GET"
-                            conn.setRequestProperty("Cache-Control", "no-cache")
-                            if (conn.responseCode == 200) {
-                                val text = conn.inputStream.bufferedReader().use { it.readText() }
-                                val json = JSONObject(text)
-                                if (json.optBoolean("isBanned", false)) {
-                                    val reason = json.optString(
-                                        "reason",
-                                        "Violation of Qwik Save Terms & Conditions (such as providing false details or unauthorized usage)."
-                                    )
-                                    withContext(Dispatchers.Main) {
-                                        UserPreferences.clearAuth(context)
-                                        banReason = reason
+                            var isUserBanned = false
+                            var reasonText = "Violation of Qwik Save Terms & Conditions (such as providing false details or unauthorized usage)."
+
+                            // 1. Direct Supabase Query for 0-latency instant ban check
+                            try {
+                                val sbUrl = URL("https://trfpjmtmsmzljcssvxnn.supabase.co/rest/v1/users?email=eq.$encodedEmail&select=*")
+                                val sbConn = sbUrl.openConnection() as HttpURLConnection
+                                sbConn.connectTimeout = 3000
+                                sbConn.readTimeout = 3000
+                                sbConn.requestMethod = "GET"
+                                sbConn.setRequestProperty("apikey", "sb_publishable_PcEuGfpHy_1Hn7Ou-juSeA_VtvTjvCv")
+                                sbConn.setRequestProperty("Authorization", "Bearer sb_publishable_PcEuGfpHy_1Hn7Ou-juSeA_VtvTjvCv")
+                                if (sbConn.responseCode == 200) {
+                                    val text = sbConn.inputStream.bufferedReader().use { it.readText() }
+                                    val array = org.json.JSONArray(text)
+                                    if (array.length() > 0) {
+                                        val userObj = array.getJSONObject(0)
+                                        if (userObj.optBoolean("is_banned", false)) {
+                                            isUserBanned = true
+                                            val r = userObj.optString("ban_reason", "")
+                                            if (r.isNotBlank()) reasonText = r
+                                        }
                                     }
+                                }
+                            } catch (_: Exception) {}
+
+                            // 2. Fallback to API check
+                            if (!isUserBanned) {
+                                try {
+                                    val endpoint = URL("https://qwiksave.vercel.app/api/auth/check-ban?email=$encodedEmail")
+                                    val conn = endpoint.openConnection() as HttpURLConnection
+                                    conn.connectTimeout = 3000
+                                    conn.readTimeout = 3000
+                                    conn.requestMethod = "GET"
+                                    conn.setRequestProperty("Cache-Control", "no-cache")
+                                    if (conn.responseCode == 200) {
+                                        val text = conn.inputStream.bufferedReader().use { it.readText() }
+                                        val json = JSONObject(text)
+                                        if (json.optBoolean("isBanned", false)) {
+                                            isUserBanned = true
+                                            val r = json.optString("reason", "")
+                                            if (r.isNotBlank()) reasonText = r
+                                        }
+                                    }
+                                } catch (_: Exception) {}
+                            }
+
+                            if (isUserBanned) {
+                                withContext(Dispatchers.Main) {
+                                    UserPreferences.clearAuth(context)
+                                    banReason = reasonText
                                 }
                             }
                         }
@@ -75,7 +118,7 @@ fun MainNavigation() {
                         // Offline or transient network glitch, keep going
                     }
                 }
-                delay(6000) // Poll every 6 seconds for instantaneous real-time ban
+                delay(5000) // Poll every 5 seconds for instantaneous real-time ban enforcement
             }
         }
     }

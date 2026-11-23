@@ -51,13 +51,8 @@ export function InitialSplashScreen() {
       aria-label="Loading Qwik Save Suite"
     >
       <div className="flex flex-col items-center max-w-sm px-6 text-center animate-in fade-in zoom-in-95 duration-250">
-        {/* Seamless Brand Icon & Banner */}
-        <div className="relative mb-6 flex flex-col items-center justify-center gap-3">
-          <img
-            src="/app-logo.png"
-            alt="Qwik Save App Logo"
-            className="w-20 h-20 rounded-2xl shadow-xl shadow-sky-500/25 object-contain"
-          />
+        {/* Seamless Brand Banner */}
+        <div className="relative mb-6 flex flex-col items-center justify-center">
           <img
             src="/images/qwik-save-banner.png"
             alt="Qwik Save - Save in One Click"

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import com.qwiksave.app.data.UserPreferences
 import com.qwiksave.app.ui.theme.QwikSaveTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,12 +39,12 @@ class MainActivity : ComponentActivity() {
         }
 
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.parseColor("#0F172A"))
         )
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false // false = WHITE icons for time, battery, wifi
-            isAppearanceLightNavigationBars = false // false = WHITE glowing navigation bar buttons (back, home, recents)
+            isAppearanceLightStatusBars = true // Dark icons (battery, wifi, network, time) by default on light screens
+            isAppearanceLightNavigationBars = false // Crisp white buttons on dark navigation bar (#0F172A)
         }
 
         setContent {
@@ -74,12 +75,84 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            val name = uri.getQueryParameter("name") ?: ""
+            val rawName = uri.getQueryParameter("name") ?: ""
             val email = uri.getQueryParameter("email") ?: ""
             val provider = uri.getQueryParameter("provider") ?: "google"
-            val age = uri.getQueryParameter("age")?.toIntOrNull() ?: 0
+            val rawAge = uri.getQueryParameter("age")?.toIntOrNull() ?: 0
+
+            val dummyBuzzwords = listOf("test", "fake", "xyz", "asdf", "dummy", "admin", "null", "undefined", "anonymous", "user", "guest")
+            val isDummy = { s: String -> dummyBuzzwords.any { s.trim().lowercase().contains(it) } || s.trim().length < 2 }
+
+            val savedName = UserPreferences.getUserName(this)
+            val finalName = when {
+                rawName.isNotBlank() && !isDummy(rawName) -> rawName.trim()
+                savedName.isNotBlank() && !isDummy(savedName) -> savedName.trim()
+                rawName.isNotBlank() -> rawName.trim()
+                else -> email.substringBefore("@").replace(".", " ")
+                    .split(" ")
+                    .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+            }
+
+            val savedAge = UserPreferences.getUserAge(this)
+            val finalAge = if (savedAge in 1..100) savedAge else if (rawAge in 1..100) rawAge else 20
+
+            val rawGender = uri.getQueryParameter("gender") ?: ""
+            val savedGender = UserPreferences.getUserGender(this)
+            val finalGender = if (rawGender.isNotBlank()) rawGender else if (savedGender.isNotBlank()) savedGender else "Male"
+
             if (email.isNotBlank()) {
-                UserPreferences.saveVerifiedAuth(this, name, email, provider, age)
+                UserPreferences.saveVerifiedAuth(this, finalName, email, provider, finalAge, finalGender)
+
+                // 1. Async sync to Supabase GoTrue Auth (/auth/v1/signup)
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        val authUrl = java.net.URL("https://trfpjmtmsmzljcssvxnn.supabase.co/auth/v1/signup")
+                        val authConn = authUrl.openConnection() as java.net.HttpURLConnection
+                        authConn.requestMethod = "POST"
+                        authConn.setRequestProperty("apikey", "sb_publishable_PcEuGfpHy_1Hn7Ou-juSeA_VtvTjvCv")
+                        authConn.setRequestProperty("Content-Type", "application/json")
+                        authConn.doOutput = true
+                        val authPayload = org.json.JSONObject().apply {
+                            put("email", email.trim().lowercase())
+                            put("password", "QwikSave_${email.trim().lowercase().hashCode()}_Secure!")
+                            put("data", org.json.JSONObject().apply {
+                                put("name", finalName)
+                                put("age", finalAge)
+                                put("gender", finalGender)
+                                put("provider", provider.trim().lowercase())
+                            })
+                        }
+                        authConn.outputStream.use { it.write(authPayload.toString().toByteArray(Charsets.UTF_8)) }
+                        authConn.responseCode
+                    } catch (_: Exception) {}
+
+                    // 2. Async sync to Supabase public.users table
+                    try {
+                        val url = java.net.URL("https://trfpjmtmsmzljcssvxnn.supabase.co/rest/v1/users")
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.setRequestProperty("apikey", "sb_publishable_PcEuGfpHy_1Hn7Ou-juSeA_VtvTjvCv")
+                        conn.setRequestProperty("Authorization", "Bearer sb_publishable_PcEuGfpHy_1Hn7Ou-juSeA_VtvTjvCv")
+                        conn.setRequestProperty("Content-Type", "application/json")
+                        conn.setRequestProperty("Prefer", "resolution=merge-duplicates")
+                        conn.doOutput = true
+                        val payload = org.json.JSONObject().apply {
+                            put("id", "usr_${System.currentTimeMillis()}_${(1000..9999).random()}")
+                            put("name", finalName)
+                            put("age", finalAge)
+                            put("gender", finalGender)
+                            put("email", email.trim().lowercase())
+                            put("provider", provider.trim().lowercase())
+                            put("verified", true)
+                            put("role", if (email.trim().equals("priyalkumar01@gmail.com", ignoreCase = true)) "owner" else "user")
+                            put("is_banned", false)
+                        }
+                        conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+                        conn.responseCode
+                    } catch (_: Exception) {}
+                }
+
+                android.widget.Toast.makeText(this, "Welcome, $finalName! Verified via ${provider.replaceFirstChar { it.uppercase() }} ✓", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }
