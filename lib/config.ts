@@ -18,8 +18,8 @@ export const APP_CONFIG = {
   taglineCaps: 'SAVE IN ONE CLICK',
   description:
     'Qwik Save — Save in One Click. Convert AI chats (ChatGPT, Claude, Gemini) to academic PDFs, download Instagram Reels, Facebook & YouTube videos in HD, merge & compress PDFs, and extract MP3 audio. 100% Free, zero watermark, no sign-up required.',
-  appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://www.ai-chat2pdf.live',
-  domain: 'ai-chat2pdf.live',
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://qwiksave.vercel.app',
+  domain: 'qwiksave.vercel.app',
   rating: {
     score: '4.7',
     stars: 5,

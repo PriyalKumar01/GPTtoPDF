@@ -7,8 +7,8 @@
     <path
         android:fillColor="#FF1877F2"
         android:pathData="M13,0 L35,0 C42.18,0 48,5.82 48,13 L48,35 C48,42.18 42.18,48 35,48 L13,48 C5.82,48 0,42.18 0,35 L0,13 C0,5.82 5.82,0 13,0 Z" />
-    <!-- Perfectly centered Facebook White 'f' glyph (exact Meta geometry) -->
+    <!-- Centered Facebook White 'f' glyph (balanced visual center) -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M27.75,48 V31.23 H33.41 L34.47,24.29 H27.75 V19.79 C27.75,17.89 28.68,16.04 31.66,16.04 H34.74 V10.13 C34.74,10.13 32.11,9.66 29.49,9.66 C24.01,9.66 20.43,12.99 20.43,19.01 V24.29 H14.33 V31.23 H20.43 V48 H27.75 Z" />
+        android:pathData="M26.25,48 V31.23 H31.91 L32.97,24.29 H26.25 V19.79 C26.25,17.89 27.18,16.04 30.16,16.04 H33.24 V10.13 C33.24,10.13 30.61,9.66 27.99,9.66 C22.51,9.66 18.93,12.99 18.93,19.01 V24.29 H12.83 V31.23 H18.93 V48 H26.25 Z" />
 </vector>

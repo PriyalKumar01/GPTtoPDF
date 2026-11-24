@@ -264,19 +264,46 @@ object AiShareWebViewExtractor {
                                         }
 
                                         var title = document.title || '';
+                                        var users = [];
+                                        var models = [];
+
+                                        // 1. Check window.WIZ_global_data for Google Gemini turns
+                                        try {
+                                            if (window.WIZ_global_data) {
+                                                for (var key in window.WIZ_global_data) {
+                                                    var val = window.WIZ_global_data[key];
+                                                    if (typeof val === 'string' && val.indexOf('∞') !== -1) {
+                                                        var turns = val.split('∰');
+                                                        for (var t = 0; t < turns.length; t++) {
+                                                            var parts = turns[t].split('∞');
+                                                            if (parts.length >= 2) {
+                                                                var u = parts[0].replace(/\\u003c/g, '<').replace(/\\u003e/g, '>').replace(/<[^>]+>/g, ' ').trim();
+                                                                var m = parts[parts.length - 1].replace(/\\u003c/g, '<').replace(/\\u003e/g, '>').replace(/<[^>]+>/g, ' ').trim();
+                                                                if (u && users.indexOf(u) === -1) users.push(u);
+                                                                if (m && models.indexOf(m) === -1) models.push(m);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } catch (wizErr) {}
+
+                                        // 2. DOM selectors for standard rendered turns
                                         var userNodes = document.querySelectorAll('.query-content, [data-test-id="user-query"], .user-query, message-content.user-message, div[data-message-author-role="user"], [data-message-author-role="user"]');
                                         var modelNodes = document.querySelectorAll('.model-response, [data-test-id="model-response"], .model-response-text, .response-content, message-content.model-message, div[data-message-author-role="model"], div[data-message-author-role="assistant"], [data-message-author-role="assistant"]');
                                         
-                                        var users = [];
-                                        for (var i = 0; i < userNodes.length; i++) {
-                                            var u = userNodes[i].innerText ? userNodes[i].innerText.trim() : '';
-                                            if (u.length > 0 && !u.startsWith('{"') && !u.startsWith('{\\"')) users.push(u);
+                                        if (users.length === 0) {
+                                            for (var i = 0; i < userNodes.length; i++) {
+                                                var u = userNodes[i].innerText ? userNodes[i].innerText.trim() : '';
+                                                if (u.length > 0 && !u.startsWith('{"') && !u.startsWith('{\\"')) users.push(u);
+                                            }
                                         }
                                         
-                                        var models = [];
-                                        for (var j = 0; j < modelNodes.length; j++) {
-                                            var m = modelNodes[j].innerText ? modelNodes[j].innerText.trim() : '';
-                                            if (m.length > 0 && !m.startsWith('{"') && !m.startsWith('{\\"')) models.push(m);
+                                        if (models.length === 0) {
+                                            for (var j = 0; j < modelNodes.length; j++) {
+                                                var m = modelNodes[j].innerText ? modelNodes[j].innerText.trim() : '';
+                                                if (m.length > 0 && !m.startsWith('{"') && !m.startsWith('{\\"')) models.push(m);
+                                            }
                                         }
                                         
                                         // If specific CSS classes didn't match, inspect readable article or paragraphs

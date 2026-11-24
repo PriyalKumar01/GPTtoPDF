@@ -3,7 +3,7 @@ import { Agent, fetch as undiciFetch } from 'undici';
 import { APP_CONFIG } from './config';
 
 const undiciAgent = new Agent({
-  maxHeaderSize: 262144, // 256KB to prevent HeadersOverflowError on Google Gemini / Cloudflare
+  maxHeaderSize: 524288, // 512KB to prevent HeadersOverflowError on Google Gemini / Cloudflare
 });
 import { SAMPLE_CONVERSATIONS } from './sample-data';
 import {
@@ -606,11 +606,25 @@ async function extractGemini(url: string): Promise<ApiExtractResponse> {
   };
 
   try {
-    const res = await undiciFetch(normalizedUrl, {
+    let currentUrl = normalizedUrl;
+    let res = await undiciFetch(currentUrl, {
       dispatcher: undiciAgent,
       headers,
       redirect: 'follow',
     });
+
+    if (res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308) {
+      const loc = res.headers.get('location');
+      if (loc) {
+        currentUrl = loc.startsWith('http') ? loc : new URL(loc, currentUrl).href;
+        res = await undiciFetch(currentUrl, {
+          dispatcher: undiciAgent,
+          headers,
+          redirect: 'follow',
+        });
+      }
+    }
+
     if (!res.ok) {
       return extractHtmlFallback(normalizedUrl);
     }
@@ -625,7 +639,7 @@ async function extractGemini(url: string): Promise<ApiExtractResponse> {
 
     const messages: ChatMessage[] = [];
 
-    // 1. Check standard & modern Gemini selectors
+    // 1. Check standard & modern Gemini DOM selectors
     const userQueries: string[] = [];
     $('.query-content, [data-test-id="user-query"], .user-query, message-content.user-message, div[data-message-author-role="user"]').each((_, el) => {
       const text = $(el).text().trim();
@@ -637,6 +651,38 @@ async function extractGemini(url: string): Promise<ApiExtractResponse> {
       const text = $(el).text().trim();
       if (text) modelResponses.push(sanitizeMarkdownContent(text));
     });
+
+    // 2. Parse Google Gemini WIZ_global_data state if DOM selectors did not yield full turns
+    if (userQueries.length === 0 || modelResponses.length === 0) {
+      const wizMatch = html.match(/window\.WIZ_global_data\s*=\s*(\{[\s\S]*?\});/);
+      if (wizMatch) {
+        try {
+          const wizData = JSON.parse(wizMatch[1]);
+          for (const [key, val] of Object.entries(wizData)) {
+            if (typeof val === 'string' && val.includes('∞')) {
+              const turns = val.split('∰');
+              for (let t = 0; t < turns.length; t++) {
+                const parts = turns[t].split('∞');
+                if (parts.length >= 2) {
+                  const u = parts[0]
+                    .replace(/\\u003c/g, '<')
+                    .replace(/\\u003e/g, '>')
+                    .replace(/<[^>]+>/g, ' ')
+                    .trim();
+                  const m = parts[parts.length - 1]
+                    .replace(/\\u003c/g, '<')
+                    .replace(/\\u003e/g, '>')
+                    .replace(/<[^>]+>/g, ' ')
+                    .trim();
+                  if (u && !userQueries.includes(u)) userQueries.push(sanitizeMarkdownContent(u));
+                  if (m && !modelResponses.includes(m)) modelResponses.push(sanitizeMarkdownContent(m));
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
 
     const maxTurns = Math.max(userQueries.length, modelResponses.length);
     for (let i = 0; i < maxTurns; i++) {
@@ -658,7 +704,7 @@ async function extractGemini(url: string): Promise<ApiExtractResponse> {
       }
     }
 
-    // 2. Check embedded script tags / JSON payloads if DOM elements were not rendered
+    // 3. Check embedded script tags / JSON payloads if DOM elements were not rendered
     if (messages.length === 0) {
       $('script').each((_, el) => {
         const scriptText = $(el).html() || '';
@@ -693,7 +739,7 @@ async function extractGemini(url: string): Promise<ApiExtractResponse> {
       });
     }
 
-    // 3. Check meta tags description if only summary is available
+    // 4. Check meta tags description if only summary is available
     if (messages.length === 0) {
       const metaDesc = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content');
       if (metaDesc && metaDesc.length > 20) {

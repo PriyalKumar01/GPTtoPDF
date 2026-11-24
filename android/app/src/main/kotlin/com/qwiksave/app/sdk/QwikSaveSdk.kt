@@ -2133,7 +2133,7 @@ class QwikSaveClient(
 
             fun drawCollegeStudyBadge(c: Canvas, topY: Float) {
                 if (partnerBadgeScope.equals("none", ignoreCase = true)) return
-                val badgeW = 104f
+                val badgeW = 124f
                 val badgeH = 28f
                 val badgeX = pageWidth - margin - badgeW - 6f
                 val badgeRect = RectF(badgeX, topY, badgeX + badgeW, topY + badgeH)
@@ -2152,11 +2152,19 @@ class QwikSaveClient(
 
                 val csLogo = collegeStudyLogoBitmap ?: appLogoBitmap
                 if (csLogo != null) {
-                    val logoRect = RectF(badgeX + 5f, topY + 4f, badgeX + 25f, topY + 24f)
+                    val srcW = csLogo.width.toFloat()
+                    val srcH = csLogo.height.toFloat()
+                    val maxLogoDim = 20f
+                    val scale = minOf(maxLogoDim / srcW, maxLogoDim / srcH)
+                    val drawW = srcW * scale
+                    val drawH = srcH * scale
+                    val offX = badgeX + 5f + (maxLogoDim - drawW) / 2f
+                    val offY = topY + 4f + (maxLogoDim - drawH) / 2f
+                    val logoRect = RectF(offX, offY, offX + drawW, offY + drawH)
                     c.drawBitmap(csLogo, null, logoRect, Paint().apply { isFilterBitmap = true })
                 }
 
-                val textLeft = badgeX + 29f
+                val textLeft = badgeX + 28f
                 val poweredPaint = TextPaint().apply {
                     color = Color.rgb(100, 116, 139)
                     textSize = 5.8f
@@ -2171,14 +2179,14 @@ class QwikSaveClient(
                 }
                 val subHubPaint = TextPaint().apply {
                     color = Color.rgb(2, 132, 199)
-                    textSize = 7f
+                    textSize = 5.8f
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     isAntiAlias = true
                 }
 
-                c.drawText("POWERED BY", textLeft, topY + 9f, poweredPaint)
-                c.drawText("College Study", textLeft, topY + 17.5f, csBrandPaint)
-                c.drawText("Your Study Hub", textLeft, topY + 24.5f, subHubPaint)
+                c.drawText("POWERED BY", textLeft, topY + 8.5f, poweredPaint)
+                c.drawText("College Study", textLeft, topY + 16.5f, csBrandPaint)
+                c.drawText("https://college-study.netlify.app", textLeft, topY + 23.5f, subHubPaint)
             }
 
             val isoDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
@@ -2218,14 +2226,19 @@ class QwikSaveClient(
                 yPosition += tLayout.height + 4f
             }
 
-            // Subtitle / Generated line
-            val subLine = if (!subtitle.isNullOrBlank()) {
-                "$subtitle • Generated: $generatedDateStr"
-            } else {
-                "Generated: $generatedDateStr • Typeset for Academic Review"
+            // Subtitle / Generated line (STRICTLY respect includeDate toggle)
+            if (includeDate || !subtitle.isNullOrBlank()) {
+                val subLine = when {
+                    !subtitle.isNullOrBlank() && includeDate -> "$subtitle • Generated: $generatedDateStr"
+                    !subtitle.isNullOrBlank() -> subtitle
+                    includeDate -> "Generated: $generatedDateStr • Typeset for Academic Review"
+                    else -> ""
+                }
+                if (subLine.isNotBlank()) {
+                    canvas.drawText(subLine, margin + 8f, yPosition + 7f, metaPaint)
+                    yPosition += 18f
+                }
             }
-            canvas.drawText(subLine, margin + 8f, yPosition + 7f, metaPaint)
-            yPosition += 18f
 
             // Top divider line
             val dividerPaint = Paint().apply {
@@ -2276,88 +2289,51 @@ class QwikSaveClient(
 
             // Safe extraction of markdown images: ![alt](src) and strict removal of raw base64
             fun extractImagesAndCleanContentSafely(rawContent: String): Pair<String, Map<String, Pair<String, Bitmap?>>> {
-                val sanitizedContent = rawContent
+                var content = rawContent
                     .replace(Regex("<Entity[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
                     .replace(Regex("<divider[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
                     .replace(Regex("<citation[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
 
                 val imgMap = mutableMapOf<String, Pair<String, Bitmap?>>()
-                val sb = StringBuilder()
-                var i = 0
-                val len = sanitizedContent.length
                 var tokenIndex = 0
 
-                while (i < len) {
-                    val imgStart = sanitizedContent.indexOf("![", i)
-                    if (imgStart == -1) {
-                        sb.append(sanitizedContent.substring(i))
-                        break
-                    }
-                    sb.append(sanitizedContent.substring(i, imgStart))
+                // Match all Markdown image syntax: ![alt](src) including multiline data:image URLs
+                val imgPattern = Regex("!\\[([\\s\\S]*?)\\]\\s*\\(\\s*(data:image\\/[^;]+;base64,[A-Za-z0-9+/=\\s\\r\\n_-]+|https?:\\/\\/[^\\s)]+)\\s*\\)", RegexOption.IGNORE_CASE)
+                content = imgPattern.replace(content) { matchResult ->
+                    val altRaw = matchResult.groupValues[1]
+                    val srcRaw = matchResult.groupValues[2]
 
-                    val altEnd = sanitizedContent.indexOf("]", imgStart + 2)
-                    if (altEnd == -1) {
-                        sb.append(sanitizedContent.substring(imgStart))
-                        break
-                    }
-                    val altText = sanitizedContent.substring(imgStart + 2, altEnd).trim()
-                        .replace(Regex("\\s+logo\\b", RegexOption.IGNORE_CASE), "")
-                        .replace(Regex("^diagram:\\s*", RegexOption.IGNORE_CASE), "")
-                        .trim()
+                    val altText = altRaw.replace(Regex("\\s+logo\\b", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("^diagram:\\s*", RegexOption.IGNORE_CASE), "").trim()
+                    var bm: Bitmap? = null
 
-                    var parenStart = altEnd + 1
-                    while (parenStart < len && (sanitizedContent[parenStart] == ' ' || sanitizedContent[parenStart] == '\t' || sanitizedContent[parenStart] == '\n' || sanitizedContent[parenStart] == '\r')) {
-                        parenStart++
+                    if (srcRaw.contains("base64,", ignoreCase = true)) {
+                        try {
+                            val b64 = srcRaw.substringAfter("base64,").trim().filter { !it.isWhitespace() }
+                            val decodedBytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                            bm = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
+                        } catch (_: Exception) {}
                     }
-                    if (parenStart < len && sanitizedContent[parenStart] == '(') {
-                        val parenEnd = sanitizedContent.indexOf(")", parenStart + 1)
-                        if (parenEnd != -1) {
-                            val rawSrc = sanitizedContent.substring(parenStart + 1, parenEnd).trim()
-                            var bm: Bitmap? = null
-                            if (rawSrc.contains("base64,", ignoreCase = true)) {
-                                try {
-                                    val b64 = rawSrc.substringAfter("base64,").trim()
-                                        .filter { !it.isWhitespace() }
-                                    val decodedBytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
-                                    bm = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size)
-                                } catch (_: Exception) {}
-                            }
-                            val token = "@@@IMG_TOKEN_${tokenIndex++}@@@"
-                            imgMap[token] = Pair(altText, bm)
-                            sb.append("\n\n").append(token).append("\n\n")
-                            i = parenEnd + 1
-                            continue
-                        } else {
-                            // No closing paren: consume until end of image tag or newline
-                            val nextBreak = sanitizedContent.indexOf("\n\n", parenStart)
-                            i = if (nextBreak != -1) nextBreak + 2 else len
-                            continue
-                        }
-                    }
-                    sb.append(sanitizedContent.substring(imgStart, altEnd + 1))
-                    i = altEnd + 1
+                    val token = "@@@IMG_TOKEN_${tokenIndex++}@@@"
+                    imgMap[token] = Pair(altText, bm)
+                    "\n\n$token\n\n"
                 }
 
-                var text = sb.toString()
-                // Strip any remaining data:image segments completely without leaking base64 lines
-                while (true) {
-                    val dIdx = text.indexOf("data:image/", ignoreCase = true)
-                    if (dIdx == -1) break
-                    val closingParen = text.indexOf(")", dIdx)
-                    val nextBlank = text.indexOf("\n\n", dIdx)
-                    val endIdx = when {
-                        closingParen != -1 && (nextBlank == -1 || closingParen < nextBlank + 10) -> closingParen + 1
-                        nextBlank != -1 -> nextBlank
-                        else -> text.length
-                    }
-                    text = text.substring(0, dIdx) + text.substring(endIdx)
-                }
+                // Also match any unclosed or legacy ![alt](data:image... patterns
+                val unclosedPattern = Regex("!\\[[\\s\\S]*?\\]\\s*\\(\\s*data:image[\\s\\S]*?(?:\\)|(?=\\n\\n|$))", RegexOption.IGNORE_CASE)
+                content = unclosedPattern.replace(content, "")
 
-                // Strip lines that are pure raw base64 leftover artifacts (>25 chars of base64 charset)
-                val cleanedLines = text.split("\n").filterNot { line ->
+                // Strip any residual raw base64 data strings anywhere in the text
+                content = content.replace(Regex("data:image\\/[^;\\s\"'>]+;base64,[A-Za-z0-9+/=\\s\\r\\n_-]+", RegexOption.IGNORE_CASE), "")
+
+                // Filter lines to ensure no raw base64 artifacts can leak into text
+                val cleanedLines = content.split("\n").filterNot { line ->
                     val t = line.trim()
-                    (t.length > 25 && t.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' || it == '=' || it == '-' || it == '_' }) ||
-                    t.startsWith("![Diagram:") || t.startsWith("![") && t.contains("data:image/")
+                    if (t.isEmpty()) return@filterNot false
+                    if (t.startsWith("![") || t.startsWith("data:image") || t.startsWith("data:application")) return@filterNot true
+                    // If line has no spaces and is >= 16 characters of base64 charset
+                    if (!t.contains(" ") && t.length >= 16 && t.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' || it == '=' || it == '-' || it == '_' }) return@filterNot true
+                    false
                 }
 
                 return Pair(cleanedLines.joinToString("\n").trim(), imgMap)
@@ -2862,9 +2838,7 @@ class QwikSaveClient(
                         false
                     )
 
-                    val cleanAnswer = qItem.answer
-                        .replace(Regex("!\\[[\\s\\S]*?\\]\\(data:image/[\\s\\S]*?\\)", RegexOption.IGNORE_CASE), "")
-                        .replace(Regex("data:image/[^;\\s\"'>]+;base64,[A-Za-z0-9+/=\\s\\r\\n_-]+", RegexOption.IGNORE_CASE), "")
+                    val (cleanAnswer, _) = extractImagesAndCleanContentSafely(qItem.answer)
                     val spannedAnswer = formatMarkdownSpanned(cleanAnswer)
                     @Suppress("DEPRECATION")
                     val aLayout = StaticLayout(
@@ -2917,8 +2891,9 @@ class QwikSaveClient(
                     yPosition += aLayout.height + 16f
                 }
             } else {
-                // Freeform text/markdown notes
-                val paragraphs = content.split("\n\n").filter { it.isNotBlank() }
+                // Freeform text/markdown notes (guaranteed safe from raw base64)
+                val (cleanFreeformContent, _) = extractImagesAndCleanContentSafely(content)
+                val paragraphs = cleanFreeformContent.split("\n\n").filter { it.isNotBlank() }
                 for (paragraph in paragraphs) {
                     val isQuestionOrHeading = paragraph.startsWith("#") || paragraph.startsWith("1.") ||
                             paragraph.startsWith("2.") || paragraph.startsWith("3.") || paragraph.startsWith("4.") ||
@@ -3059,17 +3034,17 @@ class QwikSaveClient(
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
         }
-        val effectiveBrand = if (!customFooter.isNullOrBlank()) customFooter else "Qwik Save"
+        val effectiveBrand = if (!customFooter.isNullOrBlank()) customFooter else "Qwik Save • https://qwiksave.vercel.app"
         canvas.drawText(effectiveBrand, textLeft, y + 2.5f, brandPaint)
 
-        // Line 2: Developer: Priyal Kumar
+        // Line 2: Developer: Priyal Kumar • https://www.linkedin.com/in/priyal-kumar-29b26529a/
         val devPaint = TextPaint().apply {
             color = Color.rgb(2, 132, 199) // sky-600
-            textSize = 7.5f
+            textSize = 7.0f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
         }
-        canvas.drawText("Developer: Priyal Kumar", textLeft, y + 11.5f, devPaint)
+        canvas.drawText("Developer: Priyal Kumar • https://www.linkedin.com/in/priyal-kumar-29b26529a/", textLeft, y + 11.5f, devPaint)
 
         // Right Side: Page X (clean, without website URL)
         val pageTextPaint = TextPaint().apply {
@@ -3088,8 +3063,12 @@ class QwikSaveClient(
 
     /**
      * Extract structured AI conversation model matching website schema
+     * with automatic on-device fallback for client-side rendered links (e.g. Gemini).
      */
-    suspend fun extractAiConversationModel(shareUrl: String): Result<AiConversationData> = withContext(Dispatchers.IO) {
+    suspend fun extractAiConversationModel(
+        shareUrl: String,
+        context: Context? = null
+    ): Result<AiConversationData> = withContext(Dispatchers.IO) {
         try {
             val endpoint = URL("$baseUrl/api/extract")
             val conn = (endpoint.openConnection() as HttpURLConnection).apply {
@@ -3131,34 +3110,42 @@ class QwikSaveClient(
                         }
                     }
 
-                    val userCount = msgList.count { it.role == "user" }
-                    val assistantCount = msgList.count { it.role == "assistant" }
-                    val estPages = calculateEstimatedPages(msgList)
+                    if (msgList.isNotEmpty()) {
+                        val userCount = msgList.count { it.role == "user" }
+                        val assistantCount = msgList.count { it.role == "assistant" }
+                        val estPages = calculateEstimatedPages(msgList)
 
-                    val convData = AiConversationData(
-                        id = convObj.optString("id", UUID.randomUUID().toString()),
-                        title = title,
-                        sourceUrl = sourceUrl,
-                        messages = msgList,
-                        userCount = userCount,
-                        assistantCount = assistantCount,
-                        totalCount = msgList.size,
-                        estimatedPages = estPages
-                    )
-                    return@withContext Result.success(convData)
+                        val convData = AiConversationData(
+                            id = convObj.optString("id", UUID.randomUUID().toString()),
+                            title = title,
+                            sourceUrl = sourceUrl,
+                            messages = msgList,
+                            userCount = userCount,
+                            assistantCount = assistantCount,
+                            totalCount = msgList.size,
+                            estimatedPages = estPages
+                        )
+                        return@withContext Result.success(convData)
+                    }
                 }
-            } else if (response.isNotBlank()) {
-                try {
-                    val errJson = JSONObject(response)
-                    val err = errJson.optString("error", "Unable to extract shared link.")
-                    return@withContext Result.failure(Exception(err))
-                } catch (_: Exception) {}
             }
-            Result.failure(Exception("Unable to extract shared link (HTTP $responseCode). Please check the URL."))
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (_: Exception) {}
+
+        // Fallback to on-device headless WebView extraction (for Google Gemini & Claude SPAs)
+        if (context != null) {
+            val localResult = AiShareWebViewExtractor.extractFromDevice(context, shareUrl, timeoutMs = 15000)
+            if (localResult.isSuccess && localResult.getOrNull()?.messages?.isNotEmpty() == true) {
+                return@withContext localResult
+            }
         }
+
+        Result.failure(Exception("Could not automatically parse messages from shared AI conversation. Please ensure the link is public."))
     }
+
+    suspend fun extractAiConversationModel(
+        context: Context?,
+        shareUrl: String
+    ): Result<AiConversationData> = extractAiConversationModel(shareUrl, context)
 
     /**
      * Extract shared AI chat conversation as title & text markdown (backwards compatibility).

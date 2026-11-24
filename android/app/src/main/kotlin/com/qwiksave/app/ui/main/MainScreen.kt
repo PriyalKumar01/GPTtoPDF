@@ -42,15 +42,20 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import com.qwiksave.app.R
@@ -353,34 +358,30 @@ fun ExploreTabContent(
                     color = Color(0xFF0F172A),
                     letterSpacing = (-0.5).sp
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Features!",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            style = androidx.compose.ui.text.TextStyle(
-                                brush = Brush.horizontalGradient(
-                                    listOf(Color(0xFF0284C7), Color(0xFF2563EB), Color(0xFFEA580C))
-                                )
-                            ),
-                            letterSpacing = (-0.5).sp
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(text = "🚀", fontSize = 18.sp)
-                    }
-                    // Inverted Curved Underline directly under "Features!" (Ulta curved arc)
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text(
+                        text = "Features!",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        style = androidx.compose.ui.text.TextStyle(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color(0xFF0284C7), Color(0xFF2563EB), Color(0xFFEA580C))
+                            )
+                        ),
+                        letterSpacing = (-0.5).sp
+                    )
+                    // Inverted Curved Underline directly under "Features!" starting strictly from under 'F'
                     Canvas(
                         modifier = Modifier
-                            .width(108.dp)
+                            .width(106.dp)
                             .height(6.dp)
                             .padding(top = 1.dp)
                     ) {
                         val w = size.width
                         val h = size.height
                         val arcPath = Path().apply {
-                            moveTo(2f, h - 1.5f)
-                            quadraticTo(w * 0.5f, 1.5f, w - 2f, h - 1.5f)
+                            moveTo(0f, h - 1.5f)
+                            quadraticTo(w * 0.5f, 1.5f, w, h - 1.5f)
                         }
                         drawPath(
                             path = arcPath,
@@ -658,6 +659,75 @@ fun FeatureGridCard(
 }
 
 /**
+ * Automatically continues numbered lists (1. -> 2. -> 3.) and bullet points (• -> •) on Enter.
+ * Pressing Enter on an empty list item cancels the list continuation.
+ */
+fun handleSmartAutoList(oldText: String, newText: String): String {
+    if (newText.length > oldText.length && newText.contains("\n")) {
+        val diffIdx = newText.indices.firstOrNull { idx -> idx >= oldText.length || newText[idx] != oldText[idx] } ?: return newText
+        if (diffIdx < newText.length && newText[diffIdx] == '\n') {
+            val lineStart = newText.lastIndexOf('\n', diffIdx - 1) + 1
+            val prevLine = newText.substring(lineStart, diffIdx)
+
+            // Numbered list: e.g. "1. ", "2. ", "1) "
+            val numMatch = Regex("^(\\s*)(\\d+)([.)])\\s*(.*)$").find(prevLine)
+            if (numMatch != null) {
+                val indent = numMatch.groupValues[1]
+                val currentNum = numMatch.groupValues[2].toIntOrNull() ?: 1
+                val punct = numMatch.groupValues[3]
+                val content = numMatch.groupValues[4]
+
+                if (content.isBlank()) {
+                    // Empty list item -> user pressed Enter to exit list
+                    return newText.substring(0, lineStart) + newText.substring(diffIdx + 1)
+                } else {
+                    val nextItem = "$indent${currentNum + 1}$punct "
+                    return newText.substring(0, diffIdx + 1) + nextItem + newText.substring(diffIdx + 1)
+                }
+            }
+
+            // Bullet list: e.g. "• ", "- ", "* "
+            val bulletMatch = Regex("^(\\s*)([•\\-*])\\s*(.*)$").find(prevLine)
+            if (bulletMatch != null) {
+                val indent = bulletMatch.groupValues[1]
+                val bulletChar = bulletMatch.groupValues[2]
+                val content = bulletMatch.groupValues[3]
+
+                if (content.isBlank()) {
+                    // Empty bullet item -> user pressed Enter to exit list
+                    return newText.substring(0, lineStart) + newText.substring(diffIdx + 1)
+                } else {
+                    val nextBullet = "$indent$bulletChar "
+                    return newText.substring(0, diffIdx + 1) + nextBullet + newText.substring(diffIdx + 1)
+                }
+            }
+        }
+    }
+    return newText
+}
+
+/**
+ * Wraps selected text with markdown formatting syntax, or inserts placeholder if nothing selected.
+ */
+fun applyMarkdownWrap(tfv: TextFieldValue, prefix: String, suffix: String): TextFieldValue {
+    val text = tfv.text
+    val start = tfv.selection.min
+    val end = tfv.selection.max
+    return if (start != end) {
+        val selected = text.substring(start, end)
+        val newText = text.substring(0, start) + prefix + selected + suffix + text.substring(end)
+        val newCursor = start + prefix.length + selected.length + suffix.length
+        TextFieldValue(newText, TextRange(newCursor))
+    } else {
+        val placeholder = "text"
+        val newText = text.substring(0, start) + prefix + placeholder + suffix + text.substring(start)
+        val selStart = start + prefix.length
+        val selEnd = selStart + placeholder.length
+        TextFieldValue(newText, TextRange(selStart, selEnd))
+    }
+}
+
+/**
  * Professional dropdown menu with dark solid boundary, square corners, and green checkmark indicator.
  */
 @Composable
@@ -668,6 +738,9 @@ fun <T> DropdownSelectorBox(
     onSelect: (T) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var anchorWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val anchorWidthDp = with(density) { anchorWidthPx.toDp() }
     val currentLabel = options.find { it.first == selectedValue }?.second ?: ""
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -675,7 +748,9 @@ fun <T> DropdownSelectorBox(
         Box(modifier = Modifier.fillMaxWidth()) {
             OutlinedCard(
                 onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { coordinates -> anchorWidthPx = coordinates.size.width },
                 shape = RoundedCornerShape(4.dp),
                 colors = CardDefaults.outlinedCardColors(containerColor = Color.White),
                 border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF0F172A))
@@ -708,20 +783,22 @@ fun <T> DropdownSelectorBox(
             DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .fillMaxWidth(0.88f)
+                modifier = (if (anchorWidthDp > 0.dp) Modifier.width(anchorWidthDp) else Modifier.fillMaxWidth())
                     .background(Color.White)
                     .border(1.2.dp, Color(0xFF0F172A), RoundedCornerShape(4.dp))
             ) {
-                options.forEach { (key, label) ->
+                options.forEachIndexed { index, (key, label) ->
                     val isSelected = key == selectedValue
                     DropdownMenuItem(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (isSelected) Color(0xFFECFDF5) else Color.White),
                         text = {
                             Text(
                                 text = label,
                                 fontSize = 11.5.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color(0xFF0F172A) else Color(0xFF475569)
+                                color = if (isSelected) Color(0xFF065F46) else Color(0xFF334155)
                             )
                         },
                         trailingIcon = {
@@ -729,7 +806,7 @@ fun <T> DropdownSelectorBox(
                                 Icon(
                                     Icons.Default.Check,
                                     contentDescription = "Selected",
-                                    tint = Color(0xFF10B981),
+                                    tint = Color(0xFF059669),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -739,6 +816,12 @@ fun <T> DropdownSelectorBox(
                             expanded = false
                         }
                     )
+                    if (index < options.size - 1) {
+                        HorizontalDivider(
+                            color = Color(0xFFE2E8F0),
+                            thickness = 0.8.dp
+                        )
+                    }
                 }
             }
         }
@@ -833,31 +916,55 @@ fun PdfCustomizationAccordion(
                 onSelect = onPartnerBadgeScopeChange
             )
 
-            // Checkbox Toggles (tightly grouped, checked by default)
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // Checkbox Toggles (tightly grouped, checked by default, full row clickable)
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onIncludeTitleChange(!includeTitleToggle) }
+                        .padding(vertical = 1.dp)
+                ) {
                     Checkbox(
                         checked = includeTitleToggle,
                         onCheckedChange = onIncludeTitleChange,
+                        modifier = Modifier.size(24.dp),
                         colors = CheckboxDefaults.colors(checkedColor = Color(0xFF10B981), checkmarkColor = Color.White)
                     )
-                    Text("Include Document Title Banner", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Include Document Title Banner", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onIncludeDateChange(!includeDateToggle) }
+                        .padding(vertical = 1.dp)
+                ) {
                     Checkbox(
                         checked = includeDateToggle,
                         onCheckedChange = onIncludeDateChange,
+                        modifier = Modifier.size(24.dp),
                         colors = CheckboxDefaults.colors(checkedColor = Color(0xFF10B981), checkmarkColor = Color.White)
                     )
-                    Text("Include Export Date & Time", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Include Export Date & Time", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onIncludePageNumbersChange(!includePageNumbersToggle) }
+                        .padding(vertical = 1.dp)
+                ) {
                     Checkbox(
                         checked = includePageNumbersToggle,
                         onCheckedChange = onIncludePageNumbersChange,
+                        modifier = Modifier.size(24.dp),
                         colors = CheckboxDefaults.colors(checkedColor = Color(0xFF10B981), checkmarkColor = Color.White)
                     )
-                    Text("Include Page Numbers", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Include Page Numbers", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
                 }
             }
 
@@ -1206,7 +1313,7 @@ fun PdfToolsTabContent(
                                         if (aiShareUrl.isNotBlank()) {
                                             isExtractingConversation = true
                                             coroutineScope.launch {
-                                                val res = client.extractAiConversationModel(aiShareUrl)
+                                                val res = client.extractAiConversationModel(context, aiShareUrl)
                                                 isExtractingConversation = false
                                                 res.onSuccess { model ->
                                                     extractedConversation = model
@@ -1339,7 +1446,9 @@ fun PdfToolsTabContent(
                                 ) {
                                     OutlinedButton(
                                         onClick = { showCustomizationOptions = !showCustomizationOptions },
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Icon(
@@ -1349,8 +1458,8 @@ fun PdfToolsTabContent(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            if (showCustomizationOptions) "Hide Options" else "Formatting Options",
-                                            fontSize = 11.sp,
+                                            if (showCustomizationOptions) "Hide Options" else "Customization",
+                                            fontSize = 11.5.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                     }
@@ -1392,7 +1501,9 @@ fun PdfToolsTabContent(
                                             }
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp),
                                         shape = RoundedCornerShape(8.dp),
                                         enabled = !isNotesGenerating
                                     ) {
@@ -1649,7 +1760,9 @@ fun PdfToolsTabContent(
                             ) {
                                 OutlinedButton(
                                     onClick = { showCustomizationOptions = !showCustomizationOptions },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Icon(
@@ -1659,8 +1772,8 @@ fun PdfToolsTabContent(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        if (showCustomizationOptions) "Hide Options" else "Formatting Options",
-                                        fontSize = 11.sp,
+                                        if (showCustomizationOptions) "Hide Options" else "Customization",
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -1706,7 +1819,9 @@ fun PdfToolsTabContent(
                                         }
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp),
                                     shape = RoundedCornerShape(8.dp),
                                     enabled = !isNotesGenerating
                                 ) {
@@ -1780,9 +1895,112 @@ fun PdfToolsTabContent(
                                 shape = RoundedCornerShape(8.dp)
                             )
 
+                            var directNotesTfv by remember { mutableStateOf(TextFieldValue(directNotesContent)) }
+
+                            // Quick Markdown Formatting Toolbar for Direct Notes
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFE2E8F0), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Format:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
+
+                                // Bold [B]
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.White)
+                                        .clickable {
+                                            val nextTfv = applyMarkdownWrap(directNotesTfv, "**", "**")
+                                            directNotesTfv = nextTfv
+                                            directNotesContent = nextTfv.text
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("B", fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, color = Color(0xFF0F172A))
+                                }
+
+                                // Italic [I]
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.White)
+                                        .clickable {
+                                            val nextTfv = applyMarkdownWrap(directNotesTfv, "*", "*")
+                                            directNotesTfv = nextTfv
+                                            directNotesContent = nextTfv.text
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("I", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 11.sp, color = Color(0xFF0F172A))
+                                }
+
+                                // Bullet Point [•]
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.White)
+                                        .clickable {
+                                            val nextTfv = applyMarkdownWrap(directNotesTfv, "\n• ", "")
+                                            directNotesTfv = nextTfv
+                                            directNotesContent = nextTfv.text
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("• Bullet", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
+                                }
+
+                                // Numbered List [1.]
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.White)
+                                        .clickable {
+                                            val nextTfv = applyMarkdownWrap(directNotesTfv, "\n1. ", "")
+                                            directNotesTfv = nextTfv
+                                            directNotesContent = nextTfv.text
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("1. List", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color(0xFF0F172A))
+                                }
+
+                                // Heading [#]
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.White)
+                                        .clickable {
+                                            val nextTfv = applyMarkdownWrap(directNotesTfv, "\n### ", "\n")
+                                            directNotesTfv = nextTfv
+                                            directNotesContent = nextTfv.text
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("### H3", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                }
+                            }
+
+                            Text(
+                                text = "💡 Tip: Select text to format • Auto-lists continue on Enter • _italic_ • *bold*",
+                                fontSize = 10.sp,
+                                color = Color(0xFF64748B)
+                            )
+
                             OutlinedTextField(
-                                value = directNotesContent,
-                                onValueChange = { directNotesContent = it },
+                                value = directNotesTfv,
+                                onValueChange = { newTfv ->
+                                    val smartText = handleSmartAutoList(directNotesContent, newTfv.text)
+                                    directNotesTfv = if (smartText != newTfv.text) {
+                                        TextFieldValue(smartText, TextRange(smartText.length))
+                                    } else {
+                                        newTfv
+                                    }
+                                    directNotesContent = directNotesTfv.text
+                                },
                                 label = { Text("Study Notes / Lecture Content (Markdown supported)", fontSize = 11.sp) },
                                 placeholder = { Text("Paste or type your comprehensive lecture notes, pointers, or code snippets here...", fontSize = 12.sp, color = Color.Gray) },
                                 minLines = 8,
@@ -1799,7 +2017,9 @@ fun PdfToolsTabContent(
                             ) {
                                 OutlinedButton(
                                     onClick = { showCustomizationOptions = !showCustomizationOptions },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Icon(
@@ -1809,8 +2029,8 @@ fun PdfToolsTabContent(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        if (showCustomizationOptions) "Hide Options" else "Formatting Options",
-                                        fontSize = 11.sp,
+                                        if (showCustomizationOptions) "Hide Options" else "Customization",
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -1857,7 +2077,9 @@ fun PdfToolsTabContent(
                                         }
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp),
                                     shape = RoundedCornerShape(8.dp),
                                     enabled = !isNotesGenerating
                                 ) {
@@ -2015,6 +2237,8 @@ fun PdfToolsTabContent(
                                         maxLines = 3
                                     )
 
+                                    var answerTfv by remember(safeIdx, currentItem.answer) { mutableStateOf(TextFieldValue(currentItem.answer)) }
+
                                     // Quick Markdown Formatting Toolbar for Answer
                                     Row(
                                         modifier = Modifier
@@ -2032,7 +2256,9 @@ fun PdfToolsTabContent(
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(Color.White)
                                                 .clickable {
-                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + " **bold text**")
+                                                    val nextTfv = applyMarkdownWrap(answerTfv, "**", "**")
+                                                    answerTfv = nextTfv
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = nextTfv.text)
                                                 }
                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
@@ -2045,7 +2271,9 @@ fun PdfToolsTabContent(
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(Color.White)
                                                 .clickable {
-                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + " *italic text*")
+                                                    val nextTfv = applyMarkdownWrap(answerTfv, "*", "*")
+                                                    answerTfv = nextTfv
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = nextTfv.text)
                                                 }
                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
@@ -2058,7 +2286,9 @@ fun PdfToolsTabContent(
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(Color.White)
                                                 .clickable {
-                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + "\n• Point: ")
+                                                    val nextTfv = applyMarkdownWrap(answerTfv, "\n• ", "")
+                                                    answerTfv = nextTfv
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = nextTfv.text)
                                                 }
                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
@@ -2071,7 +2301,9 @@ fun PdfToolsTabContent(
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(Color.White)
                                                 .clickable {
-                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + "\n1. Item: ")
+                                                    val nextTfv = applyMarkdownWrap(answerTfv, "\n1. ", "")
+                                                    answerTfv = nextTfv
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = nextTfv.text)
                                                 }
                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
@@ -2084,7 +2316,9 @@ fun PdfToolsTabContent(
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(Color.White)
                                                 .clickable {
-                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = currentItem.answer + "\n### Subsection\n")
+                                                    val nextTfv = applyMarkdownWrap(answerTfv, "\n### ", "\n")
+                                                    answerTfv = nextTfv
+                                                    structuredQuestions[safeIdx] = currentItem.copy(answer = nextTfv.text)
                                                 }
                                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
@@ -2092,11 +2326,23 @@ fun PdfToolsTabContent(
                                         }
                                     }
 
+                                    Text(
+                                        text = "💡 Tip: Select text to format • Auto-lists continue on Enter • _italic_ • *bold*",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF64748B)
+                                    )
+
                                     // Answer / Explanation Input
                                     OutlinedTextField(
-                                        value = currentItem.answer,
-                                        onValueChange = { newA ->
-                                            structuredQuestions[safeIdx] = currentItem.copy(answer = newA)
+                                        value = answerTfv,
+                                        onValueChange = { newTfv ->
+                                            val smartText = handleSmartAutoList(currentItem.answer, newTfv.text)
+                                            answerTfv = if (smartText != newTfv.text) {
+                                                TextFieldValue(smartText, TextRange(smartText.length))
+                                            } else {
+                                                newTfv
+                                            }
+                                            structuredQuestions[safeIdx] = currentItem.copy(answer = answerTfv.text)
                                         },
                                         label = { Text("Answer / Explanation (Paragraphs & Pointers)", fontSize = 11.sp) },
                                         placeholder = { Text("Write your explanation, code or bullet points here...", fontSize = 11.sp, color = Color.Gray) },
@@ -2149,58 +2395,128 @@ fun PdfToolsTabContent(
                             }
                         }
 
-                        // PDF Completion Dialog with 1-Click Open & Share
+                        // PDF Completion Dialog with 1-Click Open & Share (Squarish Modern Card)
                         if (showPdfCompletionDialog && notesPdfFile != null) {
-                            AlertDialog(
-                                onDismissRequest = { showPdfCompletionDialog = false },
-                                title = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("🎓 Academic PDF Ready!", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0F172A))
-                                    }
-                                },
-                                text = {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text(
-                                            text = "Your formatted academic study PDF has been generated and saved to your Downloads/QwikSave folder.",
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF334155)
-                                        )
-                                        Text(
-                                            text = "📄 ${notesPdfFile?.name}",
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Color(0xFF059669)
-                                        )
-                                    }
-                                },
-                                confirmButton = {
-                                    Button(
-                                        onClick = {
-                                            client.openPdfFile(context, notesPdfFile!!)
-                                            showPdfCompletionDialog = false
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                        shape = RoundedCornerShape(8.dp)
+                            Dialog(onDismissRequest = { showPdfCompletionDialog = false }) {
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFE2E8F0)),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.95f)
+                                        .padding(8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Open PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                },
-                                dismissButton = {
-                                    OutlinedButton(
-                                        onClick = {
-                                            client.sharePdfFile(context, notesPdfFile!!)
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF059669))
-                                    ) {
-                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF059669))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Share PDF", fontSize = 11.5.sp, color = Color(0xFF059669))
+                                        // Top Badge Header: App Icon + Hooray!
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            AiNotesLogo(size = 28.dp)
+                                            Text(
+                                                text = "Hooray! Your PDF is Ready! 🎉",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = Color(0xFF0F172A)
+                                            )
+                                        }
+
+                                        // Tagline badge
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color(0xFFECFDF5))
+                                                .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = "⚡ Saved your time & neatly typeset for study",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF065F46)
+                                            )
+                                        }
+
+                                        // File Info Box
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFFF8FAFC))
+                                                .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                                .padding(10.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Default.Description,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFDC2626),
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = notesPdfFile?.name ?: "Academic_Notes.pdf",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF0F172A),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Text(
+                                                        text = "Saved in Downloads/QwikSave",
+                                                        fontSize = 10.5.sp,
+                                                        color = Color(0xFF64748B)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Action Buttons Row: Share PDF (Outlined) + Open PDF (Solid Green)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    client.sharePdfFile(context, notesPdfFile!!)
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(42.dp),
+                                                border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF059669)),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF059669))
+                                            ) {
+                                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Share PDF", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    client.openPdfFile(context, notesPdfFile!!)
+                                                    showPdfCompletionDialog = false
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(42.dp)
+                                            ) {
+                                                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Open PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
                                 }
-                            )
+                            }
                         }
                     }
                 }
@@ -2815,16 +3131,17 @@ fun PdfToolsTabContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                // High-Resolution PDF Tools Illustration Graphic (Borderless, clean integration)
+                // High-Resolution PDF Tools Illustration Graphic (Transparent, zoomed and fitted to screen)
                 Image(
                     painter = painterResource(id = R.drawable.pdf_merge_compress_banner),
                     contentDescription = "PDF Productivity Tools",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(130.dp),
-                    contentScale = ContentScale.Fit
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
                 )
             }
         }

@@ -129,9 +129,9 @@ export class NotesPdfGenerator {
       this.doc.text('College Study', badgeX + 13.5, badgeY + 7.8);
 
       this.doc.setFont('helvetica', 'bold');
-      this.doc.setFontSize(6.0);
+      this.doc.setFontSize(5.5);
       this.doc.setTextColor(2, 132, 199);
-      this.doc.textWithLink('Your Study Hub', badgeX + 13.5, badgeY + 11.2, {
+      this.doc.textWithLink('college-study.netlify.app', badgeX + 13.5, badgeY + 11.2, {
         url: APP_CONFIG.partner.url,
       });
 
@@ -307,10 +307,12 @@ export class NotesPdfGenerator {
       const line = rawLines[i];
       const trimmed = line.trim();
 
-      // Skip empty lines or pure raw base64 leftover artifacts (>30 chars of base64 charset)
+      // Skip empty lines or pure raw base64 leftover artifacts (>= 16 chars of base64 charset without spaces)
       if (
-        trimmed.length > 30 &&
-        /^[A-Za-z0-9+/=]+$/.test(trimmed)
+        (trimmed.length >= 16 && /^[A-Za-z0-9+/=_\-]+$/.test(trimmed) && !trimmed.includes(' ')) ||
+        trimmed.startsWith('![Diagram:') ||
+        trimmed.startsWith('data:image') ||
+        (trimmed.startsWith('![') && trimmed.includes('data:image/'))
       ) {
         i++;
         continue;
@@ -611,7 +613,12 @@ export class NotesPdfGenerator {
       if (line.trim().length > 0) {
         // Strictly skip any residual raw base64 data strings that might have leaked into text
         const tLine = line.trim();
-        if (tLine.length > 35 && /^[A-Za-z0-9+/=_\s-]{35,}$/.test(tLine) && !tLine.includes(' ')) {
+        if (
+          (tLine.length >= 16 && /^[A-Za-z0-9+/=_\-]+$/.test(tLine) && !tLine.includes(' ')) ||
+          tLine.startsWith('data:image') ||
+          tLine.startsWith('![Diagram:') ||
+          (tLine.startsWith('![') && tLine.includes('data:image/'))
+        ) {
           i++;
           continue;
         }
@@ -687,9 +694,9 @@ export class NotesPdfGenerator {
           this.doc.setTextColor(15, 23, 42);
           this.doc.text('College Study', bX + 10.2, bY + 4.5);
           this.doc.setFont('helvetica', 'bold');
-          this.doc.setFontSize(5.0);
+          this.doc.setFontSize(4.8);
           this.doc.setTextColor(2, 132, 199);
-          this.doc.textWithLink('Your Study Hub', bX + 10.2, bY + 7.8, { url: APP_CONFIG.partner.url });
+          this.doc.textWithLink('college-study.netlify.app', bX + 10.2, bY + 7.8, { url: APP_CONFIG.partner.url });
           if ((this.doc as any).link) {
             (this.doc as any).link(bX, bY, bW, bH, { url: APP_CONFIG.partner.url });
           }
