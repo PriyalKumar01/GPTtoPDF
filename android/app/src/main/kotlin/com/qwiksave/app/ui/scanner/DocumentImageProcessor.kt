@@ -409,3 +409,4 @@ object DocumentImageProcessor {
 // scanner-build-step-65
 // scanner-build-step-66
 // scanner-build-step-67
+// scanner-build-step-68
