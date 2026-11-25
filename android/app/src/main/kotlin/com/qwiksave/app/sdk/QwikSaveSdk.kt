@@ -1400,6 +1400,65 @@ class QwikSaveClient(
     }
 
     /**
+     * Create high-resolution document PDF from processed Bitmaps (Scanner Studio).
+     */
+    suspend fun createPdfFromBitmaps(
+        context: Context,
+        bitmaps: List<Bitmap>,
+        outputFileName: String = "QwikSave_Scan.pdf"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val pdfDocument = PdfDocument()
+
+            bitmaps.forEachIndexed { index, bitmap ->
+                val pageWidth = 595
+                val pageHeight = 842
+                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, index + 1).create()
+                val page = pdfDocument.startPage(pageInfo)
+
+                val margin = 20f
+                val availableWidth = pageWidth - (margin * 2)
+                val availableHeight = pageHeight - (margin * 2) - 24f
+
+                val scale = minOf(
+                    availableWidth / bitmap.width.toFloat(),
+                    availableHeight / bitmap.height.toFloat()
+                )
+                val scaledWidth = bitmap.width * scale
+                val scaledHeight = bitmap.height * scale
+                val left = (pageWidth - scaledWidth) / 2f
+                val top = margin + ((availableHeight - scaledHeight) / 2f)
+
+                val canvas = page.canvas
+                val destRect = RectF(left, top, left + scaledWidth, top + scaledHeight)
+                val paint = Paint().apply {
+                    isFilterBitmap = true
+                    isAntiAlias = true
+                }
+                canvas.drawBitmap(bitmap, null, destRect, paint)
+
+                val textPaint = Paint().apply {
+                    color = Color.rgb(100, 116, 139)
+                    textSize = 8.5f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    isAntiAlias = true
+                }
+                val footerText = "Page ${index + 1} of ${bitmaps.size} • Qwik Save Document Scanner"
+                val footerWidth = textPaint.measureText(footerText)
+                canvas.drawText(footerText, (pageWidth - footerWidth) / 2f, pageHeight - 12f, textPaint)
+
+                pdfDocument.finishPage(page)
+            }
+
+            val outputFile = writePdfSafely(context, pdfDocument, outputFileName)
+            pdfDocument.close()
+            Result.success(outputFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Safely writes a PdfDocument to both app external storage (for instant File access)
      * and publishes it to the public Downloads/QwikSave directory using MediaStore on Android 10+ (API 29+).
      * This eliminates all "open failed: EACCES (Permission denied)" errors.

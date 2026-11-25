@@ -63,6 +63,7 @@ import com.qwiksave.app.battery.BatteryStudioDialog
 import com.qwiksave.app.data.UserPreferences
 import com.qwiksave.app.sdk.AiChatMessage
 import com.qwiksave.app.sdk.AiConversationData
+import com.qwiksave.app.ui.scanner.ScannerStudio
 import com.qwiksave.app.sdk.ExamQuestionItem
 import com.qwiksave.app.sdk.ExtractedMedia
 import com.qwiksave.app.sdk.QwikSaveClient
@@ -486,9 +487,9 @@ fun ExploreTabContent(
                 )
                 FeatureGridCard(
                     modifier = Modifier.weight(1f),
-                    title = "Image to PDF",
-                    subtitle = "Convert Photos to Clean PDF",
-                    badge = "Fast",
+                    title = "Doc Scanner",
+                    subtitle = "Scan, Crop & Export PDF",
+                    badge = "Pro",
                     badgeColor = Color(0xFFDC2626),
                     cardBgColor = Color(0xFFFEF2F2),
                     logo = { PdfSuiteLogo(size = 64.dp) },
@@ -1044,7 +1045,7 @@ fun PdfToolsTabContent(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    val subTabs = listOf("AI Study Notes", "Image ↔ PDF", "Merge & Compress")
+    val subTabs = listOf("AI Study Notes", "Doc Scanner", "Merge & Compress")
 
     // Image to PDF states
     var selectedImageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -1052,6 +1053,8 @@ fun PdfToolsTabContent(
     var pdfOutputName by remember { mutableStateOf("My_Document") }
     var isPdfConverting by remember { mutableStateOf(false) }
     var pdfGeneratedFile by remember { mutableStateOf<File?>(null) }
+    var scannerGeneratedPdfFile by remember { mutableStateOf<File?>(null) }
+    var showScannerPdfCompletionDialog by remember { mutableStateOf(false) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
@@ -2523,181 +2526,134 @@ fun PdfToolsTabContent(
             }
 
             1 -> {
-                // Image to PDF Section WITH PREVIEW, ROTATE & REMOVE
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            PdfSuiteLogo(size = 32.dp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("Image to PDF Converter", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                Text("Select pictures, rotate, re-order & convert to A4 PDF", fontSize = 11.sp, color = Color(0xFF64748B))
-                            }
-                        }
+                // OKEN SCANNER / CAMSCANNER STYLE DOCUMENT SCANNER STUDIO
+                ScannerStudio(
+                    client = client,
+                    onPdfGenerated = { file ->
+                        scannerGeneratedPdfFile = file
+                        showScannerPdfCompletionDialog = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(640.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
 
-                        OutlinedButton(
-                            onClick = { imagePickerLauncher.launch("image/*") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
+                if (showScannerPdfCompletionDialog && scannerGeneratedPdfFile != null) {
+                    Dialog(onDismissRequest = { showScannerPdfCompletionDialog = false }) {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFE2E8F0)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth(0.95f)
+                                .padding(8.dp)
                         ) {
-                            Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (selectedImageUris.isEmpty()) "Select Images from Gallery" else "Selected ${selectedImageUris.size} Images (Tap to add more)",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        // Interactive Preview Grid with Rotate & Remove
-                        if (selectedImageUris.isNotEmpty()) {
-                            Text(
-                                text = "Photos Preview (${selectedImageUris.size}): Tap rotate or ✕ to adjust",
-                                fontSize = 11.sp,
-                                color = Color(0xFF0F172A),
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                itemsIndexed(selectedImageUris) { index, uri ->
-                                    val rotation = imageRotations[index] ?: 0
-                                    Box(
-                                        modifier = Modifier
-                                            .size(90.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFFF1F5F9))
-                                            .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
-                                    ) {
-                                        val bitmap = remember(uri) {
-                                            try {
-                                                val input = context.contentResolver.openInputStream(uri)
-                                                val options = BitmapFactory.Options().apply { inSampleSize = 4 }
-                                                val b = BitmapFactory.decodeStream(input, null, options)
-                                                input?.close()
-                                                b
-                                            } catch (_: Exception) { null }
-                                        }
-
-                                        if (bitmap != null) {
-                                            Image(
-                                                bitmap = bitmap.asImageBitmap(),
-                                                contentDescription = "Photo ${index + 1}",
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .rotate(rotation.toFloat()),
-                                                contentScale = ContentScale.Crop
-                                            )
-                                        } else {
-                                            Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.align(Alignment.Center))
-                                        }
-
-                                        // Rotate Button (Bottom Left)
-                                        IconButton(
-                                            onClick = {
-                                                val current = imageRotations[index] ?: 0
-                                                imageRotations = imageRotations + (index to (current + 90) % 360)
-                                            },
-                                            modifier = Modifier
-                                                .align(Alignment.BottomStart)
-                                                .size(26.dp)
-                                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(topEnd = 6.dp))
-                                        ) {
-                                            Icon(Icons.Default.RotateRight, contentDescription = "Rotate", tint = Color.White, modifier = Modifier.size(14.dp))
-                                        }
-
-                                        // Delete Button (Top Right)
-                                        IconButton(
-                                            onClick = {
-                                                val mutable = selectedImageUris.toMutableList()
-                                                mutable.removeAt(index)
-                                                selectedImageUris = mutable
-                                            },
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .size(26.dp)
-                                                .background(Color.Red.copy(alpha = 0.8f), RoundedCornerShape(bottomStart = 6.dp))
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(14.dp))
-                                        }
-
-                                        // Page number label (Bottom Right)
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(topStart = 4.dp))
-                                            .padding(horizontal = 4.dp, vertical = 1.dp)
-                                        ) {
-                                            Text("#${index + 1}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = pdfOutputName,
-                            onValueChange = { pdfOutputName = it },
-                            label = { Text("Output PDF File Name", fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        )
-
-                        Button(
-                            onClick = {
-                                if (selectedImageUris.isEmpty()) {
-                                    Toast.makeText(context, "Please select at least 1 image first", Toast.LENGTH_SHORT).show()
-                                    return@Button
-                                }
-                                isPdfConverting = true
-                                coroutineScope.launch {
-                                    val cleanName = pdfOutputName.replace(Regex("[^a-zA-Z0-9_-]"), "_") + ".pdf"
-                                    val result = client.convertImagesToPdf(
-                                        context = context,
-                                        imageUris = selectedImageUris,
-                                        rotations = imageRotations,
-                                        outputFileName = cleanName
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    PdfSuiteLogo(size = 28.dp)
+                                    Text(
+                                        text = "Hooray! Document PDF Ready! 🎉",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = Color(0xFF0F172A)
                                     )
-                                    isPdfConverting = false
-                                    result.onSuccess { file ->
-                                        pdfGeneratedFile = file
-                                        Toast.makeText(context, "A4 PDF Saved to Downloads/QwikSave!", Toast.LENGTH_LONG).show()
-                                    }.onFailure { err ->
-                                        Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFECFDF5))
+                                        .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "⚡ Scanned, cropped & typeset with high fidelity",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF065F46)
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFF8FAFC))
+                                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Description,
+                                            contentDescription = null,
+                                            tint = Color(0xFFDC2626),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = scannerGeneratedPdfFile?.name ?: "Scanned_Document.pdf",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF0F172A),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "Saved in Downloads/QwikSave",
+                                                fontSize = 10.5.sp,
+                                                color = Color(0xFF64748B)
+                                            )
+                                        }
                                     }
                                 }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !isPdfConverting && selectedImageUris.isNotEmpty()
-                        ) {
-                            if (isPdfConverting) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Generating A4 PDF...", fontSize = 12.sp)
-                            } else {
-                                Text("Generate A4 PDF (${selectedImageUris.size} Photos) 📄", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
 
-                        pdfGeneratedFile?.let { file ->
-                            PdfResultCard(
-                                file = file,
-                                onOpen = { openFileWithIntent(context, file, "application/pdf") },
-                                onShare = { client.shareFile(context, file, "application/pdf") }
-                            )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            client.sharePdfFile(context, scannerGeneratedPdfFile!!)
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF059669)),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF059669))
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Share PDF", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            client.openPdfFile(context, scannerGeneratedPdfFile!!)
+                                            showScannerPdfCompletionDialog = false
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                    ) {
+                                        Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Open PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
