@@ -365,3 +365,4 @@ object DocumentImageProcessor {
 // scanner-build-step-21
 // scanner-build-step-22
 // scanner-build-step-23
+// scanner-build-step-24
