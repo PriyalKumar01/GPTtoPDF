@@ -341,3 +341,5 @@ object DocumentImageProcessor {
         return output
     }
 }
+
+// scanner-build-step-1
