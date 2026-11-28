@@ -46,6 +46,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<ApiExtractRes
           ? 404
           : result.errorCode === 'BOT_PROTECTED'
           ? 403
+          : result.errorCode === 'EMPTY_CONVERSATION'
+          ? 422
           : 500;
 
       return NextResponse.json(result, { status: statusCode });

@@ -26,7 +26,22 @@ import kotlin.coroutines.resume
 object AiShareWebViewExtractor {
 
     private const val DESKTOP_UA =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+    /**
+     * Checks if a string is promotional placeholder / carousel teaser from search engines.
+     */
+    fun isPromotionalOrCarousel(text: String): Boolean {
+        val t = text.trim()
+        if (t.contains("Generate an image of a futuristic car", ignoreCase = true)) return true
+        if (t.contains("Rewrite this email draft", ignoreCase = true)) return true
+        if (t.contains("Give me a list of 5 well-known sci-fi books", ignoreCase = true)) return true
+        if (t.contains("Give me caption options to tell the world about my new fur baby", ignoreCase = true)) return true
+        if (t.contains("The Neo-Glam Revival", ignoreCase = true)) return true
+        if (t.contains("How to Set Up the Perfect Movie Marathon Night", ignoreCase = true)) return true
+        if (t.contains("WIZ_global_data", ignoreCase = true)) return true
+        return false
+    }
 
     /**
      * Checks if a string contains internal script tags, telemetry JSON, or garbage config.
@@ -34,6 +49,7 @@ object AiShareWebViewExtractor {
     fun isGarbageScriptOrTelemetry(text: String): Boolean {
         val t = text.trim()
         if (t.isEmpty()) return true
+        if (isPromotionalOrCarousel(t)) return true
         if (t.startsWith("{\"") || t.startsWith("{ \"") || t.startsWith("[{\"") || t.startsWith("{\\\"")) return true
         if (t.contains("dangerousOriginBypassScriptNonce", ignoreCase = true)) return true
         if (t.contains("statsig::", ignoreCase = true)) return true
@@ -67,8 +83,8 @@ object AiShareWebViewExtractor {
             "https://$trimmed"
         }
 
-        // 1. Direct ChatGPT API Extraction on-device
-        val chatGptMatch = Regex("/share/([a-zA-Z0-9_-]{10,80})", RegexOption.IGNORE_CASE).find(normalizedUrl)
+        // 1. Direct ChatGPT API Extraction on-device (Only for chatgpt.com domain)
+        val chatGptMatch = Regex("chatgpt\\.com/share/([a-zA-Z0-9_-]{10,80})", RegexOption.IGNORE_CASE).find(normalizedUrl)
         if (chatGptMatch != null) {
             val shareId = chatGptMatch.groupValues[1]
             val chatGptRes = extractChatGPTDirect(normalizedUrl, shareId)
@@ -77,15 +93,20 @@ object AiShareWebViewExtractor {
             }
         }
 
-        // 2. Direct fast HTTP extraction for standard web pages
-        try {
-            val fastRes = extractViaHttp(normalizedUrl)
-            if (fastRes.isSuccess && fastRes.getOrNull()?.messages?.isNotEmpty() == true) {
-                return fastRes
-            }
-        } catch (_: Exception) {}
+        // 2. Direct fast HTTP extraction for standard web pages (SKIP for Gemini / Claude / ChatGPT SPAs)
+        val isSpaUrl = normalizedUrl.contains("gemini.google", ignoreCase = true) ||
+                       normalizedUrl.contains("claude.ai", ignoreCase = true) ||
+                       normalizedUrl.contains("chatgpt.com", ignoreCase = true)
+        if (!isSpaUrl) {
+            try {
+                val fastRes = extractViaHttp(normalizedUrl)
+                if (fastRes.isSuccess && fastRes.getOrNull()?.messages?.isNotEmpty() == true) {
+                    return fastRes
+                }
+            } catch (_: Exception) {}
+        }
 
-        // 3. Fallback to headless WebView to handle client-side rendering (Google Gemini / Claude SPAs)
+        // 3. Headless WebView to handle client-side rendering (Google Gemini / Claude SPAs)
         return extractViaWebView(context, normalizedUrl, timeoutMs)
     }
 
@@ -234,8 +255,9 @@ object AiShareWebViewExtractor {
                     webView = WebView(context.applicationContext).apply {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
+                        settings.databaseEnabled = true
                         settings.userAgentString = DESKTOP_UA
-                        settings.loadsImagesAutomatically = false
+                        settings.loadsImagesAutomatically = true
 
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
@@ -249,77 +271,163 @@ object AiShareWebViewExtractor {
                     // Polling loop to inspect rendered DOM
                     val job = launch(Dispatchers.Main) {
                         var attempts = 0
-                        while (isActive && !isDone && attempts < 14) {
-                            delay(800)
+                        while (isActive && !isDone && attempts < 36) {
+                            delay(700)
                             attempts++
                             val currentWv = webView ?: break
 
                             val jsInspect = """
                                 (function() {
                                     try {
-                                        // 1. Remove non-content junk elements from DOM
-                                        var junk = document.querySelectorAll('script, style, noscript, meta, link, header, footer, nav');
-                                        for (var k = 0; k < junk.length; k++) {
-                                            try { junk[k].parentNode.removeChild(junk[k]); } catch(e) {}
+                                        var isClaudeLogin = false;
+                                        try {
+                                            var curHref = window.location.href || '';
+                                            if (curHref.indexOf('claude.ai/login') !== -1 || curHref.indexOf('returnTo=') !== -1) {
+                                                isClaudeLogin = true;
+                                            }
+                                        } catch(e) {}
+
+                                        var title = '';
+                                        var titleEl = document.querySelector('share-viewer h1, h1.headline, .share-title-section h1, h1');
+                                        if (titleEl && titleEl.innerText && titleEl.innerText.trim()) {
+                                            title = titleEl.innerText.trim();
+                                        }
+                                        if (!title) {
+                                            var dt = document.title || '';
+                                            title = dt.replace(/^[\s\u200E\u200F]+/, '').replace(/[-|].*$/, '').replace(/Gemini\s*-\s*/i, '').replace(/Claude\s*-\s*/i, '').trim();
                                         }
 
-                                        var title = document.title || '';
                                         var users = [];
                                         var models = [];
+                                        var ordered = [];
 
-                                        // 1. Check window.WIZ_global_data for Google Gemini turns
-                                        try {
-                                            if (window.WIZ_global_data) {
-                                                for (var key in window.WIZ_global_data) {
-                                                    var val = window.WIZ_global_data[key];
-                                                    if (typeof val === 'string' && val.indexOf('∞') !== -1) {
-                                                        var turns = val.split('∰');
-                                                        for (var t = 0; t < turns.length; t++) {
-                                                            var parts = turns[t].split('∞');
-                                                            if (parts.length >= 2) {
-                                                                var u = parts[0].replace(/\\u003c/g, '<').replace(/\\u003e/g, '>').replace(/<[^>]+>/g, ' ').trim();
-                                                                var m = parts[parts.length - 1].replace(/\\u003c/g, '<').replace(/\\u003e/g, '>').replace(/<[^>]+>/g, ' ').trim();
-                                                                if (u && users.indexOf(u) === -1) users.push(u);
-                                                                if (m && models.indexOf(m) === -1) models.push(m);
-                                                            }
+                                        // 1. Check Claude __NEXT_DATA__ JSON payload & scripts
+                                        var nextDataEl = document.getElementById('__NEXT_DATA__');
+                                        if (nextDataEl && nextDataEl.textContent) {
+                                            try {
+                                                var nd = JSON.parse(nextDataEl.textContent);
+                                                var chat = nd.props && nd.props.pageProps ? (nd.props.pageProps.sharedConversation || nd.props.pageProps.sharedChat || nd.props.pageProps.chat) : null;
+                                                if (chat) {
+                                                    if (chat.name || chat.title) title = chat.name || chat.title;
+                                                    var chatMsgs = chat.chat_messages || chat.messages || [];
+                                                    for (var mi = 0; mi < chatMsgs.length; mi++) {
+                                                        var cm = chatMsgs[mi];
+                                                        var role = cm.sender === 'human' ? 'user' : 'assistant';
+                                                        var text = cm.text || (Array.isArray(cm.content) ? cm.content.map(function(c) { return c.text || ''; }).join('\n') : '');
+                                                        if (text && text.trim().length > 0) {
+                                                            ordered.push({ role: role, text: text.trim() });
+                                                            if (role === 'user') users.push(text.trim());
+                                                            else models.push(text.trim());
+                                                        }
+                                                    }
+                                                }
+                                            } catch(e) {}
+                                        }
+
+                                        // 2. Check Google Gemini Lit web components (Strictly isolate share-viewer, ignore promo carousel)
+                                        if (ordered.length === 0 && users.length === 0 && models.length === 0) {
+                                            var shareViewer = document.querySelector('share-viewer') || document.querySelector('main');
+                                            if (shareViewer) {
+                                                var turns = shareViewer.querySelectorAll('share-turn-viewer, .share-turn, .conversation-turn');
+                                                if (turns && turns.length > 0) {
+                                                    for (var t = 0; t < turns.length; t++) {
+                                                        var turnEl = turns[t];
+                                                        var uEl = turnEl.querySelector('.query-text, user-query .query-text, .user-query-container, .query-content, user-query');
+                                                        var mEl = turnEl.querySelector('message-content .markdown-main-panel, message-content .markdown, response-container message-content, message-content, .model-response, div.markdown');
+                                                        
+                                                        // Pierce ShadowRoot if present
+                                                        if (!uEl && turnEl.shadowRoot) uEl = turnEl.shadowRoot.querySelector('.query-text, user-query, .query-content');
+                                                        if (!mEl && turnEl.shadowRoot) mEl = turnEl.shadowRoot.querySelector('message-content, .markdown, .model-response');
+
+                                                        var uText = uEl && (uEl.innerText || uEl.textContent) ? (uEl.innerText || uEl.textContent).trim() : '';
+                                                        var mText = mEl && (mEl.innerText || mEl.textContent) ? (mEl.innerText || mEl.textContent).trim() : '';
+
+                                                        // Ignore Google promotional carousel teaser cards
+                                                        if (mText.indexOf("Sure, here is an image of a futuristic car") !== -1 ||
+                                                            mText.indexOf("The leaf in the image is covered in rust") !== -1 ||
+                                                            mText.indexOf("new fur baby, Finn") !== -1) {
+                                                            continue;
+                                                        }
+
+                                                        if (uText.length > 0 && !uText.startsWith('{"') && !uText.includes('WIZ_global_data')) {
+                                                            ordered.push({ role: 'user', text: uText });
+                                                            users.push(uText);
+                                                        }
+                                                        if (mText.length > 0 && !mText.startsWith('{"') && !mText.includes('WIZ_global_data')) {
+                                                            ordered.push({ role: 'assistant', text: mText });
+                                                            models.push(mText);
                                                         }
                                                     }
                                                 }
                                             }
-                                        } catch (wizErr) {}
+                                        }
 
-                                        // 2. DOM selectors for standard rendered turns
-                                        var userNodes = document.querySelectorAll('.query-content, [data-test-id="user-query"], .user-query, message-content.user-message, div[data-message-author-role="user"], [data-message-author-role="user"]');
-                                        var modelNodes = document.querySelectorAll('.model-response, [data-test-id="model-response"], .model-response-text, .response-content, message-content.model-message, div[data-message-author-role="model"], div[data-message-author-role="assistant"], [data-message-author-role="assistant"]');
-                                        
-                                        if (users.length === 0) {
+                                        // 2b. Gemini WIZ_global_data data payload fallback
+                                        if (ordered.length === 0 && users.length === 0 && models.length === 0 && window.WIZ_global_data) {
+                                            try {
+                                                for (var wKey in window.WIZ_global_data) {
+                                                    var wVal = window.WIZ_global_data[wKey];
+                                                    if (typeof wVal === 'string' && wVal.indexOf('∰') !== -1) {
+                                                        var gTurns = wVal.split('∰');
+                                                        for (var gk = 0; gk < gTurns.length; gk++) {
+                                                            var gParts = gTurns[gk].split('∞');
+                                                            if (gParts.length >= 2) {
+                                                                var gu = gParts[0].trim();
+                                                                var gm = gParts[gParts.length - 1].replace(/<[^>]*>/g, '').trim();
+                                                                if (gu.length > 0 && gu.indexOf('http') === -1) {
+                                                                    ordered.push({ role: 'user', text: gu });
+                                                                    users.push(gu);
+                                                                }
+                                                                if (gm.length > 0 && gm.indexOf('http') === -1) {
+                                                                    ordered.push({ role: 'assistant', text: gm });
+                                                                    models.push(gm);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } catch(_wErr) {}
+                                        }
+
+                                        // 3. DOM selectors for standard rendered turns (ChatGPT, Claude web, etc. - skip on Gemini to avoid carousel)
+                                        var isGeminiDomain = window.location.hostname.indexOf('gemini.google') !== -1 || document.querySelector('share-viewer') !== null;
+                                        if (!isGeminiDomain && ordered.length === 0 && users.length === 0 && models.length === 0) {
+                                            var userNodes = document.querySelectorAll('.query-content, [data-test-id="user-query"], .user-query, message-content.user-message, div[data-message-author-role="user"], [data-message-author-role="user"], .font-user-message, div[data-testid="user-message"]');
+                                            var modelNodes = document.querySelectorAll('.model-response, [data-test-id="model-response"], .model-response-text, .response-content, message-content, message-content.model-message, div[data-message-author-role="model"], div[data-message-author-role="assistant"], [data-message-author-role="assistant"], .font-claude-message, div[data-testid="claude-message"], .prose');
+                                            
                                             for (var i = 0; i < userNodes.length; i++) {
                                                 var u = userNodes[i].innerText ? userNodes[i].innerText.trim() : '';
-                                                if (u.length > 0 && !u.startsWith('{"') && !u.startsWith('{\\"')) users.push(u);
+                                                if (u.length > 0 && !u.startsWith('{"') && !u.startsWith('{\\"')) {
+                                                    ordered.push({ role: 'user', text: u });
+                                                    users.push(u);
+                                                }
                                             }
-                                        }
-                                        
-                                        if (models.length === 0) {
+                                            
                                             for (var j = 0; j < modelNodes.length; j++) {
                                                 var m = modelNodes[j].innerText ? modelNodes[j].innerText.trim() : '';
-                                                if (m.length > 0 && !m.startsWith('{"') && !m.startsWith('{\\"')) models.push(m);
+                                                if (m.length > 0 && !m.startsWith('{"') && !m.startsWith('{\\"')) {
+                                                    ordered.push({ role: 'assistant', text: m });
+                                                    models.push(m);
+                                                }
                                             }
                                         }
-                                        
-                                        // If specific CSS classes didn't match, inspect readable article or paragraphs
+
+                                        // 4. Fallback: inspect readable article or paragraphs
                                         var paras = [];
-                                        if (users.length === 0 && models.length === 0) {
-                                            var pNodes = document.querySelectorAll('article p, main p, .conversation p');
+                                        if (ordered.length === 0 && users.length === 0 && models.length === 0) {
+                                            var pNodes = document.querySelectorAll('article p, main p, .conversation p, .chat-history p');
                                             for (var p = 0; p < pNodes.length; p++) {
                                                 var pt = pNodes[p].innerText ? pNodes[p].innerText.trim() : '';
-                                                if (pt.length > 25 && !pt.startsWith('{"') && !pt.startsWith('{\\"')) {
+                                                if (pt.length > 25 && !pt.startsWith('{"') && !pt.startsWith('{\\"') && !pt.includes('WIZ_global_data')) {
                                                     paras.push(pt);
                                                 }
                                             }
                                         }
 
                                         return JSON.stringify({
+                                            isClaudeLogin: isClaudeLogin,
                                             title: title,
+                                            ordered: ordered,
                                             users: users,
                                             models: models,
                                             paras: paras
@@ -340,16 +448,36 @@ object AiShareWebViewExtractor {
                                     }
 
                                     val obj = JSONObject(cleanedRaw)
-                                    val titleRaw = obj.optString("title", "AI Study Notes")
-                                    val cleanTitle = titleRaw.replace("- Gemini", "").replace("Google Gemini -", "").replace("‎", "").trim()
-                                        .ifBlank { "Extracted AI Conversation" }
-
                                     val userArr = obj.optJSONArray("users")
                                     val modelArr = obj.optJSONArray("models")
+                                    val rawTitle = obj.optString("title", "").trim()
+                                    val cleanTitle = if (rawTitle.isNotBlank() && !isGarbageScriptOrTelemetry(rawTitle)) rawTitle else "AI Conversation"
+
+                                    if (obj.optBoolean("isClaudeLogin", false) && (userArr == null || userArr.length() == 0) && (modelArr == null || modelArr.length() == 0)) {
+                                        finishWithError("Claude requires an active account login to view shared links. Please paste your conversation text directly into the 'Direct Notes' tab!")
+                                        return@evaluateJavascript
+                                    }
 
                                     val msgList = mutableListOf<AiChatMessage>()
+                                    val orderedArr = obj.optJSONArray("ordered")
 
-                                    if (userArr != null && modelArr != null && (userArr.length() > 0 || modelArr.length() > 0)) {
+                                    if (orderedArr != null && orderedArr.length() > 0) {
+                                        for (k in 0 until orderedArr.length()) {
+                                            val oObj = orderedArr.getJSONObject(k)
+                                            val role = oObj.optString("role", "assistant")
+                                            val txt = oObj.optString("text", "").trim()
+                                            if (txt.isNotBlank() && !isGarbageScriptOrTelemetry(txt)) {
+                                                msgList.add(
+                                                    AiChatMessage(
+                                                        id = "msg-$k",
+                                                        role = if (role == "user") "user" else "assistant",
+                                                        authorName = if (role == "user") "USER" else "ASSISTANT",
+                                                        content = txt
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    } else if (userArr != null && modelArr != null && (userArr.length() > 0 || modelArr.length() > 0)) {
                                         val maxLen = maxOf(userArr.length(), modelArr.length())
                                         for (k in 0 until maxLen) {
                                             if (k < userArr.length()) {

@@ -21,13 +21,26 @@ import {
   Compass,
   Info,
   HelpCircle,
+  User,
+  LogOut,
 } from 'lucide-react';
 import { InstagramIcon, FacebookIcon, YouTubeIcon } from '@/components/BrandIcons';
 import { useTheme } from '@/lib/theme-context';
 import { APP_CONFIG } from '@/lib/config';
+import { useAuth } from '@/lib/use-auth';
+import { AuthModal } from '@/components/AuthModal';
 
 export function Navbar() {
   const { theme, toggleTheme } = useTheme();
+  const {
+    user,
+    isAuthenticated,
+    isAuthModalOpen,
+    openAuthModal,
+    closeAuthModal,
+    signOut,
+    handleAuthSuccess,
+  } = useAuth();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -346,6 +359,39 @@ export function Navbar() {
             )}
           </button>
 
+          {/* User Account / Sign In */}
+          {isAuthenticated && user ? (
+            <div className="flex items-center gap-1.5 pl-1">
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-slate-100 dark:bg-[#141D2B] border border-slate-200 dark:border-[#263448] text-xs"
+                title={`Signed in as ${user.email}`}
+              >
+                <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px] uppercase">
+                  {user.name.charAt(0)}
+                </div>
+                <span className="font-semibold text-slate-800 dark:text-[#E8EDF5] max-w-[100px] truncate hidden md:inline">
+                  {user.name}
+                </span>
+              </div>
+              <button
+                onClick={signOut}
+                title="Sign Out"
+                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-500 rounded-[2px] bg-slate-100 dark:bg-[#141D2B] border border-slate-200 dark:border-[#263448] transition-colors"
+                aria-label="Sign Out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => openAuthModal()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-[2px] shadow-sm transition-all"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+          )}
+
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="lg:hidden w-8 h-8 flex items-center justify-center rounded-[2px] bg-slate-100 dark:bg-[#141D2B] border border-slate-200 dark:border-[#263448] text-slate-700 dark:text-[#94A3B8]"
@@ -359,6 +405,44 @@ export function Navbar() {
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-b border-slate-200 dark:border-[#263448] bg-white dark:bg-[#0F1623] px-4 py-3 space-y-3 text-xs max-h-[85vh] overflow-y-auto">
+          {/* Mobile Auth Banner */}
+          <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            {isAuthenticated && user ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs uppercase">
+                    {user.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 dark:text-white leading-tight">
+                      {user.name}
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[170px]">
+                      {user.email}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={signOut}
+                  className="px-2 py-1 text-[11px] text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded border border-rose-200 dark:border-rose-900/40"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  openAuthModal();
+                }}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-xs flex items-center justify-center gap-2"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Sign In / Register</span>
+              </button>
+            )}
+          </div>
+
           <div>
             <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Overview
@@ -463,6 +547,13 @@ export function Navbar() {
           </div>
         </div>
       )}
+
+      {/* Global Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onSuccess={handleAuthSuccess}
+      />
     </header>
   );
 }

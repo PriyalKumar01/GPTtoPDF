@@ -69,6 +69,14 @@ dependencies {
   implementation("androidx.media:media:1.7.0")
   // Google Sign-In & Play Services Auth
   implementation("com.google.android.gms:play-services-auth:21.3.0")
+  // Google Jetpack Media3 Transformer (High-performance hardware-accelerated video compression)
+  implementation("androidx.media3:media3-transformer:1.4.1")
+  implementation("androidx.media3:media3-common:1.4.1")
+  implementation("androidx.media3:media3-effect:1.4.1")
+  // Apache PDFBox for Android (PDF Encryption, Password Protection, Merging & Extraction)
+  implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+  // Google ML Kit On-Device Text Recognition (Offline OCR)
+  implementation("com.google.mlkit:text-recognition:16.0.1")
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests

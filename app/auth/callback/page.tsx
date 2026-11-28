@@ -56,6 +56,18 @@ function AuthCallbackContent() {
             provider: data.provider || provider,
           });
 
+          // Store verified user in browser localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('qs_user_id', data.user.id || '');
+            localStorage.setItem('qs_user_name', data.user.name);
+            localStorage.setItem('qs_user_email', data.user.email);
+            localStorage.setItem('qs_user_provider', data.provider || provider);
+            if (data.user.age) {
+              localStorage.setItem('qs_user_age', String(data.user.age));
+            }
+            window.dispatchEvent(new Event('qs_auth_changed'));
+          }
+
           const deepLink =
             data.deepLink ||
             `qwiksave://auth/callback?name=${encodeURIComponent(data.user.name)}&email=${encodeURIComponent(
@@ -64,10 +76,23 @@ function AuthCallbackContent() {
 
           setDeepLinkUrl(deepLink);
 
-          // Auto-trigger Android deep link
-          setTimeout(() => {
-            window.location.href = deepLink;
-          }, 400);
+          const isAndroidApp =
+            typeof navigator !== 'undefined' &&
+            (navigator.userAgent.includes('QwikSave') ||
+              searchParams.get('source') === 'app' ||
+              sessionStorage.getItem('qs_auth_source') === 'app');
+
+          if (isAndroidApp) {
+            setTimeout(() => {
+              window.location.href = deepLink;
+            }, 300);
+          } else {
+            const returnUrl = sessionStorage.getItem('qs_auth_redirect') || '/';
+            sessionStorage.removeItem('qs_auth_redirect');
+            setTimeout(() => {
+              window.location.href = returnUrl;
+            }, 1000);
+          }
         } else {
           setStatus('error');
           setErrorMessage(data.error || 'Failed to verify account credentials.');
@@ -78,6 +103,12 @@ function AuthCallbackContent() {
         setErrorMessage(err.message || 'Connection error during authentication.');
       });
   }, [searchParams]);
+
+  const isAndroidApp =
+    typeof navigator !== 'undefined' &&
+    (navigator.userAgent.includes('QwikSave') ||
+      searchParams.get('source') === 'app' ||
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('qs_auth_source') === 'app'));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white px-4">
@@ -114,17 +145,28 @@ function AuthCallbackContent() {
             </div>
 
             <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/60 text-xs text-slate-300">
-              Redirecting back to Qwik Save app...
+              {isAndroidApp
+                ? 'Redirecting back to Qwik Save app...'
+                : 'Account verified! Redirecting to Qwik Save...'}
             </div>
 
-            {deepLinkUrl && (
+            <div className="space-y-2 pt-2">
               <a
-                href={deepLinkUrl}
-                className="block w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition-all"
+                href="/"
+                className="block w-full py-3.5 px-4 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold rounded-xl shadow-lg transition-all text-sm"
               >
-                Open Qwik Save App →
+                Continue to Qwik Save Web →
               </a>
-            )}
+
+              {deepLinkUrl && (
+                <a
+                  href={deepLinkUrl}
+                  className="block w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold rounded-xl text-xs transition-all border border-slate-700"
+                >
+                  Open in Qwik Save Android App
+                </a>
+              )}
+            </div>
           </div>
         )}
 

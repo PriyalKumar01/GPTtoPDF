@@ -1,0 +1,49 @@
+COMPLETED / TASK_COMPLETED
+
+Here are the exact findings (and sandbox inspection limits) from `https://gemini.google.com/share/390eff5f2f16`:
+
+### 1. Exact POST body (`f.req`) of `K4WWud` and `FQjvN`
+- **Not observable in this browser sandbox.** Neither `page.networkRequests()` (which exposes only `url`, `method`, `resourceType`, `status`, `statusText`, `ok`, `requestHeaders`, `responseHeaders`) nor `waitForResponse().request()` (which exposes only `url`, `method`, `resourceType`, `headers`) provides `postData` / request bodies, and `page.route()` / `page.evaluate()` are unavailable.
+- Both requests were `POST` with header `content-type: application/x-www-form-urlencoded;charset=utf-8` to:
+  - `https://gemini.google.com/_/BardChatUi/data/batchexecute?rpcids=K4WWud&source-path=%2Fshare%2F390eff5f2f16&bl=boq_gemini-web-uiserver_20261124.14_p0&...`
+  - `https://gemini.google.com/_/BardChatUi/data/batchexecute?rpcids=FQjvN&source-path=%2Fshare%2F390eff5f2f16&bl=boq_gemini-web-uiserver_20261124.14_p0&...`
+
+---
+
+### 2. Exact Response Bodies of `K4WWud` and `FQjvN` (Captured via `waitForResponse().text()`)
+
+- **`K4WWud` (full 499-byte response — location/language metadata, NOT the conversation):**
+```text
+)]}'
+
+463
+[["wrb.fr","K4WWud","[[\"Vishnu Puri, Kanpur, Uttar Pradesh, India\",\"SWML_DESCRIPTION_FROM_YOUR_DEVICE\",true,null,\"//www.google.com/maps/vt/data\\u003dQyZPpy9kqBKsNY-ZiJyjbg8MSUy4wKp7rRriR_i8HHRhq8RZX6WSytbtpCymch2Iw5vAxvMGrHrXFX2g-OXzGESwP5avaDhRYwJRl8dOcMufGZlbUjj5kU1G-wEXgj1UiLCbG_5zHw2jV4KSOiM7YCOtFRpBmq_EesbZEiaQVY23EaivR98XrEDtTa1YN5RA35OhEF2mDRsTicIz-Q\\\"],\"Hindi\"]",null,null,null,"generic"],["di",93],["af.httprm",93,"-5940823479564215314",178]]
+25
+[["e",4,null,null,499]]
+```
+
+- **`FQjvN` (36,054 bytes total — prompt discovery/suggestion cards, NOT the conversation; `waitForResponse().text()` preview capped at 2,048 chars, first 1,500 chars below):**
+```text
+)]}'
+
+36054
+[["wrb.fr","FQjvN","[null,[[\"snappy_cirrus\",[\"Unlock BTS\",\"7777\"],\"Dive into the BTS universe with ideas just for you 🎤\",[[\"Find your BTS theme song\",\"Analyze our chat history and my preferences, and recommend a BTS song that matches my vibe.\",null,[\"https://www.gstatic.com/lamda/images/discovery/snappy_cirrus/song_rec_icon_fedb4d3f0b7e924cd9f84.webp\"],\"Analyze my chat history, my preferences and music tastes based on my YouTube history, and recommend a BTS song that matches my vibe with a YouTube link. Consider BTS's extensive albums, including their most recent albums and latest releases, ensuring the selection aligns with my current vibe and preferences. If there’s no chat or YouTube history, recommend me a song by asking how I feel today.\\n\\nPlease give me your pick strictly using this format:\\n[Song Title] [Why this matches my vibe]\\nHow to write the reason:\\n- If using YouTube history: Connect my watching/listening patterns to the song's lyrics, theme, and vibe.\\n- If using chat history: Connect it to our recent conversations, mood, or my lifestyle (do not mention YouTube).\\n- If using no history: Base it on my answer to how I'm feeling today.\\n\\n\\n\\nStrict rules:\\n\\n-Use this YouTube link: https://www.youtube.com/search?q\\u003dBTS+[SONG+TITLE]+official\\n(Replace spaces in the song title with +. Do not generate a direct video URL.)\\n- Verify that the song name actually exists in BTS's official discography before providing the 
+```
+
+---
+
+### 3. Where the 48 Turns Came From & Why the Exact `<script>` Snippet Cannot Be Printed
+- **None of the `batchexecute` RPCs fetched the 48 turns:**
+  - `K4WWud`: Device location/language (`SWML_DESCRIPTION_FROM_YOUR_DEVICE`, `Hindi`)
+  - `FQjvN`: Discovery/promo cards (`snappy_cirrus` / `Unlock BTS`)
+  - `otAQ7b`: Model/mode list (`"Auto"`, `"Adapts to your needs"`)
+  - `CNgdBe` (×2): `[["wrb.fr","CNgdBe",null,null,null,[7],"generic"],...]`
+  - `I4z33b`: `[["wrb.fr","I4z33b",null,null,null,[7],"generic"],...]`
+  - `aPya6c`: `[["wrb.fr","aPya6c","[false,0,[]]",null,null,null,"generic"],...]`
+  - `DYBcR` (fired later): `[["wrb.fr","DYBcR","[]",null,null,null,"generic"],...]`
+  - `ujx1Bf`: Fired only well after the 48 turns had already rendered (did not even fire within 15s on fresh load).
+- **Source of the 48 turns:** They come from the **initial HTML document response (`GET https://gemini.google.com/share/390eff5f2f16`, HTTP 200, `text/html; charset=utf-8`)** inside inline executable `<script>` hydration blocks, which Angular then renders into `<share-viewer>`.
+- **Exact `<script>` / initial HTML snippet unavailable in sandbox:**
+  - `waitForResponse().text()` returns `""` for the `GET https://gemini.google.com/share/390eff5f2f16` navigation document response.
+  - `page.content()`, `innerHTML()`, and `page.locator(...)` strip/hide all executable `<script>` tags for sandbox hygiene (`<meta>` tags only have `"Gemini - direct access to Google AI"` / `"Created with Gemini"`, and the sole `<script type="application/ld+json">` only has `{"@context": "https://schema.org", "@type": "WebSite", "name": "Gemini", "url": "https://gemini.google.com"}`).
+  - To inspect the exact raw `f.req` POST bodies and the raw initial HTML `<script>` (`AF_initDataCallback`) payload, an external HTTP/curl fetch (for the HTML) or Chrome DevTools / non-sandboxed Playwright script would be required.

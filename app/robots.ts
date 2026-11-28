@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next';
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = 'https://www.ai-chat2pdf.live';
+  const baseUrl = 'https://qwiksave.vercel.app';
 
   return {
     rules: [

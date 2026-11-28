@@ -90,6 +90,7 @@ fun MainScreen(
     var selectedSocialPlatform by remember { mutableStateOf(0) } // 0=Instagram, 1=Facebook, 2=YouTube
     var selectedPdfSubTab by remember { mutableStateOf(0) } // 0=AI Notes, 1=Image to PDF, 2=Merge, 3=Compress, 4=PDF to Image
     var isMusicHubOpen by remember { mutableStateOf(false) }
+    var activeDedicatedTool by remember { mutableStateOf<String?>(null) } // "pdf-to-image", "freeconvert-compressors", "ppt-to-pdf"
     var showBatteryStudio by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -142,9 +143,10 @@ fun MainScreen(
         },
         bottomBar = {
             BottomNavigationSection(
-                selectedTab = if (isMusicHubOpen) -1 else selectedBottomTab,
+                selectedTab = if (isMusicHubOpen || activeDedicatedTool != null) -1 else selectedBottomTab,
                 onTabSelected = { tab ->
                     isMusicHubOpen = false
+                    activeDedicatedTool = null
                     selectedBottomTab = tab
                 }
             )
@@ -164,6 +166,25 @@ fun MainScreen(
                         selectedBottomTab = 2 // Return to Social Media downloader page
                     }
                 )
+            } else if (activeDedicatedTool != null) {
+                when (activeDedicatedTool) {
+                    "pdf-to-image" -> PdfToImageStudioScreen(
+                        client = client,
+                        onBack = { activeDedicatedTool = null }
+                    )
+                    "freeconvert-compressors" -> FreeConvertCompressorsStudioScreen(
+                        client = client,
+                        onBack = { activeDedicatedTool = null }
+                    )
+                    "ppt-to-pdf" -> PptToPdfStudioScreen(
+                        client = client,
+                        onBack = { activeDedicatedTool = null }
+                    )
+                    "pdf-lock" -> PdfLockStudioScreen(
+                        client = client,
+                        onBack = { activeDedicatedTool = null }
+                    )
+                }
             } else {
                 when (selectedBottomTab) {
                     0 -> ExploreTabContent(
@@ -184,12 +205,16 @@ fun MainScreen(
                         },
                         onOpenBatteryStudio = {
                             showBatteryStudio = true
+                        },
+                        onOpenDedicatedTool = { tool ->
+                            activeDedicatedTool = tool
                         }
                     )
                     1 -> PdfToolsTabContent(
                         client = client,
                         selectedSubTab = selectedPdfSubTab,
-                        onSubTabChange = { selectedPdfSubTab = it }
+                        onSubTabChange = { selectedPdfSubTab = it },
+                        onOpenDedicatedTool = { activeDedicatedTool = it }
                     )
                     2 -> SocialMediaTabContent(
                         client = client,
@@ -254,9 +279,26 @@ fun TopAppBarSection(
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color(0xFF1E293B))
                         .border(1.dp, Color(0xFF334155), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    val userGender = com.qwiksave.app.data.UserPreferences.getUserGender(LocalContext.current)
+                    val isFemale = userGender.equals("Female", ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(if (isFemale) Color(0xFFF43F5E).copy(alpha = 0.2f) else Color(0xFF0284C7).copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isFemale) Icons.Default.Face3 else Icons.Default.Face6,
+                            contentDescription = null,
+                            tint = if (isFemale) Color(0xFFFB7185) else Color(0xFF38BDF8),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                     Text(
                         text = "Hello, $userName 👋",
                         color = Color(0xFFF8FAFC),
@@ -335,7 +377,8 @@ fun ExploreTabContent(
     onNavigateToPdf: (subTab: Int) -> Unit,
     onNavigateToUtilities: () -> Unit,
     onNavigateToMusic: () -> Unit = {},
-    onOpenBatteryStudio: () -> Unit = {}
+    onOpenBatteryStudio: () -> Unit = {},
+    onOpenDedicatedTool: (String) -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -540,7 +583,7 @@ fun ExploreTabContent(
                             Icon(Icons.Default.Image, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
                         }
                     },
-                    onClick = { onNavigateToPdf(1) }
+                    onClick = { onOpenDedicatedTool("pdf-to-image") }
                 )
             }
 
@@ -568,6 +611,33 @@ fun ExploreTabContent(
                     cardBgColor = Color(0xFFEEF2FF),
                     logo = { AudioExtractorLogo(size = 64.dp) },
                     onClick = { onNavigateToSocial(3) }
+                )
+            }
+
+            // Row 6: Multi Compressor Hub + PPT / Doc to PDF (Even 12 Cards Total)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Multi Compressor",
+                    subtitle = "PNG, Video, PDF, JPG, GIF",
+                    badge = "FreeConvert",
+                    badgeColor = Color(0xFF0D9488),
+                    cardBgColor = Color(0xFFF0FDFA),
+                    logo = { FreeConvertLogo(size = 64.dp) },
+                    onClick = { onOpenDedicatedTool("freeconvert-compressors") }
+                )
+                FeatureGridCard(
+                    modifier = Modifier.weight(1f),
+                    title = "PPT to PDF",
+                    subtitle = "Convert Slides & Docs to PDF",
+                    badge = "Academic",
+                    badgeColor = Color(0xFFEA580C),
+                    cardBgColor = Color(0xFFFFF7ED),
+                    logo = { PptToPdfLogo(size = 64.dp) },
+                    onClick = { onOpenDedicatedTool("ppt-to-pdf") }
                 )
             }
         }
@@ -1040,7 +1110,8 @@ fun PdfCustomizationAccordion(
 fun PdfToolsTabContent(
     client: QwikSaveClient,
     selectedSubTab: Int,
-    onSubTabChange: (Int) -> Unit
+    onSubTabChange: (Int) -> Unit,
+    onOpenDedicatedTool: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -1198,9 +1269,7 @@ fun PdfToolsTabContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(16.dp)
     ) {
         // Sub-Tab Switcher
         LazyRow(
@@ -1230,9 +1299,17 @@ fun PdfToolsTabContent(
             }
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
         when (selectedSubTab) {
             0 -> {
-                // AI Notes to PDF Section (Matching website layout with Partner Header & Custom Footer)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // AI Notes to PDF Section (Matching website layout with Partner Header & Custom Footer)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
@@ -2398,355 +2475,68 @@ fun PdfToolsTabContent(
                             }
                         }
 
-                        // PDF Completion Dialog with 1-Click Open & Share (Squarish Modern Card)
-                        if (showPdfCompletionDialog && notesPdfFile != null) {
-                            Dialog(onDismissRequest = { showPdfCompletionDialog = false }) {
-                                Card(
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFE2E8F0)),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.95f)
-                                        .padding(8.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(20.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        // Top Badge Header: App Icon + Hooray!
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            AiNotesLogo(size = 28.dp)
-                                            Text(
-                                                text = "Hooray! Your PDF is Ready! 🎉",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                color = Color(0xFF0F172A)
-                                            )
-                                        }
-
-                                        // Tagline badge
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0xFFECFDF5))
-                                                .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(6.dp))
-                                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = "⚡ Saved your time & neatly typeset for study",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF065F46)
-                                            )
-                                        }
-
-                                        // File Info Box
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(Color(0xFFF8FAFC))
-                                                .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
-                                                .padding(10.dp)
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(
-                                                    Icons.Default.Description,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFFDC2626),
-                                                    modifier = Modifier.size(24.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = notesPdfFile?.name ?: "Academic_Notes.pdf",
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = Color(0xFF0F172A),
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Text(
-                                                        text = "Saved in Downloads/QwikSave",
-                                                        fontSize = 10.5.sp,
-                                                        color = Color(0xFF64748B)
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        // Action Buttons Row: Share PDF (Outlined) + Open PDF (Solid Green)
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    client.sharePdfFile(context, notesPdfFile!!)
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(42.dp),
-                                                border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF059669)),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF059669))
-                                            ) {
-                                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Share PDF", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                                            }
-
-                                            Button(
-                                                onClick = {
-                                                    client.openPdfFile(context, notesPdfFile!!)
-                                                    showPdfCompletionDialog = false
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                                shape = RoundedCornerShape(8.dp),
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(42.dp)
-                                            ) {
-                                                Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Open PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
+                        // PDF Completion Dialog with 1-Click Open & Share (Professional Dialog)
+                        val currentNotesPdf = notesPdfFile
+                        if (showPdfCompletionDialog && currentNotesPdf != null) {
+                            ProfessionalPdfSuccessDialog(
+                                pdfFile = currentNotesPdf,
+                                title = "Academic Study Notes Ready",
+                                tagline = "Compiled & neatly typeset for study",
+                                onDismiss = { showPdfCompletionDialog = false },
+                                onOpen = {
+                                    client.openPdfFile(context, currentNotesPdf)
+                                    showPdfCompletionDialog = false
+                                },
+                                onShare = {
+                                    client.sharePdfFile(context, currentNotesPdf)
                                 }
-                            }
+                            )
                         }
                     }
+                }
                 }
             }
 
             1 -> {
                 // OKEN SCANNER / CAMSCANNER STYLE DOCUMENT SCANNER STUDIO
-                ScannerStudio(
-                    client = client,
-                    onPdfGenerated = { file ->
-                        scannerGeneratedPdfFile = file
-                        showScannerPdfCompletionDialog = true
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(640.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ScannerStudio(
+                        client = client,
+                        onPdfGenerated = { file ->
+                            scannerGeneratedPdfFile = file
+                            showScannerPdfCompletionDialog = true
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
 
-                if (showScannerPdfCompletionDialog && scannerGeneratedPdfFile != null) {
-                    Dialog(onDismissRequest = { showScannerPdfCompletionDialog = false }) {
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFFE2E8F0)),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth(0.95f)
-                                .padding(8.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    PdfSuiteLogo(size = 28.dp)
-                                    Text(
-                                        text = "Hooray! Document PDF Ready! 🎉",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = Color(0xFF0F172A)
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFFECFDF5))
-                                        .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "⚡ Scanned, cropped & typeset with high fidelity",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF065F46)
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFFF8FAFC))
-                                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
-                                        .padding(10.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.Description,
-                                            contentDescription = null,
-                                            tint = Color(0xFFDC2626),
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = scannerGeneratedPdfFile?.name ?: "Scanned_Document.pdf",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF0F172A),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = "Saved in Downloads/QwikSave",
-                                                fontSize = 10.5.sp,
-                                                color = Color(0xFF64748B)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            client.sharePdfFile(context, scannerGeneratedPdfFile!!)
-                                        },
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(42.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF059669)),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF059669))
-                                    ) {
-                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Share PDF", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            client.openPdfFile(context, scannerGeneratedPdfFile!!)
-                                            showScannerPdfCompletionDialog = false
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(42.dp)
-                                    ) {
-                                        Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Open PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
+                    val currentScannerPdf = scannerGeneratedPdfFile
+                    if (showScannerPdfCompletionDialog && currentScannerPdf != null) {
+                        ProfessionalPdfSuccessDialog(
+                            pdfFile = currentScannerPdf,
+                            title = "Document PDF Ready",
+                            tagline = "Scanned, cropped & typeset with high fidelity",
+                            onDismiss = { showScannerPdfCompletionDialog = false },
+                            onOpen = {
+                                client.openPdfFile(context, currentScannerPdf)
+                                showScannerPdfCompletionDialog = false
+                            },
+                            onShare = {
+                                client.sharePdfFile(context, currentScannerPdf)
                             }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // PDF to Image Section
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA5F3FC)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF0891B2), modifier = Modifier.size(28.dp))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text("PDF to Image Converter", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                                Text("Extract each page of a PDF document into high-resolution PNG pictures", fontSize = 11.sp, color = Color(0xFF64748B))
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = { pdfToImagePickerLauncher.launch("application/pdf") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (pdfToImageUri == null) "Select PDF File" else "Selected: $pdfToImageName",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        if (pdfToImageUri != null) {
-                            Button(
-                                onClick = {
-                                    isExtractingImages = true
-                                    coroutineScope.launch {
-                                        val base = pdfToImageName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                                        val res = client.convertPdfToImages(context, pdfToImageUri!!, base)
-                                        isExtractingImages = false
-                                        res.onSuccess { files ->
-                                            extractedImagesList = files
-                                            Toast.makeText(context, "Extracted ${files.size} pages to Pictures/QwikSave!", Toast.LENGTH_LONG).show()
-                                        }.onFailure { err ->
-                                            Toast.makeText(context, "Error: ${err.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0891B2)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !isExtractingImages
-                            ) {
-                                if (isExtractingImages) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Extracting Pages...", fontSize = 12.sp)
-                                } else {
-                                    Text("Extract All Pages as Pictures 📸", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        if (extractedImagesList.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFECFEFF), RoundedCornerShape(6.dp))
-                                    .border(1.dp, Color(0xFF06B6D4), RoundedCornerShape(6.dp))
-                                    .padding(12.dp)
-                            ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("🎉 Pages Extracted Successfully!", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF155E75))
-                                    Text("Saved ${extractedImagesList.size} high-resolution PNGs to: Pictures/QwikSave/", fontSize = 11.sp, color = Color(0xFF0E7490))
-                                }
-                            }
-                        }
+                        )
                     }
                 }
             }
 
             2 -> {
-                // Merge PDF Section
-                Card(
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Merge PDF Section
+                    Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -3089,6 +2879,42 @@ fun PdfToolsTabContent(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                // Lock & Password Protect PDF Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDDD6FE)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF7C3AED), modifier = Modifier.size(28.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text("PDF Password Protect / Lock", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                                Text("Encrypt PDF with 128-bit password security", fontSize = 11.sp, color = Color(0xFF64748B))
+                            }
+                        }
+
+                        Button(
+                            onClick = { onOpenDedicatedTool("pdf-lock") },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Open PDF Password Locker 🔒", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 // High-Resolution PDF Tools Illustration Graphic (Transparent, zoomed and fitted to screen)
                 Image(
                     painter = painterResource(id = R.drawable.pdf_merge_compress_banner),
@@ -3099,6 +2925,7 @@ fun PdfToolsTabContent(
                         .clip(RoundedCornerShape(12.dp)),
                     contentScale = ContentScale.Crop
                 )
+                }
             }
         }
     }
@@ -4480,7 +4307,7 @@ fun UtilitiesTabContent(client: QwikSaveClient) {
     // Formatted payload computation
     val computedQrPayload = remember(selectedQrType, urlInput, plainTextInput, wifiSsid, wifiPassword, upiVpa, upiName, selectedCountryCode, phoneNumberInput) {
         when (selectedQrType) {
-            0 -> urlInput.trim().ifBlank { "https://www.ai-chat2pdf.live" }
+            0 -> urlInput.trim().ifBlank { "https://qwiksave.vercel.app" }
             1 -> plainTextInput.trim().ifBlank { "Qwik Save QR Code Studio" }
             2 -> {
                 if (wifiSsid.isNotBlank()) "WIFI:S:$wifiSsid;T:WPA;P:$wifiPassword;;"

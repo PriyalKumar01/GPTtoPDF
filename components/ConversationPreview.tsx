@@ -21,7 +21,7 @@ import {
 import { ConversationData, PdfOptions, ChatMessage } from '@/lib/types';
 import { downloadConversationPdf } from '@/lib/pdf-generator';
 import { APP_CONFIG } from '@/lib/config';
-import { calculateAccurateEstimatedPages } from '@/lib/extract-ai';
+import { calculateAccurateEstimatedPages } from '@/lib/ai-url-helpers';
 
 interface ConversationPreviewProps {
   conversation: ConversationData;

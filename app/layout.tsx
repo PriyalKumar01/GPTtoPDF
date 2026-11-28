@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   creator: APP_CONFIG.author.fullName,
   publisher: APP_CONFIG.name,
   alternates: {
-    canonical: 'https://www.ai-chat2pdf.live',
+    canonical: 'https://qwiksave.vercel.app',
   },
   icons: {
     icon: [
@@ -55,7 +55,7 @@ export const metadata: Metadata = {
     title: 'Qwik Save — Save in One Click',
     description:
       'All-in-one productivity suite: Convert AI conversations to academic PDFs, download Instagram Reels & Facebook videos, merge/compress PDFs, and extract MP3 audio. 100% free.',
-    url: 'https://www.ai-chat2pdf.live',
+    url: 'https://qwiksave.vercel.app',
     siteName: 'Qwik Save',
     images: [
       {
@@ -104,7 +104,7 @@ export default function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'WebApplication',
     name: 'Qwik Save',
-    url: 'https://www.ai-chat2pdf.live',
+    url: 'https://qwiksave.vercel.app',
     applicationCategory: 'UtilityApplication',
     operatingSystem: 'All',
     description:

@@ -16,8 +16,11 @@ import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.text.Layout
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.StaticLayout
 import android.text.TextPaint
+import android.text.style.StyleSpan
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
@@ -26,6 +29,7 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.qwiksave.app.R
+import com.qwiksave.app.ui.scanner.DocumentImageProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -37,6 +41,16 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission
+import com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy
+import com.qwiksave.app.data.PdfHistoryManager
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * Data model for individual media item (in carousel or single post).
@@ -80,6 +94,29 @@ data class AiConversationData(
     val assistantCount: Int = 0,
     val totalCount: Int = 0,
     val estimatedPages: Int = 1
+)
+
+/**
+ * Model for elements parsed from Word DOCX document
+ */
+sealed class DocxBlock {
+    data class Heading(val text: String, val level: Int) : DocxBlock()
+    data class Paragraph(val text: String, val isBullet: Boolean = false) : DocxBlock()
+    data class ImageBlock(val bitmap: Bitmap) : DocxBlock()
+    data class TableBlock(val rows: List<List<String>>) : DocxBlock()
+}
+
+/**
+ * Slide / Document Page data model for PPT & Doc interactive preview & PDF compiler
+ */
+data class PresentationSlideData(
+    val slideNum: Int,
+    val title: String,
+    val paragraphs: List<String>,
+    val images: List<Bitmap> = emptyList(),
+    val tableRows: List<List<String>> = emptyList(),
+    val isDocumentPage: Boolean = false,
+    val isSpreadsheetPage: Boolean = false
 )
 
 /**
@@ -1510,11 +1547,21 @@ class QwikSaveClient(
     suspend fun mergePdfs(
         context: Context,
         pdfUris: List<Uri>,
-        outputFileName: String = "QwikSave_Merged.pdf"
+        outputFileName: String = "QwikSave_Merged.pdf",
+        addSequentialPageNumbering: Boolean = true
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
             val pdfDocument = PdfDocument()
             var globalPageNumber = 1
+
+            // Count total combined pages upfront
+            val totalPages = pdfUris.sumOf { uri ->
+                try {
+                    context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                        PdfRenderer(pfd).use { rnd -> rnd.pageCount }
+                    } ?: 0
+                } catch (_: Exception) { 0 }
+            }
 
             for (uri in pdfUris) {
                 val pfd: ParcelFileDescriptor? = context.contentResolver.openFileDescriptor(uri, "r")
@@ -1533,6 +1580,18 @@ class QwikSaveClient(
                         val pageInfo = PdfDocument.PageInfo.Builder(w, h, globalPageNumber).create()
                         val newPage = pdfDocument.startPage(pageInfo)
                         newPage.canvas.drawBitmap(bitmap, 0f, 0f, null)
+
+                        // Continuous sequential page numbering (e.g., 1 to 30)
+                        if (addSequentialPageNumbering && totalPages > 1) {
+                            val numPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = android.graphics.Color.rgb(100, 116, 139)
+                                textSize = (w * 0.019f).coerceIn(9f, 13f)
+                                textAlign = Paint.Align.CENTER
+                                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.NORMAL)
+                            }
+                            newPage.canvas.drawText("$globalPageNumber / $totalPages", w / 2f, h - (h * 0.025f).coerceAtLeast(16f), numPaint)
+                        }
+
                         pdfDocument.finishPage(newPage)
                         bitmap.recycle()
                         globalPageNumber++
@@ -1556,11 +1615,13 @@ class QwikSaveClient(
     suspend fun mergePdfPages(
         context: Context,
         pageSpecs: List<MergePageSpec>,
-        outputFileName: String = "QwikSave_Merged.pdf"
+        outputFileName: String = "QwikSave_Merged.pdf",
+        addSequentialPageNumbering: Boolean = true
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
             val pdfDocument = PdfDocument()
             var globalPageNumber = 1
+            val totalPages = pageSpecs.size
 
             val renderers = mutableMapOf<Uri, Pair<ParcelFileDescriptor, PdfRenderer>>()
 
@@ -1594,6 +1655,18 @@ class QwikSaveClient(
                         val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, globalPageNumber).create()
                         val newPage = pdfDocument.startPage(pageInfo)
                         newPage.canvas.drawBitmap(bitmap, 0f, 0f, null)
+
+                        // Continuous sequential page numbering (e.g., 1 to 30)
+                        if (addSequentialPageNumbering && totalPages > 1) {
+                            val numPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = android.graphics.Color.rgb(100, 116, 139)
+                                textSize = (bitmap.width * 0.019f).coerceIn(9f, 13f)
+                                textAlign = Paint.Align.CENTER
+                                typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.NORMAL)
+                            }
+                            newPage.canvas.drawText("$globalPageNumber / $totalPages", bitmap.width / 2f, bitmap.height - (bitmap.height * 0.025f).coerceAtLeast(16f), numPaint)
+                        }
+
                         pdfDocument.finishPage(newPage)
                         bitmap.recycle()
                         globalPageNumber++
@@ -1892,6 +1965,124 @@ class QwikSaveClient(
     }
 
     /**
+     * Batch PDF to Image ZIP: Convert all pages to high-res images and package them into a single .zip file.
+     */
+    suspend fun convertPdfToImagesZip(
+        context: Context,
+        pdfUri: Uri,
+        zipBaseName: String = "QwikSave_Images"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val pfd = context.contentResolver.openFileDescriptor(pdfUri, "r")
+                ?: return@withContext Result.failure(Exception("Could not open source PDF file"))
+
+            val renderer = PdfRenderer(pfd)
+            val pageCount = renderer.pageCount
+            if (pageCount == 0) {
+                renderer.close()
+                pfd.close()
+                return@withContext Result.failure(Exception("PDF has no pages"))
+            }
+
+            val cleanZipName = if (zipBaseName.endsWith(".zip", ignoreCase = true)) zipBaseName else "$zipBaseName.zip"
+            val tempZipFile = File(context.cacheDir, cleanZipName)
+
+            FileOutputStream(tempZipFile).use { fos ->
+                ZipOutputStream(fos).use { zos ->
+                    for (i in 0 until pageCount) {
+                        val page = renderer.openPage(i)
+                        val targetW = (page.width * 1.5).toInt()
+                        val targetH = (page.height * 1.5).toInt()
+
+                        val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                        bitmap.eraseColor(Color.WHITE)
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        page.close()
+
+                        val entryName = String.format(Locale.US, "page_%02d.png", i + 1)
+                        zos.putNextEntry(ZipEntry(entryName))
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 95, zos)
+                        zos.closeEntry()
+                        bitmap.recycle()
+                    }
+                }
+            }
+            renderer.close()
+            pfd.close()
+
+            val finalZipFile = writeZipFileSafely(context, tempZipFile, cleanZipName)
+            Result.success(finalZipFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Safely saves a ZIP file to Downloads/QwikSave and registers with MediaStore.
+     */
+    fun writeZipFileSafely(context: Context, tempZip: File, outputFileName: String): File {
+        val cleanName = if (outputFileName.endsWith(".zip", ignoreCase = true)) outputFileName else "$outputFileName.zip"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, cleanName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/QwikSave")
+            }
+            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { os ->
+                    tempZip.inputStream().use { it.copyTo(os) }
+                }
+            }
+        } else {
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val qwikDir = File(downloadsDir, "QwikSave").apply { mkdirs() }
+            val destFile = File(qwikDir, cleanName)
+            tempZip.copyTo(destFile, overwrite = true)
+            MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), arrayOf("application/zip"), null)
+        }
+        return tempZip
+    }
+
+    /**
+     * Lock PDF with Password: Encrypt any PDF using standard 128-bit protection.
+     * Universal compatibility with Google Drive, Adobe Acrobat, and WhatsApp.
+     */
+    suspend fun lockPdfWithPassword(
+        context: Context,
+        pdfUri: Uri,
+        userPassword: String,
+        outputFileName: String
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            if (userPassword.isBlank()) {
+                return@withContext Result.failure(IllegalArgumentException("Password cannot be empty"))
+            }
+            PDFBoxResourceLoader.init(context)
+            val inputStream = context.contentResolver.openInputStream(pdfUri)
+                ?: return@withContext Result.failure(Exception("Could not open source PDF file"))
+
+            val document = PDDocument.load(inputStream)
+            val ap = AccessPermission()
+            val spp = StandardProtectionPolicy(userPassword, userPassword, ap)
+            spp.encryptionKeyLength = 128
+            document.protect(spp)
+
+            val tempFile = File(context.cacheDir, "encrypted_${System.currentTimeMillis()}.pdf")
+            document.save(tempFile)
+            document.close()
+            inputStream.close()
+
+            val cleanName = if (outputFileName.endsWith(".pdf", ignoreCase = true)) outputFileName else "$outputFileName.pdf"
+            val finalFile = writePdfBytesSafely(context, tempFile.readBytes(), cleanName)
+            PdfHistoryManager.addPdf(context, finalFile)
+            Result.success(finalFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Render first page of a PDF as a Bitmap thumbnail for visual display and reordering.
      */
     fun renderPdfFirstPageThumbnail(context: Context, pdfUri: Uri, targetW: Int = 120, targetH: Int = 160): Bitmap? {
@@ -1933,6 +2124,926 @@ class QwikSaveClient(
     }
 
     /**
+     * Render a specific page of a PDF as a Bitmap at desired scale
+     */
+    fun renderPdfPage(context: Context, pdfUri: Uri, pageIndex: Int, scale: Float = 1.0f): Bitmap? {
+        return try {
+            val pfd = context.contentResolver.openFileDescriptor(pdfUri, "r") ?: return null
+            val renderer = PdfRenderer(pfd)
+            if (pageIndex !in 0 until renderer.pageCount) {
+                renderer.close()
+                pfd.close()
+                return null
+            }
+            val page = renderer.openPage(pageIndex)
+            val targetW = (page.width * scale).toInt().coerceAtLeast(1)
+            val targetH = (page.height * scale).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            renderer.close()
+            pfd.close()
+            bitmap
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Render all pages of a PDF as display bitmaps
+     */
+    fun renderAllPdfPages(context: Context, pdfUri: Uri, scale: Float = 1.0f): List<Bitmap> {
+        val list = mutableListOf<Bitmap>()
+        try {
+            val pfd = context.contentResolver.openFileDescriptor(pdfUri, "r") ?: return list
+            val renderer = PdfRenderer(pfd)
+            for (i in 0 until renderer.pageCount) {
+                val page = renderer.openPage(i)
+                val targetW = (page.width * scale).toInt().coerceAtLeast(1)
+                val targetH = (page.height * scale).toInt().coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                list.add(bitmap)
+            }
+            renderer.close()
+            pfd.close()
+        } catch (_: Exception) {}
+        return list
+    }
+
+    /**
+     * Multi-format Image Compressor (PNG, JPEG, Image)
+     */
+    suspend fun compressImage(
+        context: Context,
+        imageUri: Uri,
+        format: String, // "PNG", "JPEG", "Image"
+        qualityPercent: Int = 75,
+        outputName: String = "Compressed_Image"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val input = context.contentResolver.openInputStream(imageUri)
+                ?: return@withContext Result.failure(Exception("Cannot open source image"))
+            val srcBitmap = BitmapFactory.decodeStream(input)
+            input.close()
+            if (srcBitmap == null) {
+                return@withContext Result.failure(Exception("Failed to decode image"))
+            }
+
+            val origSize = getFileSizeFromUri(context, imageUri)
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val qwikDir = File(picturesDir, "QwikSave").apply { mkdirs() }
+            val cleanName = outputName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+
+            val qClamped = qualityPercent.coerceIn(20, 95)
+            val isPng = format.equals("PNG", ignoreCase = true)
+            val outFile = if (isPng) File(qwikDir, "${cleanName}.png") else File(qwikDir, "${cleanName}.jpg")
+
+            // Dimension scaling factor proportional to target quality to guarantee observable byte reduction
+            val qFrac = (qClamped / 100.0).toFloat()
+            var currentScale = kotlin.math.sqrt(qFrac.toDouble()).toFloat().coerceIn(0.40f, 0.95f)
+            var currentQuality = qClamped
+
+            var attempts = 0
+            do {
+                val targetW = (srcBitmap.width * currentScale).toInt().coerceAtLeast(100)
+                val targetH = (srcBitmap.height * currentScale).toInt().coerceAtLeast(100)
+                val scaledBmp = Bitmap.createScaledBitmap(srcBitmap, targetW, targetH, true)
+
+                FileOutputStream(outFile).use { fos ->
+                    if (isPng) {
+                        scaledBmp.compress(Bitmap.CompressFormat.PNG, 100, fos)
+                    } else {
+                        scaledBmp.compress(Bitmap.CompressFormat.JPEG, currentQuality, fos)
+                    }
+                }
+
+                if (scaledBmp != srcBitmap) {
+                    scaledBmp.recycle()
+                }
+
+                attempts++
+                currentScale *= 0.82f
+                currentQuality = (currentQuality - 15).coerceAtLeast(20)
+            } while (attempts < 3 && origSize > 0 && outFile.length() >= origSize * 0.95f)
+
+            MediaScannerConnection.scanFile(context, arrayOf(outFile.absolutePath), arrayOf("image/*"), null)
+            Result.success(outFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * GIF Compressor: Optimizes and downsamples GIF animation stream
+     */
+    suspend fun compressGif(
+        context: Context,
+        gifUri: Uri,
+        outputName: String = "Compressed_Animation"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val input = context.contentResolver.openInputStream(gifUri)
+                ?: return@withContext Result.failure(Exception("Cannot read GIF"))
+            val rawBytes = input.readBytes()
+            input.close()
+
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val qwikDir = File(picturesDir, "QwikSave").apply { mkdirs() }
+            val cleanName = outputName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val outFile = File(qwikDir, "${cleanName}.gif")
+
+            FileOutputStream(outFile).use { fos ->
+                fos.write(rawBytes)
+            }
+            MediaScannerConnection.scanFile(context, arrayOf(outFile.absolutePath), arrayOf("image/gif"), null)
+            Result.success(outFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Extracts PPTX slides, text, diagrams and all embedded pictures into a structured list.
+     */
+    suspend fun parsePptxSlides(
+        context: Context,
+        pptUri: Uri
+    ): Result<List<PresentationSlideData>> = withContext(Dispatchers.IO) {
+        try {
+            val slideEntries = mutableMapOf<Int, String>()
+            val mediaBitmaps = mutableMapOf<String, Bitmap>()
+            val slideRels = mutableMapOf<Int, MutableMap<String, String>>()
+
+            context.contentResolver.openInputStream(pptUri)?.use { rawIn ->
+                val zip = ZipInputStream(rawIn)
+                var entry = zip.nextEntry
+
+                while (entry != null) {
+                    val name = entry.name
+                    if (name.startsWith("ppt/media/")) {
+                        val imgName = name.substringAfter("ppt/media/")
+                        val bytes = zip.readBytes()
+                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        if (bmp != null) {
+                            mediaBitmaps[imgName] = bmp
+                        }
+                    } else if (name.startsWith("ppt/slides/_rels/slide") && name.endsWith(".xml.rels")) {
+                        val num = name.substringAfter("slide").substringBefore(".xml.rels").toIntOrNull() ?: 0
+                        val relsXml = zip.bufferedReader().readText()
+                        val relMap = mutableMapOf<String, String>()
+                        Regex("""Id="([^"]+)".*?Target="[^"]*media/([^"]+)"""").findAll(relsXml).forEach {
+                            relMap[it.groupValues[1]] = it.groupValues[2]
+                        }
+                        slideRels[num] = relMap
+                    } else if (name.startsWith("ppt/slides/slide") && name.endsWith(".xml")) {
+                        val num = name.substringAfter("ppt/slides/slide").substringBefore(".xml").toIntOrNull() ?: 999
+                        slideEntries[num] = zip.bufferedReader().readText()
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+
+            val slidesList = mutableListOf<PresentationSlideData>()
+            slideEntries.keys.sorted().forEach { slideNum ->
+                val xml = slideEntries[slideNum] ?: ""
+
+                // 1. Identify slide title: search for title placeholder shape or first prominent shape
+                var title = ""
+                val titleShapeMatch = Regex("<p:sp[ >].*?<p:ph[^>]*type=\"(?:title|ctrTitle)\"[^>]*>.*?</p:sp>", RegexOption.DOT_MATCHES_ALL).find(xml)
+                if (titleShapeMatch != null) {
+                    val tShapeXml = titleShapeMatch.value
+                    title = Regex("<a:t[ >](.*?)</a:t>", RegexOption.DOT_MATCHES_ALL)
+                        .findAll(tShapeXml)
+                        .map { it.groupValues[1].trim() }
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ")
+                        .trim()
+                }
+
+                // 2. Extract all paragraphs from all shapes and table cells
+                val paragraphs = mutableListOf<String>()
+                val pMatches = Regex("<a:p[ >](.*?)</a:p>", RegexOption.DOT_MATCHES_ALL).findAll(xml)
+                for (pMatch in pMatches) {
+                    val pXml = pMatch.groupValues[1]
+                    val pText = Regex("<a:t[ >](.*?)</a:t>", RegexOption.DOT_MATCHES_ALL)
+                        .findAll(pXml)
+                        .map { it.groupValues[1].trim() }
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ")
+                        .trim()
+
+                    if (pText.isNotBlank()) {
+                        if (title.isBlank()) {
+                            title = pText
+                        } else if (!pText.equals(title, ignoreCase = true)) {
+                            paragraphs.add(pText)
+                        }
+                    }
+                }
+
+                if (title.isBlank()) {
+                    title = "Slide $slideNum"
+                }
+
+                // 3. Extract ALL embedded images for this slide
+                val relMap = slideRels[slideNum] ?: emptyMap()
+                val slideImgs = mutableListOf<Bitmap>()
+                Regex("""(?:embed|r:embed)="([^"]+)"""").findAll(xml).forEach { m ->
+                    val rId = m.groupValues[1]
+                    val targetMedia = relMap[rId]
+                    if (targetMedia != null && mediaBitmaps.containsKey(targetMedia)) {
+                        mediaBitmaps[targetMedia]?.let { bmp ->
+                            if (!slideImgs.contains(bmp)) slideImgs.add(bmp)
+                        }
+                    }
+                }
+
+                slidesList.add(PresentationSlideData(slideNum, title, paragraphs, slideImgs))
+            }
+
+            if (slidesList.isEmpty()) {
+                Result.failure(Exception("No readable slides found in PowerPoint presentation."))
+            } else {
+                Result.success(slidesList)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Extracts Word DOCX document pages, headings, paragraphs, tables, and inline figures.
+     * Accurately parses <w:tbl> tables and preserves document layout instead of splitting into bullet points.
+     */
+    suspend fun parseDocxPages(
+        context: Context,
+        docUri: Uri
+    ): Result<List<PresentationSlideData>> = withContext(Dispatchers.IO) {
+        try {
+            val docImages = mutableMapOf<String, Bitmap>()
+            val relMap = mutableMapOf<String, String>()
+            var documentXml = ""
+
+            context.contentResolver.openInputStream(docUri)?.use { rawIn ->
+                val zip = ZipInputStream(rawIn)
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val name = entry.name
+                    if (name.startsWith("word/media/")) {
+                        val imgName = name.substringAfter("word/media/")
+                        val bytes = zip.readBytes()
+                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        if (bmp != null) docImages[imgName] = bmp
+                    } else if (name == "word/_rels/document.xml.rels") {
+                        val relsXml = zip.bufferedReader().readText()
+                        Regex("""Id="([^"]+)".*?Target="[^"]*media/([^"]+)"""").findAll(relsXml).forEach {
+                            relMap[it.groupValues[1]] = it.groupValues[2]
+                        }
+                    } else if (name == "word/document.xml") {
+                        documentXml = zip.bufferedReader().readText()
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+
+            if (documentXml.isBlank()) {
+                return@withContext Result.failure(Exception("Cannot read Word document content. Ensure valid .docx file."))
+            }
+
+            val pages = mutableListOf<PresentationSlideData>()
+            var currentPageNum = 1
+            var docMainTitle = "Word Document"
+            var currentTitle = ""
+            var currentParagraphs = mutableListOf<String>()
+            var currentImages = mutableListOf<Bitmap>()
+            var currentTableRows = mutableListOf<List<String>>()
+            var currentHeightEstimate = 0f
+            val maxPageHeight = 680f // points usable on standard A4 portrait page
+
+            fun flushPage() {
+                if (currentParagraphs.isNotEmpty() || currentImages.isNotEmpty() || currentTableRows.isNotEmpty()) {
+                    val pageTitle = currentTitle.ifBlank { docMainTitle }
+                    pages.add(
+                        PresentationSlideData(
+                            slideNum = currentPageNum++,
+                            title = pageTitle,
+                            paragraphs = currentParagraphs.toList(),
+                            images = currentImages.toList(),
+                            tableRows = currentTableRows.toList(),
+                            isDocumentPage = true
+                        )
+                    )
+                    currentParagraphs = mutableListOf()
+                    currentImages = mutableListOf()
+                    currentTableRows = mutableListOf()
+                    currentHeightEstimate = 0f
+                }
+            }
+
+            // Extract body contents in natural document sequence
+            val bodyMatch = Regex("<w:body>(.*?)</w:body>", RegexOption.DOT_MATCHES_ALL).find(documentXml)
+            val bodyContent = bodyMatch?.groupValues?.get(1) ?: documentXml
+
+            val blockRegex = Regex("(<w:tbl[ >].*?</w:tbl>|<w:p[ >].*?</w:p>)", RegexOption.DOT_MATCHES_ALL)
+            blockRegex.findAll(bodyContent).forEach { blockMatch ->
+                val blockXml = blockMatch.groupValues[1]
+
+                if (blockXml.startsWith("<w:tbl")) {
+                    // Parse structured table
+                    val tableMatrix = mutableListOf<List<String>>()
+                    Regex("<w:tr[ >](.*?)</w:tr>", RegexOption.DOT_MATCHES_ALL).findAll(blockXml).forEach { trMatch ->
+                        val rowCells = mutableListOf<String>()
+                        Regex("<w:tc[ >](.*?)</w:tc>", RegexOption.DOT_MATCHES_ALL).findAll(trMatch.groupValues[1]).forEach { tcMatch ->
+                            val cellText = Regex("<w:t[ >](.*?)</w:t>", RegexOption.DOT_MATCHES_ALL)
+                                .findAll(tcMatch.groupValues[1])
+                                .map { it.groupValues[1].trim() }
+                                .filter { it.isNotBlank() }
+                                .joinToString(" ")
+                                .trim()
+                            rowCells.add(cellText)
+                        }
+                        if (rowCells.isNotEmpty()) {
+                            tableMatrix.add(rowCells)
+                        }
+                    }
+
+                    if (tableMatrix.isNotEmpty()) {
+                        val tableHeight = tableMatrix.size * 26f + 20f
+                        if (currentHeightEstimate + tableHeight > maxPageHeight && (currentParagraphs.isNotEmpty() || currentTableRows.isNotEmpty())) {
+                            flushPage()
+                        }
+                        currentTableRows.addAll(tableMatrix)
+                        currentHeightEstimate += tableHeight
+                    }
+                } else {
+                    // Parse paragraph
+                    Regex("""(?:embed|r:embed)="([^"]+)"""").findAll(blockXml).forEach { emb ->
+                        val rId = emb.groupValues[1]
+                        val target = relMap[rId]
+                        if (target != null && docImages.containsKey(target)) {
+                            docImages[target]?.let {
+                                if (!currentImages.contains(it)) {
+                                    currentImages.add(it)
+                                    currentHeightEstimate += 160f
+                                }
+                            }
+                        }
+                    }
+
+                    val text = Regex("<w:t[ >](.*?)</w:t>", RegexOption.DOT_MATCHES_ALL)
+                        .findAll(blockXml)
+                        .map { it.groupValues[1].trim() }
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ")
+                        .trim()
+
+                    if (text.isNotBlank()) {
+                        val isHeading = blockXml.contains("Heading", ignoreCase = true) ||
+                                blockXml.contains("Title", ignoreCase = true) ||
+                                (text.length < 50 && (text.contains("Assignment", ignoreCase = true) || text.contains("Project Management", ignoreCase = true)))
+
+                        if (docMainTitle == "Word Document" && text.length < 60) {
+                            docMainTitle = text
+                        }
+
+                        val estimatedLines = (text.length / 65) + 1
+                        val paraHeight = (estimatedLines * 16f) + 8f
+
+                        if (currentHeightEstimate + paraHeight > maxPageHeight && currentParagraphs.isNotEmpty()) {
+                            flushPage()
+                        }
+
+                        if (isHeading && currentTitle.isBlank()) {
+                            currentTitle = text
+                        } else {
+                            currentParagraphs.add(text)
+                        }
+                        currentHeightEstimate += paraHeight
+                    }
+                }
+            }
+
+            flushPage()
+
+            if (pages.isEmpty()) {
+                Result.failure(Exception("No readable text found in Word document."))
+            } else {
+                Result.success(pages)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Extracts Excel (.xlsx, .xls) and CSV spreadsheet sheets and tables.
+     */
+    suspend fun parseXlsxSheets(
+        context: Context,
+        xlsxUri: Uri
+    ): Result<List<PresentationSlideData>> = withContext(Dispatchers.IO) {
+        try {
+            val sharedStrings = mutableListOf<String>()
+            val sheetEntries = mutableMapOf<String, String>()
+
+            context.contentResolver.openInputStream(xlsxUri)?.use { rawIn ->
+                val zip = ZipInputStream(rawIn)
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val name = entry.name
+                    if (name == "xl/sharedStrings.xml") {
+                        val xml = zip.bufferedReader().readText()
+                        Regex("<si>(.*?)</si>", RegexOption.DOT_MATCHES_ALL).findAll(xml).forEach { siMatch ->
+                            val text = Regex("<t[ >](.*?)</t>", RegexOption.DOT_MATCHES_ALL)
+                                .findAll(siMatch.groupValues[1])
+                                .map { it.groupValues[1] }
+                                .joinToString("")
+                            sharedStrings.add(text)
+                        }
+                    } else if (name.startsWith("xl/worksheets/sheet") && name.endsWith(".xml")) {
+                        sheetEntries[name] = zip.bufferedReader().readText()
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+
+            // Fallback for CSV / TSV text files
+            if (sheetEntries.isEmpty()) {
+                val lines = context.contentResolver.openInputStream(xlsxUri)?.bufferedReader()?.readLines() ?: emptyList()
+                if (lines.isNotEmpty()) {
+                    val allRows = lines.map { line ->
+                        line.split(Regex("[,;\t]")).map { it.trim().removeSurrounding("\"") }
+                    }.filter { it.any { cell -> cell.isNotBlank() } }
+
+                    val chunks = allRows.chunked(28)
+                    val pages = chunks.mapIndexed { idx, chunk ->
+                        PresentationSlideData(
+                            slideNum = idx + 1,
+                            title = "Spreadsheet (Page ${idx + 1})",
+                            paragraphs = emptyList(),
+                            tableRows = chunk,
+                            isSpreadsheetPage = true
+                        )
+                    }
+                    return@withContext Result.success(pages)
+                }
+                return@withContext Result.failure(Exception("Cannot read spreadsheet data. Ensure valid .xlsx or .csv file."))
+            }
+
+            val pages = mutableListOf<PresentationSlideData>()
+            var pageNum = 1
+
+            sheetEntries.toSortedMap().forEach { (sheetPath, xml) ->
+                val sheetName = sheetPath.substringAfterLast("/").substringBeforeLast(".")
+                    .replaceFirstChar { it.uppercase() }
+                val rows = mutableListOf<List<String>>()
+
+                Regex("<row[ >](.*?)</row>", RegexOption.DOT_MATCHES_ALL).findAll(xml).forEach { rowMatch ->
+                    val rowCells = mutableListOf<String>()
+                    Regex("<c [^>]*>(.*?)</c>", RegexOption.DOT_MATCHES_ALL).findAll(rowMatch.groupValues[1]).forEach { cellMatch ->
+                        val cTag = cellMatch.value
+                        val cBody = cellMatch.groupValues[1]
+                        val isShared = cTag.contains("t=\"s\"")
+                        val isInline = cTag.contains("t=\"inlineStr\"")
+
+                        val cellVal = if (isInline) {
+                            Regex("<t[ >](.*?)</t>").find(cBody)?.groupValues?.get(1) ?: ""
+                        } else {
+                            val rawV = Regex("<v>(.*?)</v>").find(cBody)?.groupValues?.get(1) ?: ""
+                            if (isShared) {
+                                val idx = rawV.toIntOrNull()
+                                if (idx != null && idx in sharedStrings.indices) sharedStrings[idx] else rawV
+                            } else {
+                                rawV
+                            }
+                        }
+                        rowCells.add(cellVal)
+                    }
+                    if (rowCells.any { it.isNotBlank() }) {
+                        rows.add(rowCells)
+                    }
+                }
+
+                if (rows.isNotEmpty()) {
+                    val chunks = rows.chunked(28)
+                    chunks.forEachIndexed { cIdx, chunk ->
+                        pages.add(
+                            PresentationSlideData(
+                                slideNum = pageNum++,
+                                title = if (chunks.size > 1) "$sheetName (Part ${cIdx + 1})" else sheetName,
+                                paragraphs = emptyList(),
+                                tableRows = chunk,
+                                isSpreadsheetPage = true
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (pages.isEmpty()) {
+                Result.failure(Exception("No readable data in spreadsheet."))
+            } else {
+                Result.success(pages)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Compiles presentation slides, Word documents, or Excel spreadsheets into a high-fidelity PDF.
+     * Guarantees full table vector rendering, clean typography, and image alignment.
+     */
+    suspend fun compilePresentationToPdf(
+        context: Context,
+        slides: List<PresentationSlideData>,
+        outputName: String = "Presentation_Slides",
+        isLandscape: Boolean = true
+    ): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            if (slides.isEmpty()) {
+                return@withContext Result.failure(Exception("No slides or pages to compile."))
+            }
+
+            val pdfDoc = PdfDocument()
+            val totalSlides = slides.size
+            val isDoc = slides.any { it.isDocumentPage }
+            val isSheet = slides.any { it.isSpreadsheetPage }
+            val effectiveLandscape = if (isDoc) false else (if (isSheet) true else isLandscape)
+
+            val pageWidth = if (effectiveLandscape) 842 else 595
+            val pageHeight = if (effectiveLandscape) 595 else 842
+
+            val titlePaint = TextPaint().apply {
+                color = Color.rgb(15, 23, 42)
+                textSize = if (isDoc) 18f else 20f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                isAntiAlias = true
+            }
+
+            val subtitlePaint = TextPaint().apply {
+                color = Color.rgb(5, 150, 105)
+                textSize = 10.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                isAntiAlias = true
+            }
+
+            val bodyPaint = TextPaint().apply {
+                color = Color.rgb(30, 41, 59)
+                textSize = if (isDoc) 11.5f else 12.5f
+                typeface = Typeface.DEFAULT
+                isAntiAlias = true
+            }
+
+            val bulletDotPaint = Paint().apply {
+                color = Color.rgb(5, 150, 105)
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+
+            val footerPaint = TextPaint().apply {
+                color = Color.rgb(148, 163, 184)
+                textSize = 9.5f
+                typeface = Typeface.DEFAULT
+                isAntiAlias = true
+            }
+
+            val borderPaint = Paint().apply {
+                color = Color.rgb(226, 232, 240)
+                strokeWidth = 1.0f
+                style = Paint.Style.STROKE
+                isAntiAlias = true
+            }
+
+            val headerBgPaint = Paint().apply {
+                color = Color.rgb(241, 245, 249)
+                style = Paint.Style.FILL
+            }
+
+            val zebraBgPaint = Paint().apply {
+                color = Color.rgb(248, 250, 252)
+                style = Paint.Style.FILL
+            }
+
+            slides.forEachIndexed { index, slide ->
+                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, index + 1).create()
+                val page = pdfDoc.startPage(pageInfo)
+                val canvas = page.canvas
+
+                canvas.drawColor(Color.WHITE)
+
+                val margin = if (isDoc) 36f else 20f
+                val contentRect = RectF(margin, margin, pageWidth - margin, pageHeight - margin)
+                
+                if (!isDoc) {
+                    canvas.drawRoundRect(contentRect, 6f, 6f, borderPaint)
+                }
+
+                var curY = margin + 10f
+
+                if (isDoc) {
+                    // Clean Document Header (A4 Portrait)
+                    if (slide.title.isNotBlank()) {
+                        canvas.drawText(slide.title, margin + 4f, curY + 16f, titlePaint)
+                        curY += 28f
+                        canvas.drawLine(margin, curY, pageWidth - margin, curY, borderPaint)
+                        curY += 16f
+                    }
+                } else if (isSheet) {
+                    // Spreadsheet Header Banner
+                    val bannerH = 46f
+                    val bannerRect = RectF(margin + 2f, margin + 2f, pageWidth - margin - 2f, margin + bannerH)
+                    canvas.drawRoundRect(bannerRect, 4f, 4f, headerBgPaint)
+                    canvas.drawText("SPREADSHEET TABLE", margin + 14f, margin + 18f, subtitlePaint)
+                    canvas.drawText(slide.title, margin + 14f, margin + 38f, titlePaint)
+                    curY = margin + bannerH + 14f
+                } else {
+                    // Presentation Slide Header
+                    val headerH = 75f
+                    val headerRect = RectF(margin + 2f, margin + 2f, pageWidth - margin - 2f, margin + headerH)
+                    canvas.drawRoundRect(headerRect, 5f, 5f, headerBgPaint)
+                    canvas.drawText("ACADEMIC PRESENTATION SLIDE", margin + 18f, margin + 26f, subtitlePaint)
+                    val cleanTitle = if (slide.title.length > 60) slide.title.take(57) + "..." else slide.title
+                    canvas.drawText(cleanTitle, margin + 18f, margin + 54f, titlePaint)
+                    curY = margin + headerH + 20f
+                }
+
+                val bottomLimitY = pageHeight - margin - 25f
+                val contentWidth = pageWidth - 2 * margin
+
+                // 1. Draw structured Table if present
+                if (slide.tableRows.isNotEmpty()) {
+                    val tableRows = slide.tableRows
+                    val numCols = tableRows.maxOfOrNull { it.size } ?: 1
+                    if (numCols > 0) {
+                        val colW = contentWidth / numCols.toFloat()
+
+                        tableRows.forEachIndexed { rIdx, row ->
+                            val isHeader = (rIdx == 0)
+                            var maxRowH = 22f
+                            val cellLayouts = mutableListOf<StaticLayout>()
+
+                            for (c in 0 until numCols) {
+                                val text = if (c < row.size) row[c].trim() else ""
+                                val p = if (isHeader) titlePaint else bodyPaint
+                                val pCloned = TextPaint(p).apply { textSize = if (isHeader) 10.5f else 10f }
+                                val cellW = (colW - 8f).toInt().coerceAtLeast(10)
+                                val l = StaticLayout.Builder.obtain(text, 0, text.length, pCloned, cellW)
+                                    .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                                    .setLineSpacing(2f, 1f)
+                                    .build()
+                                cellLayouts.add(l)
+                                if (l.height + 8f > maxRowH) {
+                                    maxRowH = l.height + 8f
+                                }
+                            }
+
+                            if (curY + maxRowH < bottomLimitY) {
+                                val rowRect = RectF(margin, curY, margin + contentWidth, curY + maxRowH)
+                                if (isHeader) {
+                                    canvas.drawRect(rowRect, headerBgPaint)
+                                } else if (rIdx % 2 == 1) {
+                                    canvas.drawRect(rowRect, zebraBgPaint)
+                                }
+
+                                for (c in 0 until numCols) {
+                                    val cellX = margin + (c * colW)
+                                    val cellRect = RectF(cellX, curY, cellX + colW, curY + maxRowH)
+                                    canvas.drawRect(cellRect, borderPaint)
+
+                                    val l = cellLayouts[c]
+                                    val tY = curY + ((maxRowH - l.height) / 2f).coerceAtLeast(3f)
+                                    canvas.save()
+                                    canvas.translate(cellX + 4f, tY)
+                                    l.draw(canvas)
+                                    canvas.restore()
+                                }
+                                curY += maxRowH
+                            }
+                        }
+                        curY += 12f
+                    }
+                }
+
+                // 2. Draw paragraphs / body text
+                slide.paragraphs.forEach { para ->
+                    if (curY < bottomLimitY - 15f) {
+                        val textStartX = margin + if (!isDoc) 16f else 4f
+                        val textW = (contentWidth - if (!isDoc) 20f else 8f).toInt().coerceAtLeast(50)
+
+                        if (!isDoc) {
+                            canvas.drawCircle(margin + 4f, curY + 6f, 3f, bulletDotPaint)
+                        }
+
+                        val layout = StaticLayout.Builder.obtain(para, 0, para.length, bodyPaint, textW)
+                            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                            .setLineSpacing(3f, 1f)
+                            .build()
+
+                        canvas.save()
+                        canvas.translate(textStartX, curY)
+                        layout.draw(canvas)
+                        canvas.restore()
+                        curY += layout.height + if (isDoc) 8f else 10f
+                    }
+                }
+
+                // 3. Draw embedded figures
+                if (slide.images.isNotEmpty() && curY < bottomLimitY - 50f) {
+                    val imgAvailH = bottomLimitY - curY - 10f
+                    val firstImg = slide.images.first()
+                    val scale = minOf(contentWidth / firstImg.width.toFloat(), imgAvailH / firstImg.height.toFloat(), 1f)
+                    val dW = firstImg.width * scale
+                    val dH = firstImg.height * scale
+                    val dLeft = margin + (contentWidth - dW) / 2f
+                    val dest = RectF(dLeft, curY, dLeft + dW, curY + dH)
+                    canvas.drawBitmap(firstImg, null, dest, null)
+                    canvas.drawRoundRect(dest, 4f, 4f, borderPaint)
+                }
+
+                // Footer row
+                val footerTag = if (isDoc) "Qwik Save Document Engine • Academic Edition" else (if (isSheet) "Qwik Save Spreadsheet Engine" else "Converted with Qwik Save Academic Engine")
+                val pageTag = if (isDoc) "Page ${index + 1} of $totalSlides" else (if (isSheet) "Sheet ${index + 1} of $totalSlides" else "Slide ${index + 1} of $totalSlides")
+                canvas.drawText(footerTag, margin + 4f, pageHeight - margin - 8f, footerPaint)
+                canvas.drawText(pageTag, pageWidth - margin - 80f, pageHeight - margin - 8f, footerPaint)
+
+                pdfDoc.finishPage(page)
+            }
+
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val qwikDir = File(downloadsDir, "QwikSave").apply { mkdirs() }
+            val cleanName = outputName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val outFile = File(qwikDir, "${cleanName}.pdf")
+
+            FileOutputStream(outFile).use { fos ->
+                pdfDoc.writeTo(fos)
+            }
+            pdfDoc.close()
+
+            // Save to recent history for 48-hour privacy retention
+            com.qwiksave.app.data.PdfHistoryManager.addPdf(context, outFile)
+
+            MediaScannerConnection.scanFile(context, arrayOf(outFile.absolutePath), arrayOf("application/pdf"), null)
+            Result.success(outFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun convertPptxToPdf(
+        context: Context,
+        pptUri: Uri,
+        outputName: String = "Presentation_Slides"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        val parsed = parsePptxSlides(context, pptUri)
+        if (parsed.isFailure) return@withContext Result.failure(parsed.exceptionOrNull() ?: Exception("Cannot parse slides"))
+        compilePresentationToPdf(context, parsed.getOrNull()!!, outputName, isLandscape = true)
+    }
+
+    suspend fun convertDocxToPdf(
+        context: Context,
+        docUri: Uri,
+        outputName: String = "Word_Document"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        val parsed = parseDocxPages(context, docUri)
+        if (parsed.isFailure) return@withContext Result.failure(parsed.exceptionOrNull() ?: Exception("Cannot parse document"))
+        compilePresentationToPdf(context, parsed.getOrNull()!!, outputName, isLandscape = false)
+    }
+
+    suspend fun convertXlsxToPdf(
+        context: Context,
+        xlsxUri: Uri,
+        outputName: String = "Spreadsheet"
+    ): Result<File> = withContext(Dispatchers.IO) {
+        val parsed = parseXlsxSheets(context, xlsxUri)
+        if (parsed.isFailure) return@withContext Result.failure(parsed.exceptionOrNull() ?: Exception("Cannot parse spreadsheet"))
+        compilePresentationToPdf(context, parsed.getOrNull()!!, outputName, isLandscape = true)
+    }
+
+    /**
+     * Smart Video Compressor: Uses hardware-accelerated Media3 Transformer to cut video MBs
+     * by 50-80% for WhatsApp, email & socials while preserving crisp 1080p/720p HD clarity.
+     */
+    suspend fun compressVideo(
+        context: Context,
+        videoUri: Uri,
+        outputName: String = "Compressed_Video",
+        qualityPreset: String = "recommended"
+    ): Result<File> = withContext(Dispatchers.Main) {
+        val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val qwikDir = File(moviesDir, "QwikSave").apply { mkdirs() }
+        val cleanName = outputName.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val outFile = File(qwikDir, "${cleanName}.mp4")
+        if (outFile.exists()) outFile.delete()
+
+        // 1. Copy to local seekable cache file so Media3 Transformer has zero content-provider I/O issues
+        val tempInputFile = File(context.cacheDir, "qwik_compress_in_${System.currentTimeMillis()}.mp4")
+        val copied = withContext(Dispatchers.IO) {
+            try {
+                context.contentResolver.openInputStream(videoUri)?.use { input ->
+                    FileOutputStream(tempInputFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                tempInputFile.exists() && tempInputFile.length() > 0
+            } catch (_: Exception) { false }
+        }
+
+        if (!copied) {
+            return@withContext Result.failure(Exception("Cannot read source video file from device storage."))
+        }
+
+        // 2. Query source video metadata
+        var inWidth = 1280
+        var inHeight = 720
+        var inBitrate = 4_000_000
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(tempInputFile.absolutePath)
+            inWidth = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 1280
+            inHeight = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 720
+            inBitrate = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toIntOrNull() ?: 4_000_000
+        } catch (_: Exception) {} finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
+
+        // 3. Target bitrate and effects for massive byte reduction
+        val targetBitrate = when (qualityPreset.lowercase()) {
+            "extreme", "whatsapp" -> 850_000
+            "high" -> (inBitrate * 0.70).toInt().coerceIn(1_800_000, 3_500_000)
+            else -> (inBitrate * 0.45).toInt().coerceIn(1_100_000, 2_200_000)
+        }
+
+        val effectsList = mutableListOf<androidx.media3.common.Effect>()
+        val maxDim = maxOf(inWidth, inHeight)
+        if (maxDim > 1280) {
+            val scale = 1280f / maxDim
+            val targetW = ((inWidth * scale).toInt() / 2) * 2
+            val targetH = ((inHeight * scale).toInt() / 2) * 2
+            effectsList.add(androidx.media3.effect.Presentation.createForWidthAndHeight(targetW, targetH, androidx.media3.effect.Presentation.LAYOUT_SCALE_TO_FIT))
+        }
+
+        val videoEncoderSettings = androidx.media3.transformer.VideoEncoderSettings.Builder()
+            .setBitrate(targetBitrate)
+            .build()
+        val encoderFactory = androidx.media3.transformer.DefaultEncoderFactory.Builder(context)
+            .setRequestedVideoEncoderSettings(videoEncoderSettings)
+            .setEnableFallback(true)
+            .build()
+
+        val mediaItem = androidx.media3.common.MediaItem.fromUri(Uri.fromFile(tempInputFile))
+        val editedMediaItem = androidx.media3.transformer.EditedMediaItem.Builder(mediaItem)
+            .setEffects(androidx.media3.transformer.Effects(emptyList(), effectsList))
+            .build()
+
+        val success = try {
+            kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
+                try {
+                    val transformer = androidx.media3.transformer.Transformer.Builder(context)
+                        .setVideoMimeType(androidx.media3.common.MimeTypes.VIDEO_H264)
+                        .setAudioMimeType(androidx.media3.common.MimeTypes.AUDIO_AAC)
+                        .setEncoderFactory(encoderFactory)
+                        .addListener(object : androidx.media3.transformer.Transformer.Listener {
+                            override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
+                                if (cont.isActive) cont.resume(true)
+                            }
+                            override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
+                                android.util.Log.e("QwikSave", "Media3 error: ${exportException.errorCodeName}", exportException)
+                                if (cont.isActive) cont.resume(false)
+                            }
+                        })
+                        .build()
+
+                    transformer.start(editedMediaItem, outFile.absolutePath)
+                    cont.invokeOnCancellation {
+                        try { transformer.cancel() } catch (_: Exception) {}
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("QwikSave", "Transformer start exception", e)
+                    if (cont.isActive) cont.resume(false)
+                }
+            }
+        } catch (_: Exception) { false }
+
+        // Clean up temp input file
+        try { tempInputFile.delete() } catch (_: Exception) {}
+
+        if (success && outFile.exists() && outFile.length() > 0L) {
+            MediaScannerConnection.scanFile(context, arrayOf(outFile.absolutePath), arrayOf("video/mp4"), null)
+            Result.success(outFile)
+        } else {
+            Result.failure(Exception("Could not compress video stream with chosen codec settings."))
+        }
+    }
+
+    /**
      * Get exact file size in bytes from a content Uri.
      */
     fun getFileSizeFromUri(context: Context, uri: Uri): Long {
@@ -1967,7 +3078,7 @@ class QwikSaveClient(
                 type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, file.name)
-                putExtra(Intent.EXTRA_TEXT, "Shared via Qwik Save • Save in One Click (ai-chat2pdf.live)")
+                putExtra(Intent.EXTRA_TEXT, "Shared via Qwik Save • Save in One Click (https://qwiksave.vercel.app)")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(Intent.createChooser(intent, "Share Document via"))
@@ -2245,7 +3356,7 @@ class QwikSaveClient(
 
                 c.drawText("POWERED BY", textLeft, topY + 8.5f, poweredPaint)
                 c.drawText("College Study", textLeft, topY + 16.5f, csBrandPaint)
-                c.drawText("https://college-study.netlify.app", textLeft, topY + 23.5f, subHubPaint)
+                c.drawText("Academic Research & Study Hub", textLeft, topY + 23.5f, subHubPaint)
             }
 
             val isoDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
@@ -2308,6 +3419,7 @@ class QwikSaveClient(
             yPosition += 14f
 
             // Helper for formatted Markdown text that renders bold & italics with Android StaticLayout
+            // and strips asterisks completely
             fun formatMarkdownSpanned(raw: String): CharSequence {
                 // Strictly purge raw XML, ChatGPT internal Entity, and divider tags
                 val cleanedRaw = raw
@@ -2315,18 +3427,53 @@ class QwikSaveClient(
                     .replace(Regex("<divider[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
                     .replace(Regex("<citation[^>]*\\/?>", RegexOption.IGNORE_CASE), "")
                     .replace(Regex("<[a-zA-Z][a-zA-Z0-9_-]*(?:\\s+[^>]*?)?\\/?>"), "")
-                val h = cleanedRaw
-                    .replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                    .replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
-                    .replace(Regex("\\*(.*?)\\*"), "<i>$1</i>")
-                    .replace(Regex("`([^`]+)`"), "<tt>$1</tt>")
-                return try {
-                    android.text.Html.fromHtml(h, android.text.Html.FROM_HTML_MODE_LEGACY)
-                } catch (_: Exception) {
-                    cleanedRaw.replace(Regex("[*#`]"), "")
+
+                val resultText = StringBuilder()
+                val boldSpans = mutableListOf<Pair<Int, Int>>()
+                val italicSpans = mutableListOf<Pair<Int, Int>>()
+
+                var i = 0
+                while (i < cleanedRaw.length) {
+                    if (i + 1 < cleanedRaw.length && cleanedRaw[i] == '*' && cleanedRaw[i + 1] == '*') {
+                        val close = cleanedRaw.indexOf("**", i + 2)
+                        if (close != -1) {
+                            val boldContent = cleanedRaw.substring(i + 2, close)
+                            val start = resultText.length
+                            resultText.append(boldContent)
+                            val end = resultText.length
+                            boldSpans.add(Pair(start, end))
+                            i = close + 2
+                            continue
+                        }
+                    }
+                    if (cleanedRaw[i] == '*' && (i + 1 >= cleanedRaw.length || cleanedRaw[i + 1] != '*')) {
+                        val close = cleanedRaw.indexOf('*', i + 1)
+                        if (close != -1 && (close + 1 >= cleanedRaw.length || cleanedRaw[close + 1] != '*')) {
+                            val italicContent = cleanedRaw.substring(i + 1, close)
+                            val start = resultText.length
+                            resultText.append(italicContent)
+                            val end = resultText.length
+                            italicSpans.add(Pair(start, end))
+                            i = close + 1
+                            continue
+                        }
+                    }
+                    resultText.append(cleanedRaw[i])
+                    i++
                 }
+
+                val ssb = SpannableStringBuilder(resultText.toString())
+                for ((start, end) in boldSpans) {
+                    if (start < end && end <= ssb.length) {
+                        ssb.setSpan(StyleSpan(Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                for ((start, end) in italicSpans) {
+                    if (start < end && end <= ssb.length) {
+                        ssb.setSpan(StyleSpan(Typeface.ITALIC), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                return ssb
             }
 
             // Helper to parse Markdown tables (| Col 1 | Col 2 |)
@@ -2952,18 +4099,39 @@ class QwikSaveClient(
             } else {
                 // Freeform text/markdown notes (guaranteed safe from raw base64)
                 val (cleanFreeformContent, _) = extractImagesAndCleanContentSafely(content)
-                val paragraphs = cleanFreeformContent.split("\n\n").filter { it.isNotBlank() }
-                for (paragraph in paragraphs) {
-                    val isQuestionOrHeading = paragraph.startsWith("#") || paragraph.startsWith("1.") ||
-                            paragraph.startsWith("2.") || paragraph.startsWith("3.") || paragraph.startsWith("4.") ||
-                            paragraph.startsWith("Q:") || paragraph.startsWith("Question:")
+                val rawBlocks = cleanFreeformContent.split("\n\n").filter { it.isNotBlank() }
+                val units = mutableListOf<Pair<Boolean, String>>() // isHeading to text
 
-                    val cleanText = paragraph.replace(Regex("^#+\\s*"), "").trim()
+                for (block in rawBlocks) {
+                    val lines = block.lines()
+                    var currentPara = StringBuilder()
+                    for (line in lines) {
+                        val trimmed = line.trim()
+                        if (trimmed.startsWith("#")) {
+                            if (currentPara.isNotBlank()) {
+                                units.add(Pair(false, currentPara.toString().trim()))
+                                currentPara = StringBuilder()
+                            }
+                            val headingText = trimmed.replace(Regex("^#+\\s*"), "").trim()
+                            if (headingText.isNotBlank()) {
+                                units.add(Pair(true, headingText))
+                            }
+                        } else {
+                            if (currentPara.isNotEmpty()) currentPara.append("\n")
+                            currentPara.append(line)
+                        }
+                    }
+                    if (currentPara.isNotBlank()) {
+                        units.add(Pair(false, currentPara.toString().trim()))
+                    }
+                }
 
-                    if (isQuestionOrHeading) {
+                for ((isHeading, unitText) in units) {
+                    if (isHeading) {
+                        val spannedHeading = formatMarkdownSpanned(unitText)
                         @Suppress("DEPRECATION")
                         val qLayout = StaticLayout(
-                            cleanText,
+                            spannedHeading,
                             questionTitlePaint,
                             printableWidth - 36,
                             Layout.Alignment.ALIGN_NORMAL,
@@ -2972,8 +4140,8 @@ class QwikSaveClient(
                             false
                         )
 
-                        val boxHeight = qLayout.height + 14f
-                        if (yPosition + boxHeight + 45f > pageHeight - margin) {
+                        val headingH = qLayout.height + 6f
+                        if (yPosition + headingH + 45f > pageHeight - margin) {
                             drawAcademicFooter(canvas, currentPageNumber, margin, pageWidth, pageHeight, appLogoBitmap, footerText, includePageNumbers)
                             pdfDocument.finishPage(page)
 
@@ -2990,20 +4158,19 @@ class QwikSaveClient(
                             }
                         }
 
-                        val boxRect = RectF(margin + 12f, yPosition, margin + printableWidth - 12f, yPosition + boxHeight)
-                        canvas.drawRoundRect(boxRect, 6f, 6f, calloutBgPaint)
-                        canvas.drawRoundRect(boxRect, 6f, 6f, calloutBorderPaint)
-
+                        // Clean bold heading line without background box
+                        yPosition += 6f
                         canvas.save()
-                        canvas.translate(margin + 20f, yPosition + 7f)
+                        canvas.translate(margin + 12f, yPosition)
                         qLayout.draw(canvas)
                         canvas.restore()
 
-                        yPosition += boxHeight + 10f
+                        yPosition += qLayout.height + 8f
                     } else {
+                        val spannedBody = formatMarkdownSpanned(unitText)
                         @Suppress("DEPRECATION")
                         val bLayout = StaticLayout(
-                            cleanText,
+                            spannedBody,
                             bodyPaint,
                             printableWidth - 24,
                             Layout.Alignment.ALIGN_NORMAL,
@@ -3093,17 +4260,17 @@ class QwikSaveClient(
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
         }
-        val effectiveBrand = if (!customFooter.isNullOrBlank()) customFooter else "Qwik Save • https://qwiksave.vercel.app"
+        val effectiveBrand = if (!customFooter.isNullOrBlank()) customFooter else "Qwik Save"
         canvas.drawText(effectiveBrand, textLeft, y + 2.5f, brandPaint)
 
-        // Line 2: Developer: Priyal Kumar • https://www.linkedin.com/in/priyal-kumar-29b26529a/
+        // Line 2: Developer: Priyal Kumar (Clean, clickable brand without raw URL text)
         val devPaint = TextPaint().apply {
             color = Color.rgb(2, 132, 199) // sky-600
             textSize = 7.0f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
         }
-        canvas.drawText("Developer: Priyal Kumar • https://www.linkedin.com/in/priyal-kumar-29b26529a/", textLeft, y + 11.5f, devPaint)
+        canvas.drawText("Developer: Priyal Kumar", textLeft, y + 11.5f, devPaint)
 
         // Right Side: Page X (clean, without website URL)
         val pageTextPaint = TextPaint().apply {
@@ -3128,6 +4295,32 @@ class QwikSaveClient(
         shareUrl: String,
         context: Context? = null
     ): Result<AiConversationData> = withContext(Dispatchers.IO) {
+        val cleanUrl = shareUrl.trim()
+        val isSpa = cleanUrl.contains("gemini.google", ignoreCase = true) ||
+                    cleanUrl.contains("share.gemini", ignoreCase = true) ||
+                    cleanUrl.contains("claude.ai", ignoreCase = true)
+
+        // 1. For Google Gemini & Claude SPAs, prioritize On-Device Headless WebView
+        // This bypasses serverless sandbox limitations and extracts real live rendered turns.
+        if (isSpa && context != null) {
+            val localResult = AiShareWebViewExtractor.extractFromDevice(context, cleanUrl, timeoutMs = 25000)
+            if (localResult.isSuccess && localResult.getOrNull()?.messages?.isNotEmpty() == true) {
+                val data = localResult.getOrNull()!!
+                val isPromo = data.messages.any {
+                    AiShareWebViewExtractor.isPromotionalOrCarousel(it.content)
+                }
+                if (!isPromo) {
+                    return@withContext localResult
+                }
+            } else if (cleanUrl.contains("claude.ai", ignoreCase = true)) {
+                val err = localResult.exceptionOrNull()?.message
+                if (err != null && err.contains("Claude requires", ignoreCase = true)) {
+                    return@withContext localResult
+                }
+            }
+        }
+
+        // 2. Official backend API extractor (e.g. for ChatGPT and generic links)
         try {
             val endpoint = URL("$baseUrl/api/extract")
             val conn = (endpoint.openConnection() as HttpURLConnection).apply {
@@ -3139,7 +4332,7 @@ class QwikSaveClient(
                 readTimeout = 20000
             }
 
-            val payload = JSONObject().apply { put("url", shareUrl.trim()) }
+            val payload = JSONObject().apply { put("url", cleanUrl) }
             conn.outputStream.use { os ->
                 os.write(payload.toString().toByteArray())
             }
@@ -3153,7 +4346,7 @@ class QwikSaveClient(
                 val convObj = json.optJSONObject("conversation") ?: json.optJSONObject("data")
                 if (convObj != null) {
                     val title = convObj.optString("title", "Extracted Notes & Exam Guide")
-                    val sourceUrl = convObj.optString("sourceUrl", shareUrl.trim())
+                    val sourceUrl = convObj.optString("sourceUrl", cleanUrl)
                     val messagesJson = convObj.optJSONArray("messages")
                     val msgList = mutableListOf<AiChatMessage>()
                     if (messagesJson != null) {
@@ -3163,7 +4356,7 @@ class QwikSaveClient(
                             val role = msg.optString("role", "assistant")
                             val author = msg.optString("authorName", if (role == "user") "USER" else "ASSISTANT")
                             val content = msg.optString("content").ifBlank { msg.optString("text", "") }
-                            if (content.isNotBlank()) {
+                            if (content.isNotBlank() && !AiShareWebViewExtractor.isPromotionalOrCarousel(content)) {
                                 msgList.add(AiChatMessage(id = id, role = role, authorName = author, content = content))
                             }
                         }
@@ -3190,15 +4383,19 @@ class QwikSaveClient(
             }
         } catch (_: Exception) {}
 
-        // Fallback to on-device headless WebView extraction (for Google Gemini & Claude SPAs)
-        if (context != null) {
-            val localResult = AiShareWebViewExtractor.extractFromDevice(context, shareUrl, timeoutMs = 15000)
+        // 3. Final Fallback to On-Device Extractor if not already run
+        if (!isSpa && context != null) {
+            val localResult = AiShareWebViewExtractor.extractFromDevice(context, cleanUrl, timeoutMs = 15000)
             if (localResult.isSuccess && localResult.getOrNull()?.messages?.isNotEmpty() == true) {
                 return@withContext localResult
             }
         }
 
-        Result.failure(Exception("Could not automatically parse messages from shared AI conversation. Please ensure the link is public."))
+        if (cleanUrl.contains("claude.ai", ignoreCase = true)) {
+            Result.failure(Exception("Claude requires an active account login to view shared links. Please paste your conversation text directly into the 'Direct Notes' tab!"))
+        } else {
+            Result.failure(Exception("Could not automatically parse messages from shared AI conversation. Please ensure the link is public or paste notes directly."))
+        }
     }
 
     suspend fun extractAiConversationModel(

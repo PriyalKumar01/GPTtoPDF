@@ -253,19 +253,20 @@ fun ProfileDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        val isFemale = userGender.equals("Female", ignoreCase = true)
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(44.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF0284C7).copy(alpha = 0.15f))
-                                .border(1.5.dp, Color(0xFF0284C7), CircleShape),
+                                .background(if (isFemale) Color(0xFFF43F5E).copy(alpha = 0.15f) else Color(0xFF0284C7).copy(alpha = 0.15f))
+                                .border(1.5.dp, if (isFemale) Color(0xFFF43F5E) else Color(0xFF0284C7), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = Color(0xFF38BDF8),
-                                modifier = Modifier.size(24.dp)
+                                imageVector = if (isFemale) Icons.Default.Face3 else Icons.Default.Face6,
+                                contentDescription = if (isFemale) "Female Avatar" else "Male Avatar",
+                                tint = if (isFemale) Color(0xFFFB7185) else Color(0xFF38BDF8),
+                                modifier = Modifier.size(26.dp)
                             )
                         }
                         Column {

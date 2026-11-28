@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, isUserBanned, fetchUsersFromSupabase } from '@/lib/users-db';
+import { getUserByEmail, isUserBanned, getSupabaseUserByEmail } from '@/lib/users-db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,10 +15,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Exempt master owner
+  if (email === 'priyalkumar01@gmail.com') {
+    return NextResponse.json(
+      { isBanned: false, email },
+      { headers: { 'Cache-Control': 'no-store, must-revalidate' } }
+    );
+  }
+
   // First check Supabase live for real-time accuracy
   try {
-    const supabaseUsers = await fetchUsersFromSupabase();
-    const suUser = supabaseUsers.find((u) => u.email.toLowerCase() === email);
+    const suUser = await getSupabaseUserByEmail(email);
     if (suUser) {
       return NextResponse.json(
         {

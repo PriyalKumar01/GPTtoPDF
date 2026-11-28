@@ -50,7 +50,7 @@ const COUNTRY_CODES = [
 
 export default function QrCodePage() {
   const [qrType, setQrType] = useState<'url' | 'text' | 'wifi' | 'whatsapp' | 'phone'>('url');
-  const [urlValue, setUrlValue] = useState('https://ai-chat2pdf.live');
+  const [urlValue, setUrlValue] = useState('https://qwiksave.vercel.app');
   const [textValue, setTextValue] = useState('');
   const [wifiSsid, setWifiSsid] = useState('');
   const [wifiPassword, setWifiPassword] = useState('');
@@ -70,7 +70,7 @@ export default function QrCodePage() {
   const getRawContent = () => {
     switch (qrType) {
       case 'url':
-        return urlValue.trim() || 'https://ai-chat2pdf.live';
+        return urlValue.trim() || 'https://qwiksave.vercel.app';
       case 'text':
         return textValue.trim() || 'Hello World!';
       case 'wifi':
@@ -90,7 +90,7 @@ export default function QrCodePage() {
         return `tel:${fullNumber}`;
       }
       default:
-        return urlValue || 'https://ai-chat2pdf.live';
+        return urlValue || 'https://qwiksave.vercel.app';
     }
   };
 

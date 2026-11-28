@@ -28,8 +28,18 @@ import {
   Info,
 } from 'lucide-react';
 import { InstagramResult } from '@/lib/extract-instagram';
+import { useAuth } from '@/lib/use-auth';
+import { AuthModal } from '@/components/AuthModal';
 
 export default function InstagramDownloaderPage() {
+  const {
+    isAuthenticated,
+    isAuthModalOpen,
+    openAuthModal,
+    closeAuthModal,
+    requireAuth,
+    handleAuthSuccess,
+  } = useAuth();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
@@ -65,40 +75,42 @@ export default function InstagramDownloaderPage() {
       return;
     }
 
-    setLoading(true);
-    setIsComplete(false);
-    setError(null);
-    setResult(null);
-
-    try {
-      const res = await fetch('/api/instagram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch Instagram media. Please try again.');
-      }
-
-      setIsComplete(true);
-      setTimeout(() => {
-        setResult(data.data);
-        setLoading(false);
-        setTimeout(() => {
-          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 150);
-      }, 400);
-    } catch (err: any) {
-      setLoading(false);
+    requireAuth(async () => {
+      setLoading(true);
       setIsComplete(false);
-      setError(
-        err?.message ||
-          'Unable to download this media. Please verify that the post is public and try again.'
-      );
-    }
+      setError(null);
+      setResult(null);
+
+      try {
+        const res = await fetch('/api/instagram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url.trim() }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to fetch Instagram media. Please try again.');
+        }
+
+        setIsComplete(true);
+        setTimeout(() => {
+          setResult(data.data);
+          setLoading(false);
+          setTimeout(() => {
+            resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 150);
+        }, 400);
+      } catch (err: any) {
+        setLoading(false);
+        setIsComplete(false);
+        setError(
+          err?.message ||
+            'Unable to download this media. Please verify that the post is public and try again.'
+        );
+      }
+    });
   };
 
   const getProxyUrl = (mediaUrl: string, filename: string) => {
@@ -597,6 +609,15 @@ export default function InstagramDownloaderPage() {
 
         <CollegeStudyPromo />
       </main>
+
+      {/* Compulsory Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onSuccess={handleAuthSuccess}
+        title="Sign In Required"
+        subtitle="Sign in with Google, GitHub, X or College email to download Instagram Reels & Posts."
+      />
 
       <Footer />
     </div>

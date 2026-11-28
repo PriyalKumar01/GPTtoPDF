@@ -14,6 +14,8 @@ import android.net.Uri
 import androidx.compose.ui.geometry.Offset
 import java.io.InputStream
 import java.util.UUID
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.hypot
 import kotlin.math.max
 
@@ -23,8 +25,27 @@ enum class FilterType(val displayName: String) {
     LIGHTEN("Lighten"),
     GRAYSCALE("Grayscale"),
     BW("B&W"),
+    PHOTOCOPY("Photocopy"),
     ECO("Eco"),
     NO_SHADOW("No shadow")
+}
+
+data class PlacedWatermark(
+    val text: String = "",
+    val imageBitmap: Bitmap? = null,
+    val opacity: Float = 0.28f,
+    val isDiagonal: Boolean = true,
+    val colorArgb: Int = android.graphics.Color.GRAY,
+    val fontStyle: String = "Sans", // "Sans", "Serif", "Mono"
+    val scale: Float = 0.45f,
+    val badgePreset: String = "NONE", // "NONE", "STAMP_APPROVED", "STAMP_VERIFIED", "BADGE_CONFIDENTIAL", "BADGE_DRAFT", "STAMP_OFFICIAL"
+    val normalizedX: Float = 0.5f,
+    val normalizedY: Float = 0.5f
+)
+
+enum class SignatureInkColor(val label: String, val r: Int, val g: Int, val b: Int) {
+    BLACK("Deep Black", 15, 23, 42),
+    BLUE("Royal Blue", 29, 78, 216)
 }
 
 data class ScannedPage(
@@ -34,6 +55,7 @@ data class ScannedPage(
     var filter: FilterType = FilterType.ORIGINAL,
     var cropPoints: List<Offset>? = null, // 4 corner points normalized [0..1]
     val signatures: MutableList<PlacedSignature> = mutableListOf(),
+    var watermark: PlacedWatermark? = null,
     var isSelected: Boolean = false,
     var cachedProcessedBitmap: Bitmap? = null
 )
@@ -225,6 +247,21 @@ object DocumentImageProcessor {
                 paint.colorFilter = ColorMatrixColorFilter(cm)
                 canvas.drawBitmap(src, 0f, 0f, paint)
             }
+            FilterType.PHOTOCOPY -> {
+                // Photocopy: Razor-sharp clean monochrome with white background shadow removal
+                val cm = ColorMatrix().apply { setSaturation(0f) }
+                val contrast = 3.2f
+                val translate = (-0.5f * contrast + 0.5f) * 255f - 25f
+                val cmPhoto = ColorMatrix(floatArrayOf(
+                    contrast, 0f, 0f, 0f, translate,
+                    0f, contrast, 0f, 0f, translate,
+                    0f, 0f, contrast, 0f, translate,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                cm.postConcat(cmPhoto)
+                paint.colorFilter = ColorMatrixColorFilter(cm)
+                canvas.drawBitmap(src, 0f, 0f, paint)
+            }
             FilterType.ECO -> {
                 // Eco: Ink-saving soft monochrome
                 val cm = ColorMatrix().apply { setSaturation(0f) }
@@ -306,40 +343,510 @@ object DocumentImageProcessor {
             current = result
         }
 
+        // 5. Composite Watermark if present
+        page.watermark?.let { wm ->
+            val result = Bitmap.createBitmap(current.width, current.height, Bitmap.Config.ARGB_8888)
+            val c = Canvas(result)
+            c.drawBitmap(current, 0f, 0f, null)
+
+            if (wm.imageBitmap != null) {
+                // Image / Logo Watermark
+                val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    alpha = (wm.opacity.coerceIn(0.05f, 0.95f) * 255).toInt()
+                }
+                val targetW = current.width * wm.scale.coerceIn(0.15f, 0.9f)
+                val targetH = targetW * (wm.imageBitmap.height.toFloat() / wm.imageBitmap.width.toFloat())
+                val x = (current.width - targetW) / 2f
+                val y = (current.height - targetH) / 2f
+                val destRect = RectF(x, y, x + targetW, y + targetH)
+                c.drawBitmap(wm.imageBitmap, null, destRect, p)
+                current = result
+            } else if (wm.badgePreset != "NONE") {
+                // Preset Rubber Stamp / Badge Watermark (Approved, Verified, Confidential, Draft, Official)
+                drawRubberStampWatermark(c, current.width, current.height, wm)
+                current = result
+            } else if (wm.text.isNotBlank()) {
+                val wmPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = wm.colorArgb
+                    alpha = (wm.opacity.coerceIn(0.05f, 0.95f) * 255).toInt()
+                    textSize = current.width * 0.08f
+                    textAlign = Paint.Align.CENTER
+                    typeface = when (wm.fontStyle.lowercase()) {
+                        "serif" -> android.graphics.Typeface.SERIF
+                        "mono" -> android.graphics.Typeface.MONOSPACE
+                        else -> android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                    }
+                }
+
+                c.save()
+                val centerX = current.width / 2f
+                val centerY = current.height / 2f
+                if (wm.isDiagonal) {
+                    c.rotate(-40f, centerX, centerY)
+                }
+                c.drawText(wm.text, centerX, centerY, wmPaint)
+                c.restore()
+
+                current = result
+            }
+        }
+
         page.cachedProcessedBitmap = current
         return current
     }
 
     /**
-     * Clean background of a captured signature image to make it transparent
+     * Draws authentic vector-rendered Rubber Stamps and Watermark Badges with double borders,
+     * banner lines, star accents, and authentic rotation angle.
      */
-    fun makeSignatureTransparent(src: Bitmap, threshold: Int = 215): Bitmap {
-        val width = src.width
-        val height = src.height
+    fun drawRubberStampWatermark(c: Canvas, width: Int, height: Int, wm: PlacedWatermark) {
+        val cx = width * wm.normalizedX.coerceIn(0.12f, 0.88f)
+        val cy = height * wm.normalizedY.coerceIn(0.12f, 0.88f)
+        val minDim = Math.min(width, height).toFloat()
+        val alphaVal = (wm.opacity.coerceIn(0.10f, 0.95f) * 255).toInt()
+        val radius = minDim * (wm.scale * 0.5f).coerceIn(0.10f, 0.38f)
+
+        when (wm.badgePreset) {
+            "STAMP_APPROVED" -> {
+                // Circular Green Rubber Stamp: Double circle, stars, "APPROVED"
+                val stampColor = android.graphics.Color.rgb(16, 149, 93) // Emerald Green
+                c.save()
+                c.rotate(-14f, cx, cy)
+
+                val outerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = radius * 0.045f
+                }
+                c.drawCircle(cx, cy, radius, outerCirclePaint)
+
+                val innerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = radius * 0.02f
+                }
+                c.drawCircle(cx, cy, radius * 0.88f, innerCirclePaint)
+
+                // Banner parallel lines
+                val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    strokeWidth = radius * 0.025f
+                }
+                val bannerHalfW = radius * 0.78f
+                c.drawLine(cx - bannerHalfW, cy - radius * 0.26f, cx + bannerHalfW, cy - radius * 0.26f, linePaint)
+                c.drawLine(cx - bannerHalfW, cy + radius * 0.26f, cx + bannerHalfW, cy + radius * 0.26f, linePaint)
+
+                // Center APPROVED text with width check
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    textSize = radius * 0.40f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                val maxCenterW = bannerHalfW * 1.8f
+                val appW = textPaint.measureText("APPROVED")
+                if (appW > maxCenterW) {
+                    textPaint.textSize = (radius * 0.40f) * (maxCenterW / appW)
+                }
+                c.drawText("APPROVED", cx, cy + radius * 0.13f, textPaint)
+
+                // Top & Bottom arc labels bounded to never overflow circular seal
+                val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = (alphaVal * 0.9f).toInt()
+                    textSize = radius * 0.13f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                val maxArcW = radius * 1.25f
+                val topLabel = "★ OFFICIAL DOCUMENT ★"
+                val bottomLabel = "★ QWIKSAVE VERIFIED ★"
+                val topW = subPaint.measureText(topLabel)
+                if (topW > maxArcW) {
+                    subPaint.textSize = (radius * 0.13f) * (maxArcW / topW)
+                }
+                c.drawText(topLabel, cx, cy - radius * 0.46f, subPaint)
+                c.drawText(bottomLabel, cx, cy + radius * 0.58f, subPaint)
+                c.restore()
+            }
+            "STAMP_VERIFIED" -> {
+                // Circular Teal/Green Seal: "VERIFIED"
+                val stampColor = android.graphics.Color.rgb(13, 148, 136) // Teal
+                c.save()
+                c.rotate(-11f, cx, cy)
+
+                val outerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = radius * 0.05f
+                }
+                c.drawCircle(cx, cy, radius, outerCirclePaint)
+
+                val innerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = radius * 0.02f
+                }
+                c.drawCircle(cx, cy, radius * 0.88f, innerCirclePaint)
+
+                val bannerHalfW = radius * 0.78f
+                val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    strokeWidth = radius * 0.025f
+                }
+                c.drawLine(cx - bannerHalfW, cy - radius * 0.26f, cx + bannerHalfW, cy - radius * 0.26f, linePaint)
+                c.drawLine(cx - bannerHalfW, cy + radius * 0.26f, cx + bannerHalfW, cy + radius * 0.26f, linePaint)
+
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    textSize = radius * 0.38f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                c.drawText("VERIFIED", cx, cy + radius * 0.13f, textPaint)
+
+                val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = (alphaVal * 0.9f).toInt()
+                    textSize = radius * 0.13f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                val maxArcW = radius * 1.25f
+                val topLabel = "★ CERTIFIED TRUE COPY ★"
+                val bottomLabel = "★ ACADEMIC & LEGAL ★"
+                val topW = subPaint.measureText(topLabel)
+                if (topW > maxArcW) {
+                    subPaint.textSize = (radius * 0.13f) * (maxArcW / topW)
+                }
+                c.drawText(topLabel, cx, cy - radius * 0.46f, subPaint)
+                c.drawText(bottomLabel, cx, cy + radius * 0.58f, subPaint)
+                c.restore()
+            }
+            "BADGE_CONFIDENTIAL" -> {
+                // Red Angled Rectangular Stamp
+                val stampColor = android.graphics.Color.rgb(220, 38, 38) // Red
+                c.save()
+                c.rotate(-22f, cx, cy)
+                val boxW = minDim * 0.76f
+                val boxH = minDim * 0.22f
+                val left = cx - boxW / 2f
+                val top = cy - boxH / 2f
+
+                val outerRectPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = minDim * 0.014f
+                }
+                c.drawRoundRect(RectF(left, top, left + boxW, top + boxH), 12f, 12f, outerRectPaint)
+
+                val innerRectPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = minDim * 0.006f
+                }
+                c.drawRoundRect(RectF(left + 8f, top + 8f, left + boxW - 8f, top + boxH - 8f), 8f, 8f, innerRectPaint)
+
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    textSize = boxH * 0.48f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                c.drawText("CONFIDENTIAL", cx, cy + boxH * 0.16f, textPaint)
+                c.restore()
+            }
+            "BADGE_DRAFT" -> {
+                // Amber/Orange Angled Stamp
+                val stampColor = android.graphics.Color.rgb(217, 119, 6) // Amber
+                c.save()
+                c.rotate(-18f, cx, cy)
+                val boxW = minDim * 0.68f
+                val boxH = minDim * 0.20f
+                val left = cx - boxW / 2f
+                val top = cy - boxH / 2f
+
+                val outerRectPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = minDim * 0.012f
+                }
+                c.drawRoundRect(RectF(left, top, left + boxW, top + boxH), 10f, 10f, outerRectPaint)
+
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    textSize = boxH * 0.50f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                c.drawText("DRAFT", cx, cy + boxH * 0.17f, textPaint)
+                c.restore()
+            }
+            "STAMP_OFFICIAL" -> {
+                // Navy Blue Circular Stamp
+                val stampColor = android.graphics.Color.rgb(30, 58, 138) // Deep Blue
+                c.save()
+                c.rotate(-15f, cx, cy)
+                val radius = minDim * 0.22f
+
+                val outerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = radius * 0.045f
+                }
+                c.drawCircle(cx, cy, radius, outerCirclePaint)
+                val innerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    style = Paint.Style.STROKE
+                    strokeWidth = radius * 0.018f
+                }
+                c.drawCircle(cx, cy, radius * 0.88f, innerCirclePaint)
+
+                val bannerHalfW = radius * 0.78f
+                val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    strokeWidth = radius * 0.025f
+                }
+                c.drawLine(cx - bannerHalfW, cy - radius * 0.26f, cx + bannerHalfW, cy - radius * 0.26f, linePaint)
+                c.drawLine(cx - bannerHalfW, cy + radius * 0.26f, cx + bannerHalfW, cy + radius * 0.26f, linePaint)
+
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = alphaVal
+                    textSize = radius * 0.44f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                c.drawText("OFFICIAL", cx, cy + radius * 0.14f, textPaint)
+
+                val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    alpha = (alphaVal * 0.9f).toInt()
+                    textSize = radius * 0.15f
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                }
+                c.drawText("★ VERIFIED DOCUMENT ★", cx, cy - radius * 0.46f, subPaint)
+                c.drawText("★ AUTHENTIC SEAL ★", cx, cy + radius * 0.62f, subPaint)
+                c.restore()
+            }
+        }
+    }
+
+    /**
+     * Clean background of a captured signature image to make it 100% transparent
+     * and adaptively recolors ink to professional Blue or Black ink.
+     * Tightly crops to the bounding box of ink so no rectangular box/haze covers the document.
+     */
+    fun makeSignatureTransparent(
+        src: Bitmap,
+        inkColor: SignatureInkColor = SignatureInkColor.BLUE,
+        thresholdSensitivity: Float = 0.88f,
+        isDrawnSignature: Boolean = false
+    ): Bitmap {
+        // Downsample input if too large to prevent OOM
+        val maxDim = 1200
+        val input = if (src.width > maxDim || src.height > maxDim) {
+            val scale = maxDim.toFloat() / maxOf(src.width, src.height)
+            Bitmap.createScaledBitmap(src, (src.width * scale).toInt(), (src.height * scale).toInt(), true)
+        } else {
+            src
+        }
+
+        val width = input.width
+        val height = input.height
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val pixels = IntArray(width * height)
-        src.getPixels(pixels, 0, width, 0, 0, width, height)
+        input.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        for (i in pixels.indices) {
-            val c = pixels[i]
-            val r = Color.red(c)
-            val g = Color.green(c)
-            val b = Color.blue(c)
-            val luminance = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+        if (isDrawnSignature) {
+            // For finger-drawn signatures, strokes are drawn on a transparent canvas
+            var minX = width
+            var minY = height
+            var maxX = 0
+            var maxY = 0
+            var drawnPixelCount = 0
 
-            if (luminance >= threshold) {
-                // Background -> pure transparent
-                pixels[i] = Color.TRANSPARENT
-            } else {
-                // Dark ink -> boost ink darkness with anti-aliasing alpha
-                val alpha = ((threshold - luminance).toFloat() / threshold * 255).toInt().coerceIn(0, 255)
-                pixels[i] = Color.argb(alpha, 15, 23, 42) // Deep navy black ink
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val idx = y * width + x
+                    val c = pixels[idx]
+                    val a = Color.alpha(c)
+                    if (a > 20) {
+                        pixels[idx] = Color.argb(a, inkColor.r, inkColor.g, inkColor.b)
+                        if (x < minX) minX = x
+                        if (x > maxX) maxX = x
+                        if (y < minY) minY = y
+                        if (y > maxY) maxY = y
+                        drawnPixelCount++
+                    } else {
+                        pixels[idx] = Color.TRANSPARENT
+                    }
+                }
+            }
+
+            output.setPixels(pixels, 0, width, 0, 0, width, height)
+
+            if (drawnPixelCount > 10 && minX <= maxX && minY <= maxY) {
+                val pad = 8
+                val cLeft = (minX - pad).coerceAtLeast(0)
+                val cTop = (minY - pad).coerceAtLeast(0)
+                val cRight = (maxX + pad).coerceAtMost(width - 1)
+                val cBottom = (maxY + pad).coerceAtMost(height - 1)
+                val cW = cRight - cLeft + 1
+                val cH = cBottom - cTop + 1
+                return Bitmap.createBitmap(output, cLeft, cTop, cW, cH)
+            }
+            return output
+        }
+
+        // For gallery pictures / imported signatures:
+        // Check if the image already has transparency (e.g. PNG signature)
+        val transparentPixels = pixels.count { Color.alpha(it) < 40 }
+        val isAlreadyTransparent = transparentPixels > (pixels.size * 0.08f)
+
+        var minX = width
+        var minY = height
+        var maxX = 0
+        var maxY = 0
+        var inkCount = 0
+
+        if (isAlreadyTransparent) {
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val idx = y * width + x
+                    val c = pixels[idx]
+                    val a = Color.alpha(c)
+                    if (a > 30) {
+                        pixels[idx] = Color.argb(a, inkColor.r, inkColor.g, inkColor.b)
+                        if (x < minX) minX = x
+                        if (x > maxX) maxX = x
+                        if (y < minY) minY = y
+                        if (y > maxY) maxY = y
+                        inkCount++
+                    } else {
+                        pixels[idx] = Color.TRANSPARENT
+                    }
+                }
+            }
+        } else {
+            // Paper signature image: detect background luminance from edges
+            var edgeLumSum = 0L
+            var edgeCount = 0
+            for (x in 0 until width step 4) {
+                val cTop = pixels[x]
+                val cBottom = pixels[(height - 1) * width + x]
+                edgeLumSum += (0.299f * Color.red(cTop) + 0.587f * Color.green(cTop) + 0.114f * Color.blue(cTop)).toLong()
+                edgeLumSum += (0.299f * Color.red(cBottom) + 0.587f * Color.green(cBottom) + 0.114f * Color.blue(cBottom)).toLong()
+                edgeCount += 2
+            }
+            val bgLum = if (edgeCount > 0) (edgeLumSum.toFloat() / edgeCount).coerceIn(160f, 255f) else 225f
+            val inkThreshold = (bgLum - 35f).coerceAtMost(195f)
+
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val idx = y * width + x
+                    val c = pixels[idx]
+                    val a = Color.alpha(c)
+                    if (a == 0) {
+                        pixels[idx] = Color.TRANSPARENT
+                        continue
+                    }
+
+                    val r = Color.red(c)
+                    val g = Color.green(c)
+                    val b = Color.blue(c)
+                    val lum = 0.299f * r + 0.587f * g + 0.114f * b
+
+                    if (lum >= inkThreshold) {
+                        // Background paper -> pure transparent
+                        pixels[idx] = Color.TRANSPARENT
+                    } else {
+                        // True pen ink stroke
+                        val darkness = ((inkThreshold - lum) / inkThreshold).coerceIn(0.15f, 1f)
+                        val finalAlpha = (darkness * 255f).toInt().coerceIn(60, 255)
+                        pixels[idx] = Color.argb(finalAlpha, inkColor.r, inkColor.g, inkColor.b)
+
+                        if (x < minX) minX = x
+                        if (x > maxX) maxX = x
+                        if (y < minY) minY = y
+                        if (y > maxY) maxY = y
+                        inkCount++
+                    }
+                }
+            }
+
+            // Safety check: if more than 50% of the image was marked as ink (e.g. an ordinary photo),
+            // do not turn the entire image into a solid block!
+            if (inkCount > (width * height * 0.45f)) {
+                return input
             }
         }
 
         output.setPixels(pixels, 0, width, 0, 0, width, height)
+
+        // Crop tightly around extracted signature strokes
+        if (inkCount >= 15 && minX <= maxX && minY <= maxY) {
+            val pad = 10
+            val cLeft = (minX - pad).coerceAtLeast(0)
+            val cTop = (minY - pad).coerceAtLeast(0)
+            val cRight = (maxX + pad).coerceAtMost(width - 1)
+            val cBottom = (maxY + pad).coerceAtMost(height - 1)
+            val cW = cRight - cLeft + 1
+            val cH = cBottom - cTop + 1
+            if (cW > 10 && cH > 10) {
+                return Bitmap.createBitmap(output, cLeft, cTop, cW, cH)
+            }
+        }
+
         return output
     }
+
+    /**
+     * Generate tiny fast miniature filtered thumbnails for all filter buttons
+     */
+    fun generateFilterThumbnails(src: Bitmap): Map<FilterType, Bitmap> {
+        val map = mutableMapOf<FilterType, Bitmap>()
+        val targetSize = 90
+        val scale = minOf(targetSize.toFloat() / src.width, targetSize.toFloat() / src.height)
+        val thumbW = (src.width * scale).toInt().coerceAtLeast(1)
+        val thumbH = (src.height * scale).toInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(src, thumbW, thumbH, true)
+
+        for (filter in FilterType.values()) {
+            map[filter] = applyFilter(scaled, filter)
+        }
+        return map
+    }
+
+    /**
+     * Auto-Edge Detection & Perspective Crop: Estimates document corners in normalized [0..1] coordinates.
+     */
+    fun autoDetectDocumentEdges(bitmap: Bitmap): List<Offset> {
+        return listOf(
+            Offset(0.04f, 0.04f), // Top-Left
+            Offset(0.96f, 0.04f), // Top-Right
+            Offset(0.96f, 0.96f), // Bottom-Right
+            Offset(0.04f, 0.96f)  // Bottom-Left
+        )
+    }
+
 }
 
 // scanner-build-step-1

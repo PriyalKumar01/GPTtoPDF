@@ -131,6 +131,48 @@ export async function fetchUsersFromSupabase(): Promise<UserRecord[]> {
 }
 
 /**
+ * Direct real-time fetch for a single user by email from Supabase
+ */
+export async function getSupabaseUserByEmail(email: string): Promise<UserRecord | null> {
+  const { url, key } = getSupabaseConfig();
+  if (!url || !key) return null;
+
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase().trim())}&select=*`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+        },
+        cache: 'no-store',
+      }
+    );
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const row = data[0];
+    return {
+      id: row.id,
+      name: row.name,
+      age: row.age || undefined,
+      email: row.email,
+      provider: row.provider,
+      verified: Boolean(row.verified),
+      role: row.role || 'user',
+      isBanned: Boolean(row.is_banned),
+      banReason: row.ban_reason || undefined,
+      createdAt: row.created_at,
+      lastLoginAt: row.last_login_at,
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
  * Sync user to Supabase in the background
  */
 export async function syncUserToSupabase(user: UserRecord): Promise<void> {

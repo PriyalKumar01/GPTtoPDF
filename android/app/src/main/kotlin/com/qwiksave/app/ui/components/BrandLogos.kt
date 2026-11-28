@@ -237,3 +237,99 @@ fun XLogo(modifier: Modifier = Modifier, size: Dp = 22.dp, tint: Color = Color.W
         modifier = modifier.size(size)
     )
 }
+
+@Composable
+fun FreeConvertLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(size * 0.28f))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFF0F766E), Color(0xFF0D9488))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Compress,
+                contentDescription = "FreeConvert",
+                tint = Color.White,
+                modifier = Modifier.size(size * 0.55f)
+            )
+            if (size >= 40.dp) {
+                Text(
+                    text = "HUB",
+                    fontSize = (size.value * 0.16f).sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFCCFBF1)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun VideoCompressorLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(size * 0.28f))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFFBE123C), Color(0xFFF43F5E))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.VideoFile,
+            contentDescription = "Video Compressor",
+            tint = Color.White,
+            modifier = Modifier.size(size * 0.60f)
+        )
+    }
+}
+
+@Composable
+fun PptToPdfLogo(modifier: Modifier = Modifier, size: Dp = 28.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(size * 0.28f))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFFC2410C), Color(0xFFEA580C))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "P",
+                fontSize = (size.value * 0.38f).sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = null,
+                tint = Color(0xFFFFEDD5),
+                modifier = Modifier.size(size * 0.25f)
+            )
+            Text(
+                text = "PDF",
+                fontSize = (size.value * 0.22f).sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+        }
+    }
+}

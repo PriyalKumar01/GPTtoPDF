@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveOrUpdateUser } from '@/lib/users-db';
+import { saveOrUpdateUser, isUserBanned, getUserByEmail, getSupabaseUserByEmail } from '@/lib/users-db';
+import { validateUserEmail } from '@/lib/email-validator';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,8 @@ const OAUTH_CONFIG = {
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const provider = (searchParams.get('provider') || 'google').toLowerCase() as keyof typeof OAUTH_CONFIG;
+  const rawProv = (searchParams.get('provider') || 'google').toLowerCase();
+  const provider = (rawProv === 'x' ? 'twitter' : rawProv) as keyof typeof OAUTH_CONFIG;
   const config = OAUTH_CONFIG[provider];
 
   if (!config) {
@@ -72,6 +74,11 @@ export async function GET(request: NextRequest) {
     state: provider,
   });
 
+  if (provider === 'twitter') {
+    params.set('code_challenge', 'challenge');
+    params.set('code_challenge_method', 'plain');
+  }
+
   const authRedirectUrl = `${config.authUrl}?${params.toString()}`;
 
   return NextResponse.json({
@@ -85,15 +92,75 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/auth
- * Exchanges authorization code for user info
+ * Exchanges authorization code for user info OR processes direct verified email login
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { provider, code, redirectUri } = body;
+    const rawProv = (body.provider || 'google').toLowerCase();
+    const prov = (rawProv === 'x' ? 'twitter' : rawProv);
 
-    const prov = (provider || 'google').toLowerCase() as keyof typeof OAUTH_CONFIG;
-    const config = OAUTH_CONFIG[prov];
+    // Direct verified email sign-in / registration
+    if (prov === 'email') {
+      const email = (body.email || '').trim().toLowerCase();
+      const name = (body.name || '').trim();
+      const age = body.age ? parseInt(body.age, 10) : undefined;
+
+      if (!email || !name) {
+        return NextResponse.json(
+          { success: false, error: 'Full name and email address are required.' },
+          { status: 400 }
+        );
+      }
+
+      const emailCheck = validateUserEmail(email);
+      if (!emailCheck.valid) {
+        return NextResponse.json(
+          { success: false, error: emailCheck.reason || 'Invalid email address.' },
+          { status: 400 }
+        );
+      }
+
+      // Check if user is banned (live Supabase lookup)
+      const liveUser = await getSupabaseUserByEmail(email);
+      if (liveUser?.isBanned || isUserBanned(email)) {
+        return NextResponse.json(
+          {
+            success: false,
+            isBanned: true,
+            error: `Your account has been suspended by platform administration. Reason: ${
+              liveUser?.banReason || 'Terms of Service violation'
+            }`,
+          },
+          { status: 403 }
+        );
+      }
+
+      const dbUser = saveOrUpdateUser({
+        name,
+        age: age && age > 0 && age <= 100 ? age : undefined,
+        email,
+        provider: emailCheck.isEducational ? 'college-id' : 'email',
+      });
+
+      return NextResponse.json({
+        success: true,
+        provider: emailCheck.isEducational ? 'college-id' : 'email',
+        user: {
+          id: dbUser.id,
+          name: dbUser.name,
+          age: dbUser.age,
+          email: dbUser.email,
+          verified: true,
+        },
+        deepLink: `qwiksave://auth/callback?name=${encodeURIComponent(dbUser.name)}&email=${encodeURIComponent(
+          dbUser.email
+        )}&provider=email`,
+      });
+    }
+
+    const config = OAUTH_CONFIG[prov as keyof typeof OAUTH_CONFIG];
+    const { code, redirectUri } = body;
 
     if (!config || !code) {
       return NextResponse.json({ error: 'Missing code or provider' }, { status: 400 });
@@ -226,16 +293,26 @@ export async function POST(request: NextRequest) {
       userEmail = `${userName.toLowerCase().replace(/[^a-z0-9]/g, '')}@${prov}.auth`;
     }
 
-    // Check if account is suspended / banned by Owner
-    const { isUserBanned, getUserByEmail } = await import('@/lib/users-db');
-    if (isUserBanned(userEmail)) {
-      const bannedInfo = getUserByEmail(userEmail);
+    // Validate email is not disposable
+    if (userEmail && !userEmail.endsWith('.auth')) {
+      const emailCheck = validateUserEmail(userEmail);
+      if (!emailCheck.valid) {
+        return NextResponse.json(
+          { success: false, error: emailCheck.reason || 'Disposable email addresses are not permitted.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Check if account is suspended / banned in Supabase live or locally
+    const liveUser = await getSupabaseUserByEmail(userEmail);
+    if (liveUser?.isBanned || isUserBanned(userEmail)) {
       return NextResponse.json(
         {
           success: false,
           isBanned: true,
           error: `Your account has been suspended by platform administration. Reason: ${
-            bannedInfo?.banReason || 'Terms violation'
+            liveUser?.banReason || 'Terms violation'
           }`,
         },
         { status: 403 }

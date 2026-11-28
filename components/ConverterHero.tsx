@@ -31,8 +31,10 @@ import {
   isValidAiShareUrl,
   identifyPlatform,
   calculateAccurateEstimatedPages,
-} from '@/lib/extract-ai';
+} from '@/lib/ai-url-helpers';
 import { CuteLoader } from './CuteLoader';
+import { useAuth } from '@/lib/use-auth';
+import { AuthModal } from '@/components/AuthModal';
 
 interface ConverterHeroProps {
   onConversationReady: (conversation: ConversationData) => void;
@@ -45,6 +47,14 @@ export function ConverterHero({
   isProcessing,
   setIsProcessing,
 }: ConverterHeroProps) {
+  const {
+    isAuthenticated,
+    isAuthModalOpen,
+    openAuthModal,
+    closeAuthModal,
+    requireAuth,
+    handleAuthSuccess,
+  } = useAuth();
   const [urlInput, setUrlInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'url' | 'direct' | 'builder'>('url');
@@ -394,7 +404,7 @@ export function ConverterHero({
           Turn AI Conversations Into PDFs.
         </h1>
         <p className="max-w-3xl mx-auto text-xs sm:text-sm text-slate-600 dark:text-[#94A3B8] leading-relaxed">
-          Convert your ChatGPT, Claude, Gemini, or Perplexity study notes, exam question papers, and explanations into clean, beautifully formatted PDFs. No login. No signup.
+          Convert your ChatGPT, Claude, Gemini, or Perplexity study notes, exam question papers, and explanations into clean, beautifully formatted academic PDFs.
         </p>
       </div>
 
@@ -452,7 +462,7 @@ export function ConverterHero({
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !isProcessing) {
-                      handleConvertUrl();
+                      requireAuth(() => handleConvertUrl());
                     }
                   }}
                   placeholder="Paste your ChatGPT, Claude, or Gemini share link here..."
@@ -476,7 +486,7 @@ export function ConverterHero({
               {/* Main Convert CTA */}
               <button
                 type="button"
-                onClick={() => handleConvertUrl()}
+                onClick={() => requireAuth(() => handleConvertUrl())}
                 disabled={isProcessing}
                 className="h-11 px-5 bg-[#3B82F6] hover:bg-[#2563EB] disabled:bg-slate-300 dark:disabled:bg-[#1E293B] disabled:text-slate-500 text-white font-medium text-xs sm:text-sm rounded-[2px] flex items-center justify-center gap-2 transition-colors shrink-0"
               >
@@ -525,7 +535,7 @@ export function ConverterHero({
             </div>
             <button
               type="button"
-              onClick={handleConvertDirect}
+              onClick={() => requireAuth(handleConvertDirect)}
               disabled={isProcessing}
               className="h-10 px-5 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium text-xs rounded-[2px] flex items-center justify-center gap-2 transition-colors"
             >
@@ -688,7 +698,7 @@ export function ConverterHero({
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
-                onClick={handleConvertBuilder}
+                onClick={() => requireAuth(handleConvertBuilder)}
                 disabled={isProcessing}
                 className="h-10 px-5 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium text-xs rounded-[2px] flex items-center justify-center gap-2 transition-colors shadow-xs"
               >
@@ -979,6 +989,15 @@ export function ConverterHero({
             </div>
           </div>
         </div>
+
+      {/* Compulsory Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onSuccess={handleAuthSuccess}
+        title="Sign In Required"
+        subtitle="Authentication is required to convert and export your AI study notes."
+      />
     </section>
   );
 }

@@ -16,8 +16,18 @@ import {
   FileCheck,
 } from 'lucide-react';
 import { DownloaderProgressLoader } from '@/components/DownloaderProgressLoader';
+import { useAuth } from '@/lib/use-auth';
+import { AuthModal } from '@/components/AuthModal';
 
 export default function AudioExtractorPage() {
+  const {
+    isAuthenticated,
+    isAuthModalOpen,
+    openAuthModal,
+    closeAuthModal,
+    requireAuth,
+    handleAuthSuccess,
+  } = useAuth();
   const [activeTab, setActiveTab] = useState<'local' | 'url'>('local');
   const [localFile, setLocalFile] = useState<File | null>(null);
   const [urlInput, setUrlInput] = useState('');
@@ -40,39 +50,41 @@ export default function AudioExtractorPage() {
   const handleExtractLocal = async () => {
     if (!localFile) return;
 
-    setIsProcessing(true);
-    setErrorMsg(null);
-    setAudioUrl(null);
+    requireAuth(async () => {
+      setIsProcessing(true);
+      setErrorMsg(null);
+      setAudioUrl(null);
 
-    try {
-      const arrayBuffer = await localFile.arrayBuffer();
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      try {
+        const arrayBuffer = await localFile.arrayBuffer();
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-      // Convert audio buffer to WAV
-      const wavBlob = audioBufferToWav(decodedBuffer);
-      const url = URL.createObjectURL(wavBlob);
-      const filename = `${localFile.name.replace(/\.[^/.]+$/, '')}_audio.wav`;
+        // Convert audio buffer to WAV
+        const wavBlob = audioBufferToWav(decodedBuffer);
+        const url = URL.createObjectURL(wavBlob);
+        const filename = `${localFile.name.replace(/\.[^/.]+$/, '')}_audio.wav`;
 
-      setAudioUrl(url);
-      setAudioFilename(filename);
-      setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 150);
+        setAudioUrl(url);
+        setAudioFilename(filename);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
 
-      // Auto download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (e: any) {
-      console.error('Audio extraction error:', e);
-      setErrorMsg('Could not decode audio from this video file. Please verify the format.');
-    } finally {
-      setIsProcessing(false);
-    }
+        // Auto download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (e: any) {
+        console.error('Audio extraction error:', e);
+        setErrorMsg('Could not decode audio from this video file. Please verify the format.');
+      } finally {
+        setIsProcessing(false);
+      }
+    });
   };
 
   const handleExtractUrl = async () => {
@@ -81,49 +93,45 @@ export default function AudioExtractorPage() {
       return;
     }
 
-    setIsProcessing(true);
-    setErrorMsg(null);
-    setAudioUrl(null);
+    requireAuth(async () => {
+      setIsProcessing(true);
+      setErrorMsg(null);
+      setAudioUrl(null);
 
-    try {
-      // Use our universal or instagram API to fetch audio stream
-      const res = await fetch('/api/universal-download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlInput.trim() }),
-      });
+      try {
+        // Use our universal or instagram API to fetch audio stream
+        const res = await fetch('/api/universal-download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlInput.trim() }),
+        });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to extract audio from this URL.');
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to extract audio from this URL.');
+        }
+
+        const streamUrl = data.data.audioUrl || data.data.downloadUrl;
+        if (!streamUrl) {
+          throw new Error('No audio stream found for this link.');
+        }
+
+        const proxyAudio = `/api/proxy-download?url=${encodeURIComponent(
+          streamUrl
+        )}&filename=audio_${data.data.id}.mp3`;
+
+        setAudioUrl(proxyAudio);
+        setAudioFilename(`audio_${data.data.id}.mp3`);
+        setTimeout(() => {
+          resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      } catch (e: any) {
+        console.error('URL extraction error:', e);
+        setErrorMsg(e.message || 'Could not extract audio track from this URL.');
+      } finally {
+        setIsProcessing(false);
       }
-
-      const streamUrl = data.data.audioUrl || data.data.downloadUrl;
-      if (!streamUrl) {
-        throw new Error('No audio stream found for this link.');
-      }
-
-      const proxyAudio = `/api/proxy-download?url=${encodeURIComponent(
-        streamUrl
-      )}&filename=audio_${data.data.id}.mp3`;
-
-      setAudioUrl(proxyAudio);
-      setAudioFilename(`audio_${data.data.id}.mp3`);
-      setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 150);
-
-      const a = document.createElement('a');
-      a.href = proxyAudio;
-      a.download = `audio_${data.data.id}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (e: any) {
-      setErrorMsg(e.message || 'Unable to extract audio from link.');
-    } finally {
-      setIsProcessing(false);
-    }
+    });
   };
 
   // Fast WAV encoding helper
@@ -356,6 +364,15 @@ export default function AudioExtractorPage() {
 
         <CollegeStudyPromo />
       </main>
+
+      {/* Compulsory Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        onSuccess={handleAuthSuccess}
+        title="Sign In Required"
+        subtitle="Sign in with Google, GitHub, X or College email to extract audio tracks."
+      />
 
       <Footer />
     </div>

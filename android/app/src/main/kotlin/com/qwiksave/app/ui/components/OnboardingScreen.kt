@@ -682,13 +682,22 @@ fun OnboardingScreen(
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.padding(top = 8.dp)
                         ) {
-                            Image(
-                                painter = painterResource(R.drawable.app_logo),
-                                contentDescription = "Logo",
+                            val isFemaleAvatar = genderInput.equals("Female", ignoreCase = true)
+                            Box(
                                 modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                            )
+                                    .size(62.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isFemaleAvatar) Color(0xFFFCE7F3) else Color(0xFFE0F2FE))
+                                    .border(2.5.dp, if (isFemaleAvatar) Color(0xFFF43F5E) else Color(0xFF0284C7), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isFemaleAvatar) Icons.Default.Face3 else Icons.Default.Face6,
+                                    contentDescription = if (isFemaleAvatar) "Female Avatar" else "Male Avatar",
+                                    tint = if (isFemaleAvatar) Color(0xFFE11D48) else Color(0xFF0284C7),
+                                    modifier = Modifier.size(38.dp)
+                                )
+                            }
                             Text(
                                 text = "Set Up Your Profile",
                                 fontSize = 22.sp,

@@ -1,0 +1,88 @@
+COMPLETED / TASK_COMPLETED
+
+Inspected `https://share.gemini.google/TJDQpgdxMpq9` (which redirects to `https://gemini.google.com/share/390eff5f2f16?social_preview=true&skid=a0f5548c-2c5b-4a64-b2e9-dc5d14d11093`).
+
+### 1. Conversation Title & Metadata
+- **Page `<title>`:** `Gemini - direct access to Google AI`
+- **Conversation Title:** `Google Cloud Console OAuth Setup`
+- **Title Element Selector:** `share-viewer h1.gds-headline-m.headline` (inside `section.share-viewer_header-container-old > div.top-container > div.share-title-section > div.title-link > h1`)
+- **Metadata / Link:**
+  - Share link (`a.share-link`): `https://share.gemini.google/G8dt582Ngpca`
+  - Mode/Timestamp (`[data-test-id="created-with-bard-mode-from-config"]` and `span.publish-time-text`): `Created with Deeper analysis November 21, 2026 at 02:17 AM • Published November 23, 2026 at 02:57 AM`
+
+---
+
+### 2. DOM Selectors & Tag Names
+
+#### Conversation Container
+- **Page/Landing Wrapper:** `share-landing-page > section.share-landing-page_content > share-viewer`
+- **Chat Container:** `share-viewer > section.share-viewer_chat-container > div.chat-history`
+- **Turn Container (48 turns):** `div.chat-history > div > share-turn-viewer` (48 elements)
+  - Each `share-turn-viewer` contains one `user-query` and one `response-container`.
+
+#### User Prompt / Message Element (48 elements)
+- **Outer Tag:** `user-query`
+- **Full Hierarchy & Selectors:**
+  - `user-query > span.user-query-container > user-query-content.user-query-container`
+  - `user-query-content > div.user-query-container > div.query-content` (e.g., `#user-query-content-0`)
+  - `div.query-content > div.query-bubble-anchor > span.user-query-bubble-with-background > span.horizontal-container > div.query-text.gds-body-l`
+  - **Text Lines:** `p.query-text-line` (317 total across 48 queries; each line contains `<span>` children)
+  - **Clean CSS selector for user message text:** `share-turn-viewer user-query .query-text` (or `user-query .query-text-line`)
+
+#### Model / Assistant Response Element (48 elements)
+- **Outer Tag:** `response-container` (`response-container.response-container`)
+- **Full Hierarchy & Selectors:**
+  - `response-container > div.response-container > div.presented-response-container > div.response-container-content`
+  - `div.response-container-content > structured-content-container.message-content > div.container > message-content`
+  - **Clean CSS selector for model message:** `share-turn-viewer response-container message-content` (or `message-content > div.markdown.markdown-main-panel`)
+
+#### Markdown & Rich Elements Inside Model Responses (`message-content`)
+- **Root Markdown Panel (48):** `message-content > div.markdown.markdown-main-panel.md-content`
+- **Standard Markdown HTML Elements found inside `message-content`:**
+  - Paragraphs: `p` (354)
+  - Headings: `h3` (10)
+  - Lists: `ul` (48), `ol` (34), `li` (188)
+  - Inline code: `code` (237)
+  - Code blocks: `code-block` (21) → `div.code-block` → `div.formatted-code-block-internal-container` → header `div.code-block-decoration.header-formatted > span` (e.g., `Plaintext`) + `pre > code` (21)
+  - Bold / Italic: `b` (603), `strong` (33), `i` (75)
+  - Links: `a` (3), wrapped in `link-block` (3)
+- **Gemini Custom / Structured Elements inside `message-content`:**
+  - `response-element.no-md` (81)
+  - `sequence` (`div.sequence-container > div.sequence-event` step cards, 8)
+  - `structured-node-sequence` / `structured-text` (53)
+  - `structured-list` (6)
+  - *(Note: 0 `table`, 0 `blockquote`, 0 `hr` elements were present in this conversation.)*
+
+---
+
+### 3. Messages Summary (48 Turns Total; User: 14,361 chars, Model: 57,598 chars)
+Examples of the first and key turns (full 48-turn summary was extracted):
+- **Turn 0:**
+  - **User (904 chars):** `OAuth Setup ke liye Redirect & Callback URLs\n\nApne developer consoles (Google Cloud Console, GitHub Developer Settings, Facebook Developers) mein ye URLs enter karein:...`
+  - **Model (2,572 chars):** `Google Cloud Console par OAuth setup karne aur apni GOOGLE_CLIENT_ID aur GOOGLE_CLIENT_SECRET nikalne ke liye ye steps follow karein:...` (5-step `sequence` block + details)
+- **Turn 1:**
+  - **User (344 chars):** `New Project\nProject name\nQwikSave\nProject ID: qwiksave-515320...`
+  - **Model (847 chars):** `Agar yeh aapka personal ya solo project hai (aur public users ke liye login banana hai)...`
+- **Turns 2–10:** Google Cloud Console project creation (`QwikSave`), Testing vs Production mode, `qwiksave.vercel.app` Authorized Redirect URIs, Web vs Android OAuth Client ID, SHA-1 setup.
+- **Turns 11–12:** GitHub OAuth App setup & Facebook Developers (Meta for Developers) OAuth setup.
+- **Turns 13–27:** Troubleshooting Facebook Login app creation, Basic settings, Terms of Service URL (`https://qwiksave.vercel.app/terms`), App Domains, Unpublished app status.
+- **Turns 28–36:** Android APK SHA-1 fingerprint, Supabase `service_role` / `sb_secret_...` API key & `/auth/v1/callback` redirect URI debugging.
+- **Turns 37–42:** Meta Business Portfolio security warnings & Business Verification questions.
+- **Turns 43–47:** Switching to X (Twitter) OAuth setup in X Developer Portal (`OAuth 2.0 Client ID` & `Client Secret`, Callback URL form error fix).
+
+---
+
+### 4. Network Requests (`batchexecute` / RPC / API)
+No REST JSON API endpoint was called. All application RPC traffic went via `POST` to `https://gemini.google.com/_/BardChatUi/data/batchexecute?rpcids=<ID>&source-path=%2Fshare%2F390eff5f2f16...` (with `Content-Type: application/json; charset=utf-8`, `Content-Encoding: br`).
+
+Observed `batchexecute` RPCs:
+- **Fired before `share-turn-viewer` rendered (48 turns):**
+  - `otAQ7b` (HTTP 200): Returned Gemini model/mode selector config (`"Auto"`, `"Adapts to your needs"`, etc.).
+  - `CNgdBe` (×2, HTTP 200): Returned `null` (`[7]`).
+  - `I4z33b` (HTTP 200): Returned `null` (`[7]`).
+  - `aPya6c` (HTTP 200): Returned `[false,0,[]]`.
+  - `K4WWud` (HTTP 200) and `FQjvN` (HTTP 200): Both completed with status 200 prior to DOM render; their response body previews were empty in `waitForResponse` (either due to streaming/large/non-buffered payload or because conversation data is SSR-embedded in the initial HTML document `https://gemini.google.com/share/390eff5f2f16` whose `<script>` tags are stripped from DOM inspection).
+- **Fired after initial render:**
+  - `DYBcR` (HTTP 200): Returned `[]`.
+  - `ujx1Bf` (HTTP 200): Fired after all 48 turns had already rendered.
+- **Other auxiliary requests:** Telemetry/logging (`play.google.com/log`, `www.google-analytics.com/g/collect`), OneGoogle/WAA/LinkShortener `$rpc` calls (`ogads-pa.clients6.google.com`, `waa-pa.clients6.google.com`, `linkshortener.pa.clients6.google.com`).

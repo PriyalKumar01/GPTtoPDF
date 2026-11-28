@@ -45,6 +45,8 @@ export default function ToolsHubPage() {
     'pdf-to-image': ['Convert PDF to JPG & PNG', 'High-Res 300 DPI Export', 'Instant ZIP or Single Download'],
     'audio-extractor': ['Extract MP3 from Any Video', 'Studio 320kbps Quality', 'Supports MP4, MOV, WebM, MKV'],
     'qr-code-generator': ['Custom URLs, WiFi & WhatsApp', 'Vector SVG & High-Res PNG', 'Instant Real-Time Preview'],
+    'freeconvert-hub': ['PNG, JPEG, GIF, PDF, Videos', 'Quality & Bitrate Control', 'Universal Dropdown Hub'],
+    'ppt-to-pdf': ['Convert .pptx / .ppt Slides', 'Academic Presentation Handouts', 'Slide Numbers & Lecture Notes'],
   };
 
   const tools = APP_CONFIG.tools;
